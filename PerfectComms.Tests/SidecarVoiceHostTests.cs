@@ -25,32 +25,33 @@ public sealed class SidecarVoiceHostTests
         Assert.True(first.EnsureStarted("mic-a", "spk-a"));
         first.SetMicActive(true);
         first.SetSynthetic(true);
-        first.AddPeer("42", isOfferer: true, generation: 1);
+        Assert.True(first.AddPeer("42", isOfferer: true, generation: 1));
         first.SendGameState(false, 1f, new[]
         {
             new SidecarProtocol.GameStatePeerInput("42", 1f, 0f, 0, false)
         });
 
         first.Dispose();
+        WaitUntil(() => firstClient.DisposeCount == 1);
 
         Assert.Equal(0, firstClient.HandlerCount);
         Assert.False(firstClient.MicActiveCalls[^1]);
         Assert.False(firstClient.SyntheticCalls[^1]);
         Assert.Contains("42", firstClient.RemovedPeers);
         Assert.Equal((true, 0f, 0), firstClient.GameStates[^1]);
-        Assert.Equal(1, firstClient.DisposeCount);
 
-        var second = Assert.IsType<SidecarVoiceLease>(host.TryAcquire(Callbacks(), out failure));
+        SidecarVoiceLease? second = null;
+        WaitUntil(() => (second = host.TryAcquire(Callbacks(), out failure)) != null);
         Assert.Equal(string.Empty, failure);
         Assert.Equal(0, secondClient.HandlerCount);
-        Assert.True(second.EnsureStarted("mic-b", "spk-b"));
+        Assert.True(second!.EnsureStarted("mic-b", "spk-b"));
         Assert.Equal(10, secondClient.HandlerCount);
         Assert.Equal(1, firstClient.StartCount);
         Assert.Equal(1, secondClient.StartCount);
         Assert.Equal(2, createCount);
 
         second.Dispose();
-        Assert.Equal(1, secondClient.DisposeCount);
+        WaitUntil(() => secondClient.DisposeCount == 1);
     }
 
     [Fact]
@@ -63,8 +64,9 @@ public sealed class SidecarVoiceHostTests
         Assert.True(lease.AddPeer("42", isOfferer: true, generation: 1));
         fake.RemoveFailuresRemaining = 1;
 
-        Assert.False(lease.RemovePeer("42", generation: 1));
+        Assert.True(lease.RemovePeer("42", generation: 1));
         lease.Dispose();
+        WaitUntil(() => fake.DisposeCount == 1);
 
         Assert.Equal(new[] { "42", "42" }, fake.RemovedPeers);
     }
@@ -84,39 +86,198 @@ public sealed class SidecarVoiceHostTests
     }
 
     [Fact]
-    public void ConditionalOutputSelectionDoesNotSendWhenSuperseded()
+    public void ConditionalOutputSelectionIsRecheckedWhenItsTurnArrives()
     {
-        var fake = new FakeSidecarVoiceClient();
+        using var commandEntered = new ManualResetEventSlim();
+        using var allowCommand = new ManualResetEventSlim();
+        var fake = new FakeSidecarVoiceClient
+        {
+            BlockNextMicActive = true,
+            CommandEntered = commandEntered,
+            AllowCommand = allowCommand,
+        };
         var host = new SidecarVoiceHostCore(() => fake);
         var lease = Assert.IsType<SidecarVoiceLease>(host.TryAcquire(Callbacks(), out _));
         Assert.True(lease.EnsureStarted("mic", "spk"));
+        var blockedAdmission = Task.Run(() => lease.SetMicActive(true));
+        Assert.True(commandEntered.Wait(TimeSpan.FromSeconds(2)));
+        Assert.True(blockedAdmission.Wait(TimeSpan.FromSeconds(2)));
+        var current = true;
 
-        Assert.False(lease.TrySelectOutputDeviceIf("stale", () => false));
-        Assert.Empty(fake.OutputSelectionCalls);
-
-        Assert.True(lease.TrySelectOutputDeviceIf("current", () => true));
-        Assert.Equal(new[] { "current" }, fake.OutputSelectionCalls);
+        Assert.True(lease.TrySelectOutputDeviceIf("superseded", () => current));
+        current = false;
+        allowCommand.Set();
         lease.Dispose();
+        WaitUntil(() => fake.DisposeCount == 1);
+
+        Assert.Empty(fake.OutputSelectionCalls);
     }
 
     [Fact]
-    public void ConditionalAudioRouteDoesNotSendWhenSuperseded()
+    public void ConditionalAudioRouteIsRecheckedWhenItsTurnArrives()
     {
-        var fake = new FakeSidecarVoiceClient();
+        using var commandEntered = new ManualResetEventSlim();
+        using var allowCommand = new ManualResetEventSlim();
+        var fake = new FakeSidecarVoiceClient
+        {
+            BlockNextMicActive = true,
+            CommandEntered = commandEntered,
+            AllowCommand = allowCommand,
+        };
+        var host = new SidecarVoiceHostCore(() => fake);
+        var lease = Assert.IsType<SidecarVoiceLease>(host.TryAcquire(Callbacks(), out _));
+        Assert.True(lease.EnsureStarted("mic", "spk"));
+        var blockedAdmission = Task.Run(() => lease.SetMicActive(true));
+        Assert.True(commandEntered.Wait(TimeSpan.FromSeconds(2)));
+        Assert.True(blockedAdmission.Wait(TimeSpan.FromSeconds(2)));
+        var current = true;
+
+        Assert.True(lease.TryConfigureAudioRouteIf(
+            "mic-stale", "spk-stale", SidecarCaptureMode.Warm, synthetic: false, () => current));
+        current = false;
+        allowCommand.Set();
+        lease.Dispose();
+        WaitUntil(() => fake.DisposeCount == 1);
+
+        Assert.Empty(fake.AudioRouteCalls);
+    }
+
+    [Fact]
+    public async Task BlockedClientActionDoesNotBlockQueriesOrCommandAdmission()
+    {
+        using var commandEntered = new ManualResetEventSlim();
+        using var allowCommand = new ManualResetEventSlim();
+        var fake = new FakeSidecarVoiceClient
+        {
+            BlockNextMicActive = true,
+            CommandEntered = commandEntered,
+            AllowCommand = allowCommand,
+        };
         var host = new SidecarVoiceHostCore(() => fake);
         var lease = Assert.IsType<SidecarVoiceLease>(host.TryAcquire(Callbacks(), out _));
         Assert.True(lease.EnsureStarted("mic", "spk"));
 
-        Assert.False(lease.TryConfigureAudioRouteIf(
-            "mic-stale", "spk-stale", SidecarCaptureMode.Warm, synthetic: false, () => false));
-        Assert.Empty(fake.AudioRouteCalls);
+        var blockedAdmission = Task.Run(() => lease.SetMicActive(true));
+        Assert.True(commandEntered.Wait(TimeSpan.FromSeconds(2)));
+        Assert.True(blockedAdmission.Wait(TimeSpan.FromSeconds(2)));
+        var probe = Task.Run(() =>
+        {
+            Assert.Equal(CaptureHealth.Healthy, lease.Health);
+            Assert.Single(lease.OutputDevices);
+            Assert.True(lease.ConfigureAudioRoute(
+                "mic", "spk", SidecarCaptureMode.Transmit, synthetic: false));
+        });
 
-        Assert.True(lease.TryConfigureAudioRouteIf(
-            "mic-current", "spk-current", SidecarCaptureMode.Transmit, synthetic: true, () => true));
-        Assert.Equal(
-            ("mic-current", "spk-current", SidecarCaptureMode.Transmit, true),
-            Assert.Single(fake.AudioRouteCalls));
+        Assert.Same(probe, await Task.WhenAny(probe, Task.Delay(TimeSpan.FromSeconds(2))));
+        allowCommand.Set();
         lease.Dispose();
+        WaitUntil(() => fake.DisposeCount == 1);
+    }
+
+    [Fact]
+    public async Task ReleaseIsNonblockingRejectsLaterCommandsAndRetiresInOrder()
+    {
+        using var commandEntered = new ManualResetEventSlim();
+        using var allowCommand = new ManualResetEventSlim();
+        var fake = new FakeSidecarVoiceClient
+        {
+            BlockNextMicActive = true,
+            CommandEntered = commandEntered,
+            AllowCommand = allowCommand,
+        };
+        var host = new SidecarVoiceHostCore(() => fake);
+        var lease = Assert.IsType<SidecarVoiceLease>(host.TryAcquire(Callbacks(), out _));
+        Assert.True(lease.EnsureStarted("mic", "spk"));
+
+        var blockedAdmission = Task.Run(() => lease.SetMicActive(true));
+        Assert.True(commandEntered.Wait(TimeSpan.FromSeconds(2)));
+        Assert.True(blockedAdmission.Wait(TimeSpan.FromSeconds(2)));
+        var release = Task.Run(lease.Dispose);
+
+        Assert.Same(release, await Task.WhenAny(release, Task.Delay(TimeSpan.FromSeconds(2))));
+        Assert.False(lease.ConfigureAudioRoute(
+            "late-mic", "late-spk", SidecarCaptureMode.Transmit, synthetic: false));
+        Assert.Null(host.TryAcquire(Callbacks(), out var failure));
+        Assert.Equal("helper-retiring", failure);
+        allowCommand.Set();
+        WaitUntil(() => fake.DisposeCount == 1);
+
+        Assert.True(fake.Sequence.IndexOf("mic:true") < fake.Sequence.IndexOf("mic:false"));
+        Assert.True(fake.Sequence.IndexOf("mic:false") < fake.Sequence.IndexOf("dispose"));
+        Assert.DoesNotContain("route:late-mic:late-spk", fake.Sequence);
+    }
+
+    [Fact]
+    public void BoundedCommandQueueRejectsOverflowImmediately()
+    {
+        using var commandEntered = new ManualResetEventSlim();
+        using var allowCommand = new ManualResetEventSlim();
+        var fake = new FakeSidecarVoiceClient
+        {
+            BlockNextMicActive = true,
+            CommandEntered = commandEntered,
+            AllowCommand = allowCommand,
+        };
+        var host = new SidecarVoiceHostCore(() => fake, commandCapacity: 1);
+        var lease = Assert.IsType<SidecarVoiceLease>(host.TryAcquire(Callbacks(), out _));
+        Assert.True(lease.EnsureStarted("mic", "spk"));
+
+        var blockedAdmission = Task.Run(() => lease.SetMicActive(true));
+        Assert.True(commandEntered.Wait(TimeSpan.FromSeconds(2)));
+        Assert.True(blockedAdmission.Wait(TimeSpan.FromSeconds(2)));
+        Assert.True(lease.ConfigureAudioRoute(
+            "queued-mic", "queued-spk", SidecarCaptureMode.Warm, synthetic: false));
+        Assert.False(lease.SelectOutputDevice("overflow"));
+
+        allowCommand.Set();
+        lease.Dispose();
+        WaitUntil(() => fake.DisposeCount == 1);
+        Assert.DoesNotContain("overflow", fake.OutputSelectionCalls);
+    }
+
+    [Fact]
+    public void InitialConfigurationIsOneOrderedOperationWithItsActualResult()
+    {
+        var fake = new FakeSidecarVoiceClient
+        {
+            InitialConfigurationResult = false,
+        };
+        var host = new SidecarVoiceHostCore(() => fake);
+        var lease = Assert.IsType<SidecarVoiceLease>(host.TryAcquire(Callbacks(), out _));
+        Assert.True(lease.EnsureStarted("mic", "spk"));
+        lease.SetSynthetic(true);
+
+        var configured = lease.TryConfigureInitialCapture(
+            "mic", "spk",
+            aec: true, agc: true, ns: true, nsVeryHigh: false, hpf: true,
+            gain: 1f, vadThreshold: 0.01f, noiseGateThreshold: 0.02f,
+            synthetic: false, micActive: true, micWarm: false,
+            monitorEnabled: false, monitorDelayed: false, monitorGain: 1f,
+            iceServers: null);
+
+        Assert.False(configured);
+        Assert.Equal(new[] { "synthetic:true", "initial-config" }, fake.Sequence);
+        lease.Dispose();
+        WaitUntil(() => fake.DisposeCount == 1);
+    }
+
+    [Fact]
+    public void BackgroundAudioRouteCompletionReturnsTheClientResult()
+    {
+        var fake = new FakeSidecarVoiceClient
+        {
+            AudioRouteResult = false,
+        };
+        var host = new SidecarVoiceHostCore(() => fake);
+        var lease = Assert.IsType<SidecarVoiceLease>(host.TryAcquire(Callbacks(), out _));
+        Assert.True(lease.EnsureStarted("mic", "spk"));
+
+        Assert.False(lease.ConfigureAudioRouteAndWait(
+            "mic", "spk", SidecarCaptureMode.Transmit, synthetic: false));
+        Assert.Single(fake.AudioRouteCalls);
+
+        lease.Dispose();
+        WaitUntil(() => fake.DisposeCount == 1);
     }
 
     [Fact]
@@ -146,6 +307,7 @@ public sealed class SidecarVoiceHostTests
         Assert.True(await second);
         Assert.Equal(1, fake.StartCount);
         lease.Dispose();
+        WaitUntil(() => fake.DisposeCount == 1);
     }
 
     [Fact]
@@ -182,8 +344,10 @@ public sealed class SidecarVoiceHostTests
         Assert.True(await start);
 
         lease.SetMicActive(true);
+        WaitUntil(() => fake.MicActiveCalls.Count == 1);
         Assert.Equal(new[] { true }, fake.MicActiveCalls);
         lease.Dispose();
+        WaitUntil(() => fake.DisposeCount == 1);
     }
 
     [Fact]
@@ -216,7 +380,7 @@ public sealed class SidecarVoiceHostTests
         Assert.False(await start);
         Assert.False(lease.IsActive);
         Assert.Equal(CaptureHealth.Dead, lease.Health);
-        Assert.Equal(1, fake.DisposeCount);
+        WaitUntil(() => fake.DisposeCount == 1);
     }
 
     [Fact]
@@ -249,7 +413,7 @@ public sealed class SidecarVoiceHostTests
         Assert.False(await start);
         Assert.False(lease.IsActive);
         Assert.Equal(CaptureHealth.Dead, lease.Health);
-        Assert.Equal(1, fake.DisposeCount);
+        WaitUntil(() => fake.DisposeCount == 1);
         Assert.Null(host.TryAcquire(Callbacks(), out var failure));
         Assert.Equal("host-shutdown", failure);
     }
@@ -268,74 +432,97 @@ public sealed class SidecarVoiceHostTests
         firstClient.RaiseDead("heartbeat timeout");
         Assert.Equal(1, deadEvents);
         first.Dispose();
-        Assert.Equal(1, firstClient.DisposeCount);
+        WaitUntil(() => firstClient.DisposeCount == 1);
         Assert.Equal(0, firstClient.HandlerCount);
 
-        var second = Assert.IsType<SidecarVoiceLease>(host.TryAcquire(Callbacks(), out _));
-        Assert.True(second.EnsureStarted("mic", "spk"));
+        SidecarVoiceLease? second = null;
+        WaitUntil(() => (second = host.TryAcquire(Callbacks(), out _)) != null);
+        Assert.True(second!.EnsureStarted("mic", "spk"));
         Assert.Equal(2, created);
         Assert.Equal(10, secondClient.HandlerCount);
         second.Dispose();
+        WaitUntil(() => secondClient.DisposeCount == 1);
     }
 
     [Fact]
     public void RetiringHelperBlocksReplacementUntilCleanupCompletes()
     {
         using var allowDisposeCompletion = new ManualResetEventSlim();
-        var firstClient = new FakeSidecarVoiceClient
+        try
         {
-            AllowDisposeCompletion = allowDisposeCompletion,
-        };
-        var secondClient = new FakeSidecarVoiceClient();
-        var created = 0;
-        var host = new SidecarVoiceHostCore(() => ++created == 1 ? firstClient : secondClient);
-        var first = Assert.IsType<SidecarVoiceLease>(host.TryAcquire(Callbacks(), out _));
-        Assert.True(first.EnsureStarted("mic", "spk"));
+            var firstClient = new FakeSidecarVoiceClient
+            {
+                AllowDisposeCompletion = allowDisposeCompletion,
+            };
+            var secondClient = new FakeSidecarVoiceClient();
+            var created = 0;
+            var host = new SidecarVoiceHostCore(() => ++created == 1 ? firstClient : secondClient);
+            var first = Assert.IsType<SidecarVoiceLease>(host.TryAcquire(Callbacks(), out _));
+            Assert.True(first.EnsureStarted("mic", "spk"));
 
-        first.Dispose();
+            first.Dispose();
+            WaitUntil(() => firstClient.DisposeCount == 1);
 
-        Assert.False(firstClient.CleanupComplete);
-        Assert.Null(host.TryAcquire(Callbacks(), out var failure));
-        Assert.Equal("helper-retiring", failure);
-        Assert.Equal(1, created);
+            Assert.False(firstClient.CleanupComplete);
+            Assert.Null(host.TryAcquire(Callbacks(), out var failure));
+            Assert.Equal("helper-retiring", failure);
+            Assert.Equal(1, created);
 
-        allowDisposeCompletion.Set();
-        Assert.True(SpinWait.SpinUntil(
-            () => firstClient.CleanupComplete,
-            TimeSpan.FromSeconds(2)));
-        var second = Assert.IsType<SidecarVoiceLease>(host.TryAcquire(Callbacks(), out failure));
-        Assert.Equal(string.Empty, failure);
-        Assert.True(second.EnsureStarted("mic", "spk"));
-        Assert.Equal(2, created);
-        second.Dispose();
+            allowDisposeCompletion.Set();
+            Assert.True(SpinWait.SpinUntil(
+                () => firstClient.CleanupComplete,
+                TimeSpan.FromSeconds(2)));
+            SidecarVoiceLease? second = null;
+            WaitUntil(() => (second = host.TryAcquire(Callbacks(), out failure)) != null);
+            Assert.Equal(string.Empty, failure);
+            Assert.True(second!.EnsureStarted("mic", "spk"));
+            Assert.Equal(2, created);
+            second.Dispose();
+            WaitUntil(() => secondClient.DisposeCount == 1);
+        }
+        finally
+        {
+            allowDisposeCompletion.Set();
+        }
     }
 
     [Fact]
     public void ActiveLeaseDoesNotReplaceDeadHelperBeforeCleanupCompletes()
     {
         using var allowDisposeCompletion = new ManualResetEventSlim();
-        var firstClient = new FakeSidecarVoiceClient
+        try
         {
-            AllowDisposeCompletion = allowDisposeCompletion,
-        };
-        var secondClient = new FakeSidecarVoiceClient();
-        var created = 0;
-        var host = new SidecarVoiceHostCore(() => ++created == 1 ? firstClient : secondClient);
-        var lease = Assert.IsType<SidecarVoiceLease>(host.TryAcquire(Callbacks(), out _));
-        Assert.True(lease.EnsureStarted("mic", "spk"));
-        firstClient.RaiseDead("heartbeat timeout");
+            var firstClient = new FakeSidecarVoiceClient
+            {
+                AllowDisposeCompletion = allowDisposeCompletion,
+            };
+            var secondClient = new FakeSidecarVoiceClient();
+            var created = 0;
+            var host = new SidecarVoiceHostCore(() => ++created == 1 ? firstClient : secondClient);
+            var lease = Assert.IsType<SidecarVoiceLease>(host.TryAcquire(Callbacks(), out _));
+            Assert.True(lease.EnsureStarted("mic", "spk"));
+            firstClient.RaiseDead("heartbeat timeout");
 
-        Assert.False(lease.EnsureStarted("mic", "spk"));
-        Assert.False(firstClient.CleanupComplete);
-        Assert.Equal(1, created);
+            Assert.False(lease.EnsureStarted("mic", "spk"));
+            WaitUntil(() => firstClient.DisposeCount == 1);
+            Assert.False(firstClient.CleanupComplete);
+            Assert.Equal(1, created);
 
-        allowDisposeCompletion.Set();
-        Assert.True(SpinWait.SpinUntil(
-            () => firstClient.CleanupComplete,
-            TimeSpan.FromSeconds(2)));
-        Assert.True(lease.EnsureStarted("mic", "spk"));
-        Assert.Equal(2, created);
-        lease.Dispose();
+            allowDisposeCompletion.Set();
+            Assert.True(SpinWait.SpinUntil(
+                () => firstClient.CleanupComplete,
+                TimeSpan.FromSeconds(2)));
+            Assert.True(SpinWait.SpinUntil(
+                () => lease.EnsureStarted("mic", "spk"),
+                TimeSpan.FromSeconds(2)));
+            Assert.Equal(2, created);
+            lease.Dispose();
+            WaitUntil(() => secondClient.DisposeCount == 1);
+        }
+        finally
+        {
+            allowDisposeCompletion.Set();
+        }
     }
 
     [Fact]
@@ -356,6 +543,8 @@ public sealed class SidecarVoiceHostTests
 
         Assert.Equal(1, seen);
         Assert.Equal(CaptureHealth.Healthy, lease.Health);
+        lease.Dispose();
+        WaitUntil(() => fake.DisposeCount == 1);
     }
 
     [Fact]
@@ -367,14 +556,275 @@ public sealed class SidecarVoiceHostTests
         Assert.True(lease.EnsureStarted("mic", "spk"));
 
         host.Shutdown("test-exit");
+        WaitUntil(() => fake.DisposeCount == 1);
 
-        Assert.Equal(1, fake.DisposeCount);
         Assert.Equal(0, fake.HandlerCount);
         Assert.False(lease.IsActive);
         Assert.Equal(CaptureHealth.Dead, lease.Health);
         Assert.Null(host.TryAcquire(Callbacks(), out var failure));
         Assert.Equal("host-shutdown", failure);
     }
+
+    [Fact]
+    public async Task SaturatedCriticalRoutesRetireTheHelperFailClosed()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var commandEntered = new ManualResetEventSlim();
+        using var allowCommand = new ManualResetEventSlim();
+        var fake = new FakeSidecarVoiceClient
+        {
+            BlockNextMicActive = true,
+            CommandEntered = commandEntered,
+            AllowCommand = allowCommand,
+        };
+        var host = new SidecarVoiceHostCore(() => fake, commandCapacity: 1);
+        var lease = Assert.IsType<SidecarVoiceLease>(host.TryAcquire(Callbacks(), out _));
+        Assert.True(lease.EnsureStarted("mic", "spk"));
+
+        lease.SetMicActive(true);
+        Assert.True(await Task.Run(
+            () => commandEntered.Wait(TimeSpan.FromSeconds(2), cancellationToken),
+            cancellationToken));
+        Assert.True(lease.ConfigureAudioRoute(
+            "transmit-mic", "transmit-spk", SidecarCaptureMode.Transmit, synthetic: false));
+        Assert.True(lease.ConfigureAudioRoute(
+            "warm-mic", "warm-spk", SidecarCaptureMode.Warm, synthetic: false));
+        Assert.False(lease.ConfigureAudioRoute(
+            "stopped-mic", "stopped-spk", SidecarCaptureMode.Stopped, synthetic: false));
+
+        var release = lease.ReleaseAsync();
+        Assert.False(release.IsCompleted);
+        allowCommand.Set();
+        await AwaitCompletion(release);
+
+        Assert.Equal(2, fake.AudioRouteCalls.Count);
+        Assert.Equal(SidecarCaptureMode.Warm, fake.AudioRouteCalls[^1].Mode);
+        Assert.False(fake.MicActiveCalls[^1]);
+        Assert.Equal(0, fake.HandlerCount);
+    }
+
+    [Fact]
+    public async Task CommandWorkerStartFailureFencesFallbackCleanup()
+    {
+        using var allowFirstCleanup = new ManualResetEventSlim();
+        try
+        {
+            var firstClient = new FakeSidecarVoiceClient
+            {
+                AllowDisposeCompletion = allowFirstCleanup,
+            };
+            var secondClient = new FakeSidecarVoiceClient();
+            var createCount = 0;
+            var workerStartCount = 0;
+            var host = new SidecarVoiceHostCore(
+                () => Interlocked.Increment(ref createCount) == 1 ? firstClient : secondClient,
+                commandCapacity: 4,
+                startCommandWorker: (run, name) =>
+                {
+                    if (Interlocked.Increment(ref workerStartCount) == 1)
+                        throw new InvalidOperationException("worker-start-failed");
+                    new Thread(run)
+                    {
+                        IsBackground = true,
+                        Name = name,
+                    }.Start();
+                });
+            var lease = Assert.IsType<SidecarVoiceLease>(host.TryAcquire(Callbacks(), out _));
+
+            Assert.False(lease.EnsureStarted("mic-a", "spk-a"));
+            await AwaitCompletion(firstClient.DisposeObserved);
+            Assert.False(firstClient.CleanupComplete);
+            Assert.False(lease.EnsureStarted("mic-b", "spk-b"));
+            Assert.Equal(1, createCount);
+
+            allowFirstCleanup.Set();
+            Assert.True(await TryUntilAsync(() => lease.EnsureStarted("mic-b", "spk-b")));
+            Assert.Equal(2, createCount);
+            Assert.False(firstClient.MicActiveCalls[^1]);
+
+            await AwaitCompletion(lease.ReleaseAsync());
+        }
+        finally
+        {
+            allowFirstCleanup.Set();
+        }
+    }
+
+    [Fact]
+    public async Task ReleaseAsyncWaitsForFallbackRetirement()
+    {
+        using var allowCleanup = new ManualResetEventSlim();
+        try
+        {
+            var fake = new FakeSidecarVoiceClient
+            {
+                AllowDisposeCompletion = allowCleanup,
+            };
+            var host = new SidecarVoiceHostCore(
+                () => fake,
+                commandCapacity: 4,
+                startCommandWorker: (_, _) => throw new InvalidOperationException("worker-start-failed"));
+            var lease = Assert.IsType<SidecarVoiceLease>(host.TryAcquire(Callbacks(), out _));
+
+            Assert.False(lease.EnsureStarted("mic", "spk"));
+            await AwaitCompletion(fake.DisposeObserved);
+            var release = lease.ReleaseAsync();
+
+            Assert.False(release.IsCompleted);
+            Assert.Null(host.TryAcquire(Callbacks(), out var failure));
+            Assert.Equal("helper-retiring", failure);
+            allowCleanup.Set();
+            await AwaitCompletion(release);
+            var replacement = Assert.IsType<SidecarVoiceLease>(
+                host.TryAcquire(Callbacks(), out failure));
+            Assert.Equal(string.Empty, failure);
+            await AwaitCompletion(replacement.ReleaseAsync());
+        }
+        finally
+        {
+            allowCleanup.Set();
+        }
+    }
+
+    [Fact]
+    public async Task ReleaseAsyncCompletesAfterCleanupAndRetirementFenceClears()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var commandEntered = new ManualResetEventSlim();
+        using var allowCommand = new ManualResetEventSlim();
+        using var allowCleanup = new ManualResetEventSlim();
+        try
+        {
+            var fake = new FakeSidecarVoiceClient
+            {
+                BlockNextMicActive = true,
+                CommandEntered = commandEntered,
+                AllowCommand = allowCommand,
+                AllowDisposeCompletion = allowCleanup,
+            };
+            var host = new SidecarVoiceHostCore(() => fake);
+            var lease = Assert.IsType<SidecarVoiceLease>(host.TryAcquire(Callbacks(), out _));
+            Assert.True(lease.EnsureStarted("mic", "spk"));
+
+            lease.SetMicActive(true);
+            Assert.True(await Task.Run(
+                () => commandEntered.Wait(TimeSpan.FromSeconds(2), cancellationToken),
+                cancellationToken));
+            var release = lease.ReleaseAsync();
+            Assert.False(release.IsCompleted);
+
+            allowCommand.Set();
+            await AwaitCompletion(fake.DisposeObserved);
+            Assert.Equal(0, fake.HandlerCount);
+            Assert.False(fake.CleanupComplete);
+            Assert.False(release.IsCompleted);
+
+            allowCleanup.Set();
+            await AwaitCompletion(release);
+            var replacement = Assert.IsType<SidecarVoiceLease>(
+                host.TryAcquire(Callbacks(), out var failure));
+            Assert.Equal(string.Empty, failure);
+            await AwaitCompletion(replacement.ReleaseAsync());
+        }
+        finally
+        {
+            allowCleanup.Set();
+            allowCommand.Set();
+        }
+    }
+
+    [Fact]
+    public async Task OutputFrameCompletionReturnsActualWriteResult()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var frameEntered = new ManualResetEventSlim();
+        using var allowFrame = new ManualResetEventSlim();
+        var fake = new FakeSidecarVoiceClient
+        {
+            OutputFrameEntered = frameEntered,
+            AllowOutputFrame = allowFrame,
+            OutputFrameResult = false,
+        };
+        var host = new SidecarVoiceHostCore(() => fake);
+        var lease = Assert.IsType<SidecarVoiceLease>(host.TryAcquire(Callbacks(), out _));
+        Assert.True(lease.EnsureStarted("mic", "spk"));
+        var frame = new[] { 0.25f, -0.5f };
+
+        var submission = Task.Run(
+            () => lease.SendOutputTestFrameAndWait(frame),
+            cancellationToken);
+        Assert.True(await Task.Run(
+            () => frameEntered.Wait(TimeSpan.FromSeconds(2), cancellationToken),
+            cancellationToken));
+        Assert.False(submission.IsCompleted);
+        allowFrame.Set();
+
+        Assert.Same(submission, await Task.WhenAny(
+            submission,
+            Task.Delay(TimeSpan.FromSeconds(2), cancellationToken)));
+        Assert.False(await submission);
+        Assert.Equal(new[] { 0.25f, -0.5f }, Assert.Single(fake.OutputFrames));
+        await AwaitCompletion(lease.ReleaseAsync());
+    }
+
+    [Fact]
+    public async Task OutputFrameCompletionRejectsBoundedQueueOverflow()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var commandEntered = new ManualResetEventSlim();
+        using var allowCommand = new ManualResetEventSlim();
+        var fake = new FakeSidecarVoiceClient
+        {
+            BlockNextMicActive = true,
+            CommandEntered = commandEntered,
+            AllowCommand = allowCommand,
+        };
+        var host = new SidecarVoiceHostCore(() => fake, commandCapacity: 1);
+        var lease = Assert.IsType<SidecarVoiceLease>(host.TryAcquire(Callbacks(), out _));
+        Assert.True(lease.EnsureStarted("mic", "spk"));
+
+        lease.SetMicActive(true);
+        Assert.True(await Task.Run(
+            () => commandEntered.Wait(TimeSpan.FromSeconds(2), cancellationToken),
+            cancellationToken));
+        Assert.True(lease.SelectOutputDevice("queued-output"));
+        var submission = Task.Run(
+            () => lease.SendOutputTestFrameAndWait(new[] { 0.5f, -0.5f }),
+            cancellationToken);
+
+        Assert.Same(submission, await Task.WhenAny(
+            submission,
+            Task.Delay(TimeSpan.FromSeconds(2), cancellationToken)));
+        Assert.False(await submission);
+        Assert.Empty(fake.OutputFrames);
+
+        var release = lease.ReleaseAsync();
+        allowCommand.Set();
+        await AwaitCompletion(release);
+    }
+
+    private static async Task AwaitCompletion(Task completion)
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        Assert.Same(completion, await Task.WhenAny(
+            completion,
+            Task.Delay(TimeSpan.FromSeconds(2), cancellationToken)));
+        await completion;
+    }
+
+    private static async Task<bool> TryUntilAsync(Func<bool> predicate)
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        for (var attempt = 0; attempt < 200; attempt++)
+        {
+            if (predicate()) return true;
+            await Task.Delay(10, cancellationToken);
+        }
+        return predicate();
+    }
+
+    private static void WaitUntil(Func<bool> predicate)
+        => Assert.True(SpinWait.SpinUntil(predicate, TimeSpan.FromSeconds(2)));
 
     private static SidecarVoiceCallbacks Callbacks(
         Action<string>? onDead = null,
@@ -419,18 +869,29 @@ public sealed class SidecarVoiceHostTests
         public IReadOnlyList<VoiceDeviceInfo> OutputDevices { get; } =
             new[] { new VoiceDeviceInfo("speaker-id", "speaker", true) };
         public int StartCount => Volatile.Read(ref StartCountBacking);
-        public int DisposeCount { get; private set; }
+        public int DisposeCount => Volatile.Read(ref DisposeCountBacking);
         public bool CleanupComplete => Volatile.Read(ref CleanupCompleteBacking) != 0;
         public ManualResetEventSlim? StartEntered { get; init; }
         public ManualResetEventSlim? AllowStart { get; init; }
         public ManualResetEventSlim? AllowDisposeCompletion { get; init; }
+        public bool BlockNextMicActive { get; init; }
+        public ManualResetEventSlim? CommandEntered { get; init; }
+        public ManualResetEventSlim? AllowCommand { get; init; }
+        public ManualResetEventSlim? OutputFrameEntered { get; init; }
+        public ManualResetEventSlim? AllowOutputFrame { get; init; }
+        public bool InitialConfigurationResult { get; init; } = true;
+        public bool AudioRouteResult { get; init; } = true;
+        public bool OutputFrameResult { get; init; } = true;
         public List<bool> MicActiveCalls { get; } = new();
         public List<bool> SyntheticCalls { get; } = new();
         public List<string> RemovedPeers { get; } = new();
         public List<string> OutputSelectionCalls { get; } = new();
         public List<(string Input, string Output, SidecarCaptureMode Mode, bool Synthetic)> AudioRouteCalls { get; } = new();
+        public List<float[]> OutputFrames { get; } = new();
         public int RemoveFailuresRemaining { get; set; }
         public List<(bool Deaf, float Master, int Peers)> GameStates { get; } = new();
+        public List<string> Sequence { get; } = new();
+        public Task DisposeObserved => DisposeObservedBacking.Task;
 
         public int HandlerCount =>
             Count(_onFrame) + Count(_onDead) + Count(_onRecoverableError) + Count(_onLocalSdp) + Count(_onLocalCandidate) +
@@ -446,14 +907,38 @@ public sealed class SidecarVoiceHostTests
         }
 
         private int StartCountBacking;
+        private int DisposeCountBacking;
         private int CleanupCompleteBacking = 1;
+        private int BlockedMicActiveConsumed;
+        private readonly TaskCompletionSource<bool> DisposeObservedBacking =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public bool TryConfigureInitialCapture(string micDevice, string outputDevice, bool aec, bool agc, bool ns, bool nsVeryHigh, bool hpf, float gain, float vadThreshold, float noiseGateThreshold, bool synthetic, bool micActive, bool micWarm, bool monitorEnabled, bool monitorDelayed, float monitorGain, IEnumerable<IceServer>? iceServers) => true;
+        public bool TryConfigureInitialCapture(string micDevice, string outputDevice, bool aec, bool agc, bool ns, bool nsVeryHigh, bool hpf, float gain, float vadThreshold, float noiseGateThreshold, bool synthetic, bool micActive, bool micWarm, bool monitorEnabled, bool monitorDelayed, float monitorGain, IEnumerable<IceServer>? iceServers)
+        {
+            Sequence.Add("initial-config");
+            return InitialConfigurationResult;
+        }
         public void SetDsp(bool aec, bool agc, bool ns, bool nsVeryHigh, bool hpf) { }
-        public void SetSynthetic(bool enabled) => SyntheticCalls.Add(enabled);
-        public void SetMonitor(bool enabled, bool delayed, float gain) { }
+        public void SetSynthetic(bool enabled)
+        {
+            SyntheticCalls.Add(enabled);
+            Sequence.Add($"synthetic:{enabled.ToString().ToLowerInvariant()}");
+        }
+        public void SetMonitor(bool enabled, bool delayed, float gain)
+            => Sequence.Add($"monitor:{enabled.ToString().ToLowerInvariant()}");
         public void SetInput(float gain, float vadThreshold, float noiseGateThreshold) { }
-        public void SetMicActive(bool active) => MicActiveCalls.Add(active);
+        public void SetMicActive(bool active)
+        {
+            if (active
+                && BlockNextMicActive
+                && Interlocked.Exchange(ref BlockedMicActiveConsumed, 1) == 0)
+            {
+                CommandEntered?.Set();
+                AllowCommand?.Wait(TimeSpan.FromSeconds(5));
+            }
+            MicActiveCalls.Add(active);
+            Sequence.Add($"mic:{active.ToString().ToLowerInvariant()}");
+        }
         public void SetMicWarm() { }
         public void SelectMicDevice(string deviceId) { }
         public bool SelectOutputDevice(string deviceId)
@@ -468,9 +953,20 @@ public sealed class SidecarVoiceHostTests
             bool synthetic)
         {
             AudioRouteCalls.Add((inputDevice, outputDevice, captureMode, synthetic));
-            return true;
+            Sequence.Add($"route:{inputDevice}:{outputDevice}");
+            return AudioRouteResult;
         }
-        public void SendOutputTestFrame(float[] interleavedStereo) { }
+        public void SendOutputTestFrame(float[] interleavedStereo)
+            => SendOutputTestFrameAndWait(interleavedStereo);
+        public bool SendOutputTestFrameAndWait(float[] interleavedStereo)
+        {
+            OutputFrameEntered?.Set();
+            AllowOutputFrame?.Wait(
+                TimeSpan.FromSeconds(5),
+                TestContext.Current.CancellationToken);
+            OutputFrames.Add((float[])interleavedStereo.Clone());
+            return OutputFrameResult;
+        }
         public bool AddPeer(string peerId, bool isOfferer, int generation) => true;
         public bool RemovePeer(string peerId, int generation)
         {
@@ -497,15 +993,30 @@ public sealed class SidecarVoiceHostTests
 
         public void Dispose()
         {
-            DisposeCount++;
             Health = CaptureHealth.Dead;
-            if (AllowDisposeCompletion == null) return;
-            Volatile.Write(ref CleanupCompleteBacking, 0);
-            Task.Run(() =>
+            if (AllowDisposeCompletion != null)
             {
-                AllowDisposeCompletion.Wait();
-                Volatile.Write(ref CleanupCompleteBacking, 1);
-            });
+                var cleanupGate = AllowDisposeCompletion;
+                var cancellationToken = TestContext.Current.CancellationToken;
+                Volatile.Write(ref CleanupCompleteBacking, 0);
+                Task.Run(() =>
+                {
+                    try
+                    {
+                        cleanupGate.Wait(cancellationToken);
+                    }
+                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                    {
+                    }
+                    finally
+                    {
+                        Volatile.Write(ref CleanupCompleteBacking, 1);
+                    }
+                });
+            }
+            Sequence.Add("dispose");
+            Interlocked.Increment(ref DisposeCountBacking);
+            DisposeObservedBacking.TrySetResult(true);
         }
 
         private static int Count(Delegate? value) => value?.GetInvocationList().Length ?? 0;

@@ -589,7 +589,9 @@ public static class VoiceSettingsPanel
                 .Build(
                     pane,
                     "Hear Your Microphone",
-                    _microphoneTest?.IsMicrophoneTestActive == true ? "Stop Test" : "Start Test",
+                    _microphoneTest?.IsMicrophoneTestStarting == true
+                        ? "Cancel Start"
+                        : _microphoneTest?.IsMicrophoneTestActive == true ? "Stop Test" : "Start Test",
                     paneW,
                     y,
                     RowH,
@@ -930,6 +932,16 @@ public static class VoiceSettingsPanel
 
         float dt = Mathf.Max(0f, Time.unscaledDeltaTime);
         _microphoneTest?.Tick();
+        if (_microphoneTest?.ConsumeUiRefresh() == true)
+        {
+            _rebuildRequested = true;
+            if (!_microphoneTest.IsMicrophoneTestActive &&
+                !string.Equals(
+                    _microphoneTest.MicrophoneStatus,
+                    "Mic check is off",
+                    StringComparison.Ordinal))
+                VoiceChatHudState.ShowToastThreadSafe(_microphoneTest.MicrophoneStatus);
+        }
         UpdateLivePreview(dt);
         if (_animT < 1f)
             _animT = Mathf.Min(1f, _animT + dt / 0.22f);

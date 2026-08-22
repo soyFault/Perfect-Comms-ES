@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace VoiceChatPlugin.VoiceChat;
 
@@ -79,6 +80,7 @@ internal interface ISidecarVoiceClient : IDisposable
         SidecarCaptureMode captureMode,
         bool synthetic);
     void SendOutputTestFrame(float[] interleavedStereo);
+    bool SendOutputTestFrameAndWait(float[] interleavedStereo);
     bool AddPeer(string peerId, bool isOfferer, int generation);
     bool RemovePeer(string peerId, int generation);
     bool RestartIce(string peerId, int generation, bool createOffer);
@@ -138,6 +140,8 @@ internal sealed class SidecarVoiceLease : IDisposable
     private readonly SidecarVoiceCallbacks _callbacks;
     private readonly Dictionary<string, int> _peerGenerations = new(StringComparer.Ordinal);
     private int _active = 1;
+    private readonly TaskCompletionSource<bool> _retirementCompletion =
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     private readonly Action<float[], int> _frameForwarder;
     private readonly Action<string> _deadForwarder;
@@ -237,295 +241,772 @@ internal sealed class SidecarVoiceLease : IDisposable
         bool monitorDelayed,
         float monitorGain,
         IEnumerable<IceServer>? iceServers)
-        => _host.Use(this, client => client.TryConfigureInitialCapture(
+    {
+        var iceServerSnapshot = iceServers?.ToArray();
+        return _host.Execute(this, client => client.TryConfigureInitialCapture(
             micDevice, outputDevice, aec, agc, ns, nsVeryHigh, hpf, gain, vadThreshold, noiseGateThreshold,
-            synthetic, micActive, micWarm, monitorEnabled, monitorDelayed, monitorGain, iceServers), false);
+            synthetic, micActive, micWarm, monitorEnabled, monitorDelayed, monitorGain, iceServerSnapshot));
+    }
 
     public void SetDsp(bool aec, bool agc, bool ns, bool nsVeryHigh, bool hpf)
-        => _host.Use(this, client => client.SetDsp(aec, agc, ns, nsVeryHigh, hpf));
+        => _host.Submit(this, client => client.SetDsp(aec, agc, ns, nsVeryHigh, hpf));
     public void SetSynthetic(bool enabled)
-        => _host.Use(this, client => client.SetSynthetic(enabled));
+        => _host.Submit(this, client => client.SetSynthetic(enabled));
     public void SetMonitor(bool enabled, bool delayed, float gain)
-        => _host.Use(this, client => client.SetMonitor(enabled, delayed, gain));
+        => _host.Submit(this, client => client.SetMonitor(enabled, delayed, gain));
     public void SetInput(float gain, float vadThreshold, float noiseGateThreshold)
-        => _host.Use(this, client => client.SetInput(gain, vadThreshold, noiseGateThreshold));
+        => _host.Submit(this, client => client.SetInput(gain, vadThreshold, noiseGateThreshold));
     public void SetMicActive(bool active)
-        => _host.Use(this, client => client.SetMicActive(active));
+        => _host.SubmitCritical(this, client => client.SetMicActive(active));
     public void SetMicWarm()
-        => _host.Use(this, client => client.SetMicWarm());
+        => _host.SubmitCritical(this, client => client.SetMicWarm());
     public void SelectMicDevice(string deviceId)
-        => _host.Use(this, client => client.SelectMicDevice(deviceId));
+        => _host.Submit(this, client => client.SelectMicDevice(deviceId));
     public bool SelectOutputDevice(string deviceId)
-        => _host.Use(this, client => client.SelectOutputDevice(deviceId), false);
+        => _host.Submit(this, client => client.SelectOutputDevice(deviceId));
     public bool TrySelectOutputDeviceIf(string deviceId, Func<bool> stillCurrent)
-        => _host.Use(this, client =>
-            stillCurrent() && client.SelectOutputDevice(deviceId), false);
+        => _host.Submit(this, client => client.SelectOutputDevice(deviceId), stillCurrent);
     public bool ConfigureAudioRoute(
         string inputDevice,
         string outputDevice,
         SidecarCaptureMode captureMode,
         bool synthetic)
-        => _host.Use(this, client => client.ConfigureAudioRoute(
-            inputDevice, outputDevice, captureMode, synthetic), false);
+        => _host.SubmitCritical(this, client => client.ConfigureAudioRoute(
+            inputDevice, outputDevice, captureMode, synthetic));
     public bool TryConfigureAudioRouteIf(
         string inputDevice,
         string outputDevice,
         SidecarCaptureMode captureMode,
         bool synthetic,
         Func<bool> stillCurrent)
-        => _host.Use(this, client =>
-            stillCurrent() && client.ConfigureAudioRoute(
-                inputDevice, outputDevice, captureMode, synthetic), false);
+        => _host.SubmitCritical(this, client => client.ConfigureAudioRoute(
+            inputDevice, outputDevice, captureMode, synthetic), stillCurrent);
+    internal bool ConfigureAudioRouteAndWait(
+        string inputDevice,
+        string outputDevice,
+        SidecarCaptureMode captureMode,
+        bool synthetic)
+        => _host.ExecuteCritical(this, client => client.ConfigureAudioRoute(
+            inputDevice, outputDevice, captureMode, synthetic));
+    internal bool TryConfigureAudioRouteIfAndWait(
+        string inputDevice,
+        string outputDevice,
+        SidecarCaptureMode captureMode,
+        bool synthetic,
+        Func<bool> stillCurrent)
+        => _host.ExecuteCritical(this, client => client.ConfigureAudioRoute(
+            inputDevice, outputDevice, captureMode, synthetic), stillCurrent);
     public void SendOutputTestFrame(float[] interleavedStereo)
-        => _host.Use(this, client => client.SendOutputTestFrame(interleavedStereo));
+    {
+        if (interleavedStereo == null) throw new ArgumentNullException(nameof(interleavedStereo));
+        var snapshot = (float[])interleavedStereo.Clone();
+        _host.Submit(this, client => client.SendOutputTestFrame(snapshot));
+    }
+    public bool SendOutputTestFrameAndWait(float[] interleavedStereo)
+    {
+        if (interleavedStereo == null) throw new ArgumentNullException(nameof(interleavedStereo));
+        return _host.Execute(this, client => client.SendOutputTestFrameAndWait(interleavedStereo));
+    }
     public bool AddPeer(string peerId, bool isOfferer, int generation)
-        => _host.Use(this, client =>
+        => _host.Submit(this, client =>
         {
             if (!client.AddPeer(peerId, isOfferer, generation)) return false;
             TrackPeer(peerId, generation);
             return true;
-        }, false);
+        });
     public bool RemovePeer(string peerId, int generation)
-        => _host.Use(this, client =>
+        => _host.Submit(this, client =>
         {
             var written = client.RemovePeer(peerId, generation);
             if (written) UntrackPeer(peerId);
             return written;
-        }, false);
+        });
     public bool RestartIce(string peerId, int generation, bool createOffer)
-        => _host.Use(this, client => client.RestartIce(peerId, generation, createOffer), false);
+        => _host.Submit(this, client => client.RestartIce(peerId, generation, createOffer));
     public bool SetRemoteSdp(string peerId, int generation, string sdpType, string sdp)
-        => _host.Use(this, client => client.SetRemoteSdp(peerId, generation, sdpType, sdp), false);
+        => _host.Submit(this, client => client.SetRemoteSdp(peerId, generation, sdpType, sdp));
     public bool AddIceCandidate(string peerId, int generation, string candidate)
-        => _host.Use(this, client => client.AddIceCandidate(peerId, generation, candidate), false);
+        => _host.Submit(this, client => client.AddIceCandidate(peerId, generation, candidate));
     public void SetIceServers(IEnumerable<IceServer> servers)
-        => _host.Use(this, client => client.SetIceServers(servers));
+    {
+        if (servers == null) return;
+        var snapshot = servers.ToArray();
+        _host.Submit(this, client => client.SetIceServers(snapshot));
+    }
     public void SendGameState(bool deaf, float master, IReadOnlyList<SidecarProtocol.GameStatePeerInput> peers)
-        => _host.Use(this, client => client.SendGameState(deaf, master, peers));
+    {
+        var snapshot = peers?.ToArray() ?? Array.Empty<SidecarProtocol.GameStatePeerInput>();
+        _host.Submit(this, client => client.SendGameState(deaf, master, snapshot));
+    }
+
+    internal Task RetirementCompletion => _retirementCompletion.Task;
+    internal void CompleteRetirement() => _retirementCompletion.TrySetResult(true);
+
+    public Task ReleaseAsync()
+    {
+        _host.Release(this, "lease-release-async");
+        return RetirementCompletion;
+    }
 
     public void Dispose() => _host.Release(this, "lease-dispose");
 }
 
 internal sealed class SidecarVoiceHostCore
 {
+    private sealed class StartupAttempt
+    {
+        internal readonly ManualResetEventSlim Completed = new();
+        internal bool Result;
+    }
+
+    private sealed class CommandWork
+    {
+        internal Func<ISidecarVoiceClient, bool> Action = null!;
+        internal Func<bool>? Predicate;
+        internal ManualResetEventSlim? Completed;
+        internal bool Result;
+        internal long Generation;
+        internal bool Retirement;
+        internal bool Quiesce;
+        internal string Reason = string.Empty;
+        internal bool CriticalState;
+    }
+
+    private abstract class RetirementSession
+    {
+        private readonly Action<RetirementSession> _retired;
+
+        protected RetirementSession(
+            ISidecarVoiceClient client,
+            SidecarVoiceLease lease,
+            long generation,
+            Action<RetirementSession> retired)
+        {
+            Client = client;
+            Lease = lease;
+            Generation = generation;
+            _retired = retired;
+        }
+
+        internal ISidecarVoiceClient Client { get; }
+        internal SidecarVoiceLease Lease { get; }
+        internal long Generation { get; }
+
+        internal abstract void BeginRetirement(bool quiesce, string reason);
+
+        protected void Retire(bool quiesce, string reason)
+        {
+            try
+            {
+                if (quiesce)
+                {
+                    try { Quiesce(Client, Lease.TakePeers(), reason); } catch { }
+                }
+                else
+                {
+                    try { Lease.TakePeers(); } catch { }
+                }
+                try { Lease.Detach(Client); } catch { }
+                try { Client.Dispose(); } catch { }
+                while (true)
+                {
+                    try
+                    {
+                        if (Client.CleanupComplete) break;
+                    }
+                    catch
+                    {
+                        break;
+                    }
+                    Thread.Sleep(10);
+                }
+            }
+            finally
+            {
+                _retired(this);
+            }
+        }
+    }
+
+
+    private sealed class FallbackRetirementSession : RetirementSession
+    {
+        private int _retirementStarted;
+
+        internal FallbackRetirementSession(
+            ISidecarVoiceClient client,
+            SidecarVoiceLease lease,
+            long generation,
+            Action<RetirementSession> retired)
+            : base(client, lease, generation, retired)
+        {
+        }
+
+        internal override void BeginRetirement(bool quiesce, string reason)
+        {
+            if (Interlocked.Exchange(ref _retirementStarted, 1) != 0) return;
+            _ = Task.Run(() => Retire(quiesce, reason));
+        }
+    }
+
+    private sealed class CommandSession : RetirementSession
+    {
+        private readonly object _queueGate = new();
+        private readonly Queue<CommandWork> _queue = new();
+        private readonly AutoResetEvent _available = new(false);
+        private readonly int _capacity;
+        private readonly Action<CommandSession> _criticalStateFailed;
+        private CommandWork? _reservedCriticalState;
+        private bool _accepting = true;
+
+        internal CommandSession(
+            ISidecarVoiceClient client,
+            SidecarVoiceLease lease,
+            long generation,
+            int capacity,
+            Action<RetirementSession> retired,
+            Action<CommandSession> criticalStateFailed,
+            Action<ThreadStart, string> startWorker)
+            : base(client, lease, generation, retired)
+        {
+            _capacity = capacity;
+            _criticalStateFailed = criticalStateFailed;
+            startWorker(Run, $"SidecarVoiceCommands-{generation}");
+        }
+
+        internal bool TryEnqueue(CommandWork work)
+        {
+            lock (_queueGate)
+            {
+                if (!_accepting) return false;
+                work.Generation = Generation;
+                if (_reservedCriticalState == null && _queue.Count < _capacity)
+                    _queue.Enqueue(work);
+                else if (work.CriticalState && _reservedCriticalState == null)
+                    _reservedCriticalState = work;
+                else
+                    return false;
+                _available.Set();
+                return true;
+            }
+        }
+
+        internal override void BeginRetirement(bool quiesce, string reason)
+        {
+            lock (_queueGate)
+            {
+                if (!_accepting) return;
+                _accepting = false;
+                if (_reservedCriticalState != null)
+                {
+                    _queue.Enqueue(_reservedCriticalState);
+                    _reservedCriticalState = null;
+                }
+                _queue.Enqueue(new CommandWork
+                {
+                    Action = _ => true,
+                    Generation = Generation,
+                    Retirement = true,
+                    Quiesce = quiesce,
+                    Reason = reason,
+                });
+                _available.Set();
+            }
+        }
+
+        private void Run()
+        {
+            while (true)
+            {
+                CommandWork? work = null;
+                lock (_queueGate)
+                {
+                    if (_queue.Count != 0)
+                        work = _queue.Dequeue();
+                    else if (_reservedCriticalState != null)
+                    {
+                        work = _reservedCriticalState;
+                        _reservedCriticalState = null;
+                    }
+                }
+                if (work == null)
+                {
+                    _available.WaitOne();
+                    continue;
+                }
+                if (work.Retirement)
+                {
+                    Retire(work.Quiesce, work.Reason);
+                    return;
+                }
+
+                var current = false;
+                try
+                {
+                    current = work.Generation == Generation
+                              && (work.Predicate == null || work.Predicate());
+                    work.Result = current && work.Action(Client);
+                }
+                catch
+                {
+                    work.Result = false;
+                }
+                finally
+                {
+                    if (current && work.CriticalState && !work.Result)
+                        _criticalStateFailed(this);
+                    work.Completed?.Set();
+                }
+            }
+        }
+    }
+
+    private const int DefaultCommandCapacity = 256;
     private readonly object _gate = new();
     private readonly Func<ISidecarVoiceClient> _createClient;
-    private ISidecarVoiceClient? _client;
-    private ISidecarVoiceClient? _startingClient;
-    private ISidecarVoiceClient? _retiringClient;
+    private readonly Action<ThreadStart, string> _startCommandWorker;
+    private readonly int _commandCapacity;
+    private CommandSession? _session;
+    private RetirementSession? _retiring;
+    private StartupAttempt? _starting;
     private SidecarVoiceLease? _owner;
     private long _nextLeaseId;
+    private long _nextGeneration;
     private bool _shutdown;
 
     internal SidecarVoiceHostCore(Func<ISidecarVoiceClient> createClient)
+        : this(createClient, DefaultCommandCapacity)
+    {
+    }
+
+    internal SidecarVoiceHostCore(
+        Func<ISidecarVoiceClient> createClient,
+        int commandCapacity,
+        Action<ThreadStart, string>? startCommandWorker = null)
     {
         _createClient = createClient ?? throw new ArgumentNullException(nameof(createClient));
+        if (commandCapacity <= 0) throw new ArgumentOutOfRangeException(nameof(commandCapacity));
+        _commandCapacity = commandCapacity;
+        _startCommandWorker = startCommandWorker ?? StartCommandWorker;
     }
 
     internal SidecarVoiceLease? TryAcquire(SidecarVoiceCallbacks callbacks, out string failure)
     {
+        SidecarVoiceLease? lease = null;
         lock (_gate)
         {
             if (_shutdown)
-            {
                 failure = "host-shutdown";
-                return null;
-            }
-            if (_owner != null)
-            {
+            else if (_owner != null)
                 failure = $"lease-active:{_owner.Id}";
-                return null;
-            }
-            if (_startingClient != null)
-            {
+            else if (_starting != null || _retiring != null)
                 failure = "helper-retiring";
-                return null;
-            }
-            if (_retiringClient != null)
+            else
             {
-                if (!_retiringClient.CleanupComplete)
-                {
-                    failure = "helper-retiring";
-                    return null;
-                }
-                _retiringClient = null;
+                lease = new SidecarVoiceLease(this, ++_nextLeaseId, callbacks);
+                _owner = lease;
+                failure = string.Empty;
             }
-
-            if (_client != null && _client.Health == CaptureHealth.Dead)
-                DropClientLocked(null, "dead-before-acquire");
-
-            var lease = new SidecarVoiceLease(this, ++_nextLeaseId, callbacks);
-            _owner = lease;
-            if (_client != null) lease.Attach(_client);
-            failure = string.Empty;
-            VoiceDiagnostics.Log(
-                "sidecar.host",
-                $"event=lease-acquired lease={lease.Id} reused={(_client != null).ToString().ToLowerInvariant()}");
-            return lease;
         }
+        if (lease != null)
+            VoiceDiagnostics.Log("sidecar.host", $"event=lease-acquired lease={lease.Id} reused=false");
+        return lease;
     }
 
     internal bool EnsureStarted(SidecarVoiceLease lease, string micDevice, string outputDevice)
     {
-        ISidecarVoiceClient client;
+        StartupAttempt? waiting;
+        CommandSession? existing;
+        var reserved = false;
         lock (_gate)
         {
-            while (_startingClient != null && OwnsLocked(lease))
-                Monitor.Wait(_gate);
             if (!OwnsLocked(lease)) return false;
-            if (_client != null && _client.Health == CaptureHealth.Healthy) return true;
-            if (_client != null) DropClientLocked(lease, "dead-before-start");
-            if (_retiringClient != null)
+            existing = _session;
+            waiting = _starting;
+            if (existing == null && waiting == null)
             {
-                if (!_retiringClient.CleanupComplete) return false;
-                _retiringClient = null;
-            }
-
-            try
-            {
-                client = _createClient();
-                _client = client;
-                _startingClient = client;
-                lease.Attach(client);
-            }
-            catch (Exception ex)
-            {
-                VoiceDiagnostics.Log("sidecar.host", $"event=create-failed lease={lease.Id} error=\"{ex.Message}\"");
-                _client = null;
-                return false;
+                if (_retiring != null) return false;
+                waiting = new StartupAttempt();
+                _starting = waiting;
+                reserved = true;
             }
         }
 
-        bool started;
-        try { started = client.Start(micDevice, outputDevice); }
+        if (existing != null)
+        {
+            CaptureHealth health;
+            try { health = existing.Client.Health; }
+            catch { health = CaptureHealth.Dead; }
+            if (health == CaptureHealth.Healthy)
+            {
+                lock (_gate)
+                    return OwnsLocked(lease) && ReferenceEquals(_session, existing);
+            }
+            RetireDeadSession(lease, existing);
+            return false;
+        }
+
+        if (!reserved)
+        {
+            waiting!.Completed.Wait();
+            return waiting.Result && lease.IsActive;
+        }
+
+        return StartReserved(lease, waiting!, micDevice, outputDevice);
+    }
+
+
+    private bool StartReserved(
+        SidecarVoiceLease lease,
+        StartupAttempt attempt,
+        string micDevice,
+        string outputDevice)
+    {
+        ISidecarVoiceClient? client = null;
+        var started = false;
+        try
+        {
+            client = _createClient();
+            lease.Attach(client);
+            started = client.Start(micDevice, outputDevice);
+        }
         catch (Exception ex)
         {
             VoiceDiagnostics.Log("sidecar.host", $"event=start-threw lease={lease.Id} error=\"{ex.Message}\"");
-            started = false;
         }
 
+        var healthy = false;
+        if (client != null && started)
+        {
+            try { healthy = client.Health == CaptureHealth.Healthy; }
+            catch { }
+        }
+
+        CommandSession? session = null;
+        RetirementSession? retirement = null;
+        var generation = Interlocked.Increment(ref _nextGeneration);
+        var commandWorkerFailed = false;
+        if (client != null)
+        {
+            try
+            {
+                session = new CommandSession(
+                    client,
+                    lease,
+                    generation,
+                    _commandCapacity,
+                    OnRetired,
+                    RetireAfterCriticalExecutionFailure,
+                    _startCommandWorker);
+            }
+            catch (Exception ex)
+            {
+                commandWorkerFailed = true;
+                retirement = new FallbackRetirementSession(client, lease, generation, OnRetired);
+                VoiceDiagnostics.Log("sidecar.host", $"event=queue-start-failed lease={lease.Id} error=\"{ex.Message}\"");
+            }
+        }
+
+        var accepted = false;
+        var completeReleasedLease = false;
         lock (_gate)
         {
-            if (ReferenceEquals(_startingClient, client))
-                _startingClient = null;
-
-            var accepted = started
-                           && client.Health == CaptureHealth.Healthy
-                           && OwnsLocked(lease)
-                           && ReferenceEquals(_client, client);
+            if (ReferenceEquals(_starting, attempt))
+                _starting = null;
+            accepted = session != null
+                       && healthy
+                       && OwnsLocked(lease)
+                       && _session == null
+                       && _retiring == null;
             if (accepted)
-                VoiceDiagnostics.Log("sidecar.host", $"event=helper-ready lease={lease.Id}");
+                _session = session;
             else
             {
-                if (ReferenceEquals(_client, client))
-                    _client = null;
-                RetireClientLocked(client, lease, "start-failed");
+                retirement ??= session;
+                if (retirement != null)
+                    _retiring = retirement;
+                else
+                    completeReleasedLease = !lease.IsActive;
             }
-
-            Monitor.PulseAll(_gate);
-            return accepted;
+            attempt.Result = accepted;
         }
+
+        if (accepted)
+            VoiceDiagnostics.Log("sidecar.host", $"event=helper-ready lease={lease.Id}");
+        else if (retirement != null)
+            retirement.BeginRetirement(
+                started,
+                commandWorkerFailed ? "queue-start-failed" : "start-failed");
+        else if (completeReleasedLease)
+            lease.CompleteRetirement();
+        attempt.Completed.Set();
+        return accepted;
     }
 
     internal CaptureHealth GetHealth(SidecarVoiceLease lease)
     {
+        CommandSession? session;
         lock (_gate)
-            return OwnsLocked(lease) && _startingClient == null
-                ? _client?.Health ?? CaptureHealth.Dead
+            session = OwnsLocked(lease) && _starting == null ? _session : null;
+        if (session == null) return CaptureHealth.Dead;
+        CaptureHealth health;
+        try { health = session.Client.Health; }
+        catch { return CaptureHealth.Dead; }
+        lock (_gate)
+            return OwnsLocked(lease) && ReferenceEquals(_session, session)
+                ? health
                 : CaptureHealth.Dead;
     }
 
     internal IReadOnlyList<VoiceDeviceInfo> GetOutputDevices(SidecarVoiceLease lease)
     {
+        CommandSession? session;
         lock (_gate)
-            return OwnsLocked(lease) && _startingClient == null && _client != null
-                ? _client.OutputDevices.ToArray()
+            session = OwnsLocked(lease) && _starting == null ? _session : null;
+        if (session == null) return Array.Empty<VoiceDeviceInfo>();
+        VoiceDeviceInfo[] devices;
+        try { devices = session.Client.OutputDevices.ToArray(); }
+        catch { return Array.Empty<VoiceDeviceInfo>(); }
+        lock (_gate)
+            return OwnsLocked(lease) && ReferenceEquals(_session, session)
+                ? devices
                 : Array.Empty<VoiceDeviceInfo>();
     }
 
-    internal void Use(SidecarVoiceLease lease, Action<ISidecarVoiceClient> action)
-    {
-        lock (_gate)
+    internal void Submit(SidecarVoiceLease lease, Action<ISidecarVoiceClient> action)
+        => Submit(lease, client =>
         {
-            if (!OwnsLocked(lease)
-                || _startingClient != null
-                || _client == null
-                || _client.Health == CaptureHealth.Dead) return;
-            action(_client);
-        }
+            action(client);
+            return true;
+        });
+
+    internal void SubmitCritical(SidecarVoiceLease lease, Action<ISidecarVoiceClient> action)
+        => SubmitCritical(lease, client =>
+        {
+            action(client);
+            return true;
+        });
+
+    internal bool SubmitCritical(
+        SidecarVoiceLease lease,
+        Func<ISidecarVoiceClient, bool> action,
+        Func<bool>? predicate = null)
+    {
+        CommandSession? session;
+        lock (_gate)
+            session = OwnsLocked(lease) && _starting == null ? _session : null;
+        if (session == null) return false;
+        if (session.TryEnqueue(new CommandWork
+        {
+            Action = action,
+            Predicate = predicate,
+            CriticalState = true,
+        }))
+            return true;
+        RetireAfterCriticalAdmissionFailure(lease, session);
+        return false;
     }
 
-    internal T Use<T>(SidecarVoiceLease lease, Func<ISidecarVoiceClient, T> action, T fallback)
+    internal bool Submit(
+        SidecarVoiceLease lease,
+        Func<ISidecarVoiceClient, bool> action,
+        Func<bool>? predicate = null)
     {
+        CommandSession? session;
         lock (_gate)
+            session = OwnsLocked(lease) && _starting == null ? _session : null;
+        return session?.TryEnqueue(new CommandWork
         {
-            if (!OwnsLocked(lease)
-                || _startingClient != null
-                || _client == null
-                || _client.Health == CaptureHealth.Dead) return fallback;
-            return action(_client);
+            Action = action,
+            Predicate = predicate,
+        }) == true;
+    }
+
+    internal bool ExecuteCritical(
+        SidecarVoiceLease lease,
+        Func<ISidecarVoiceClient, bool> action,
+        Func<bool>? predicate = null)
+    {
+        var completed = new ManualResetEventSlim();
+        var work = new CommandWork
+        {
+            Action = action,
+            Predicate = predicate,
+            Completed = completed,
+            CriticalState = true,
+        };
+        CommandSession? session;
+        lock (_gate)
+            session = OwnsLocked(lease) && _starting == null ? _session : null;
+        if (session == null) return false;
+        if (!session.TryEnqueue(work))
+        {
+            RetireAfterCriticalAdmissionFailure(lease, session);
+            return false;
         }
+        completed.Wait();
+        return work.Result;
+    }
+
+    internal bool Execute(
+        SidecarVoiceLease lease,
+        Func<ISidecarVoiceClient, bool> action,
+        Func<bool>? predicate = null)
+    {
+        var completed = new ManualResetEventSlim();
+        var work = new CommandWork
+        {
+            Action = action,
+            Predicate = predicate,
+            Completed = completed,
+        };
+        CommandSession? session;
+        lock (_gate)
+            session = OwnsLocked(lease) && _starting == null ? _session : null;
+        if (session == null || !session.TryEnqueue(work)) return false;
+        completed.Wait();
+        return work.Result;
     }
 
     internal void Release(SidecarVoiceLease lease, string reason)
     {
+        RetirementSession? retiring = null;
+        var complete = false;
+        var helperAlive = false;
         lock (_gate)
         {
             if (!ReferenceEquals(_owner, lease))
             {
                 lease.Deactivate();
-                return;
+                complete = _starting == null
+                           && !ReferenceEquals(_session?.Lease, lease)
+                           && !ReferenceEquals(_retiring?.Lease, lease);
             }
-
-            lease.Deactivate();
-            var client = _client;
-            var starting = ReferenceEquals(_startingClient, client);
-            if (client != null)
+            else
             {
-                lease.Detach(client);
-                if (!starting && client.Health != CaptureHealth.Dead)
-                    QuiesceLocked(client, lease.TakePeers(), reason);
-                else
-                    lease.TakePeers();
+                lease.Deactivate();
+                _owner = null;
+                if (_session != null)
+                {
+                    retiring = _session;
+                    _session = null;
+                    _retiring = retiring;
+                }
+                else if (_starting == null && !ReferenceEquals(_retiring?.Lease, lease))
+                {
+                    complete = true;
+                }
             }
-            _owner = null;
-
-            if (client != null && !starting)
-                DropClientLocked(null, $"lease-release:{reason}");
-            Monitor.PulseAll(_gate);
-
-            VoiceDiagnostics.Log(
-                "sidecar.host",
-                $"event=lease-released lease={lease.Id} reason={reason} helperAlive={(_client != null).ToString().ToLowerInvariant()}");
+            helperAlive = ReferenceEquals(_retiring?.Lease, lease);
         }
+        retiring?.BeginRetirement(true, reason);
+        if (complete)
+            lease.CompleteRetirement();
+        VoiceDiagnostics.Log(
+            "sidecar.host",
+            $"event=lease-released lease={lease.Id} reason={reason} helperAlive={helperAlive.ToString().ToLowerInvariant()}");
     }
 
     internal void Shutdown(string reason)
     {
+        RetirementSession? retiring = null;
+        SidecarVoiceLease? complete = null;
         lock (_gate)
         {
-            if (_shutdown && _client == null) return;
+            if (_shutdown) return;
             _shutdown = true;
             var owner = _owner;
-            var starting = ReferenceEquals(_startingClient, _client);
             if (owner != null)
-            {
                 owner.Deactivate();
-                if (_client != null) owner.Detach(_client);
-                owner.TakePeers();
-            }
             _owner = null;
-            if (!starting)
-                DropClientLocked(null, $"process-shutdown:{reason}");
-            Monitor.PulseAll(_gate);
-            VoiceDiagnostics.Log("sidecar.host", $"event=shutdown reason={reason}");
+            if (_session != null)
+            {
+                retiring = _session;
+                _session = null;
+                _retiring = retiring;
+            }
+            else if (owner != null
+                     && _starting == null
+                     && !ReferenceEquals(_retiring?.Lease, owner))
+            {
+                complete = owner;
+            }
         }
+        retiring?.BeginRetirement(true, $"process-shutdown:{reason}");
+        complete?.CompleteRetirement();
+        VoiceDiagnostics.Log("sidecar.host", $"event=shutdown reason={reason}");
+    }
+
+    private void RetireAfterCriticalAdmissionFailure(
+        SidecarVoiceLease lease,
+        CommandSession session)
+    {
+        var retire = false;
+        lock (_gate)
+        {
+            if (!OwnsLocked(lease) || !ReferenceEquals(_session, session)) return;
+            _session = null;
+            _retiring = session;
+            retire = true;
+        }
+        if (retire)
+            session.BeginRetirement(true, "critical-state-admission-failed");
+    }
+    private void RetireAfterCriticalExecutionFailure(CommandSession session)
+    {
+        var retire = false;
+        lock (_gate)
+        {
+            if (!ReferenceEquals(_session, session)) return;
+            _session = null;
+            _retiring = session;
+            retire = true;
+        }
+        if (retire)
+            session.BeginRetirement(true, "critical-state-execution-failed");
+    }
+
+
+    private void RetireDeadSession(SidecarVoiceLease lease, CommandSession session)
+    {
+        lock (_gate)
+        {
+            if (!OwnsLocked(lease) || !ReferenceEquals(_session, session)) return;
+            _session = null;
+            _retiring = session;
+            session.BeginRetirement(false, "dead-before-start");
+        }
+    }
+
+    private void OnRetired(RetirementSession session)
+    {
+        var cleared = false;
+        lock (_gate)
+        {
+            if (ReferenceEquals(_retiring, session))
+            {
+                _retiring = null;
+                cleared = true;
+            }
+        }
+        if (cleared && !session.Lease.IsActive)
+            session.Lease.CompleteRetirement();
+        VoiceDiagnostics.Log("sidecar.host", $"event=helper-dropped generation={session.Generation}");
     }
 
     private bool OwnsLocked(SidecarVoiceLease lease)
         => !_shutdown && lease.IsActive && ReferenceEquals(_owner, lease);
 
-    private static void QuiesceLocked(
+    private static void StartCommandWorker(ThreadStart run, string name)
+    {
+        new Thread(run)
+        {
+            IsBackground = true,
+            Name = name,
+        }.Start();
+    }
+
+    private static void Quiesce(
         ISidecarVoiceClient client,
         IReadOnlyList<KeyValuePair<string, int>> peers,
         string reason)
@@ -544,27 +1025,6 @@ internal sealed class SidecarVoiceHostCore
         foreach (var peer in peers)
             try { client.RemovePeer(peer.Key, peer.Value); } catch { }
         VoiceDiagnostics.Log("sidecar.host", $"event=session-quiesced reason={reason} peersRemoved={peers.Count}");
-    }
-
-    private void DropClientLocked(SidecarVoiceLease? attachedLease, string reason)
-    {
-        var client = _client;
-        _client = null;
-        if (client == null) return;
-        RetireClientLocked(client, attachedLease, reason);
-    }
-
-    private void RetireClientLocked(
-        ISidecarVoiceClient client,
-        SidecarVoiceLease? attachedLease,
-        string reason)
-    {
-        if (attachedLease != null)
-            try { attachedLease.Detach(client); } catch { }
-        try { client.Dispose(); } catch { }
-        if (!client.CleanupComplete)
-            _retiringClient = client;
-        VoiceDiagnostics.Log("sidecar.host", $"event=helper-dropped reason={reason}");
     }
 }
 

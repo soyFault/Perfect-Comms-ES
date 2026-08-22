@@ -164,6 +164,92 @@ internal static class FirstRunOutputPreviewPolicy
     }
 }
 
+#if WINDOWS
+internal interface IFirstRunDesktopAudioLease : IDisposable
+{
+    bool EnsureStarted(string microphoneDevice, string speakerDevice);
+    void SetDsp(bool echoCancellation, bool noiseSuppression, bool strongerNoiseSuppression);
+    void SetInput(float gain, float vadThreshold, float noiseGateThreshold);
+    void SetMonitor(bool enabled, bool delayed, float gain);
+    bool ConfigureAudioRoute(
+        string inputDevice,
+        string outputDevice,
+        SidecarCaptureMode captureMode);
+    void SendOutputTestFrame(float[] interleavedStereo);
+    bool SendOutputTestFrameAndWait(float[] interleavedStereo);
+    Task ReleaseAsync();
+}
+
+internal interface IFirstRunDesktopAudioHost
+{
+    IFirstRunDesktopAudioLease? TryAcquire(
+        SidecarVoiceCallbacks callbacks,
+        out string failure);
+}
+
+internal sealed class FirstRunDesktopAudioHost : IFirstRunDesktopAudioHost
+{
+    internal static readonly FirstRunDesktopAudioHost Instance = new();
+
+    public IFirstRunDesktopAudioLease? TryAcquire(
+        SidecarVoiceCallbacks callbacks,
+        out string failure)
+    {
+        var lease = SidecarVoiceHost.TryAcquire(callbacks, out failure);
+        return lease == null ? null : new FirstRunDesktopAudioLease(lease);
+    }
+}
+
+internal sealed class FirstRunDesktopAudioLease : IFirstRunDesktopAudioLease
+{
+    private readonly SidecarVoiceLease _lease;
+
+    internal FirstRunDesktopAudioLease(SidecarVoiceLease lease)
+    {
+        _lease = lease;
+    }
+
+    public bool EnsureStarted(string microphoneDevice, string speakerDevice)
+        => _lease.EnsureStarted(microphoneDevice, speakerDevice);
+
+    public void SetDsp(bool echoCancellation, bool noiseSuppression, bool strongerNoiseSuppression)
+        => _lease.SetDsp(
+            aec: echoCancellation,
+            agc: false,
+            ns: noiseSuppression,
+            nsVeryHigh: strongerNoiseSuppression,
+            hpf: true);
+
+    public void SetInput(float gain, float vadThreshold, float noiseGateThreshold)
+        => _lease.SetInput(gain, vadThreshold, noiseGateThreshold);
+
+    public void SetMonitor(bool enabled, bool delayed, float gain)
+        => _lease.SetMonitor(enabled, delayed, gain);
+
+    public bool ConfigureAudioRoute(
+        string inputDevice,
+        string outputDevice,
+        SidecarCaptureMode captureMode)
+        => _lease.ConfigureAudioRouteAndWait(
+            inputDevice,
+            outputDevice,
+            captureMode,
+            synthetic: false);
+
+    public void SendOutputTestFrame(float[] interleavedStereo)
+        => _lease.SendOutputTestFrame(interleavedStereo);
+
+    public bool SendOutputTestFrameAndWait(float[] interleavedStereo)
+        => _lease.SendOutputTestFrameAndWait(interleavedStereo);
+
+    public Task ReleaseAsync()
+        => _lease.ReleaseAsync();
+
+    public void Dispose()
+        => _lease.Dispose();
+}
+#endif
+
 /// <summary>
 /// Local-only setup probe. Desktop capture owns a peerless sidecar lease and never adds ICE or
 /// peers; Android reads Unity's microphone directly. Output tests use the exact selected sidecar
@@ -211,18 +297,161 @@ internal sealed class FirstRunAudioPreview : IDisposable
     private VoiceChatRoom? _monitorRoom;
 
 #if WINDOWS
-    private SidecarVoiceLease? _lease;
-    private int _desktopFailurePending;
-    private volatile string _desktopFailureMessage = "The audio helper stopped";
-    private int _desktopFailureChannel;
-    private int _desktopFailureAffectedOutput;
+    private enum DesktopOperationKind
+    {
+        Microphone,
+        Output,
+        OutputFallback,
+    }
+
+    private readonly record struct DesktopConfiguration(
+        string InputDevice,
+        string OutputDevice,
+        bool EchoCancellation,
+        bool NoiseSuppression,
+        bool StrongerNoiseSuppression,
+        float InputGain,
+        float VadThreshold,
+        float NoiseGateThreshold,
+        bool MonitorEnabled,
+        bool MonitorDelayed,
+        float MonitorGain,
+        SidecarCaptureMode CaptureMode,
+        bool InputFellBackToDefault);
+
+    private readonly record struct DesktopOperation(
+        int OperationGeneration,
+        int LeaseGeneration,
+        DesktopOperationKind Kind,
+        DesktopConfiguration Configuration,
+        SidecarVoiceCallbacks? Callbacks,
+        IFirstRunDesktopAudioLease? ExistingLease,
+        CancellationToken Cancellation);
+    private sealed class DesktopLeaseRetirement
+    {
+        private readonly TaskCompletionSource<bool> _completion =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        internal DesktopLeaseRetirement(Task previous)
+        {
+            Previous = previous;
+            Barrier = Task.WhenAll(previous, _completion.Task);
+        }
+
+        internal Task Previous { get; }
+        internal Task Barrier { get; }
+
+        internal void Complete()
+            => _completion.TrySetResult(true);
+    }
+
+
+    private sealed class DesktopOperationCompletion
+    {
+        private IFirstRunDesktopAudioLease? _lease;
+        private CancellationTokenRegistration _cancellationRegistration;
+        private int _cancellationArmed;
+        private readonly DesktopLeaseRetirement? _retirement;
+
+        internal DesktopOperationCompletion(
+            int operationGeneration,
+            int leaseGeneration,
+            DesktopOperationKind kind,
+            DesktopConfiguration configuration,
+            IFirstRunDesktopAudioLease? lease,
+            bool acquiredLease,
+            string failure,
+            DesktopLeaseRetirement? retirement = null)
+        {
+            OperationGeneration = operationGeneration;
+            LeaseGeneration = leaseGeneration;
+            Kind = kind;
+            Configuration = configuration;
+            _lease = lease;
+            AcquiredLease = acquiredLease;
+            Failure = failure;
+            _retirement = retirement;
+        }
+
+        internal int OperationGeneration { get; }
+        internal int LeaseGeneration { get; }
+        internal DesktopOperationKind Kind { get; }
+        internal DesktopConfiguration Configuration { get; }
+        internal bool AcquiredLease { get; }
+        internal string Failure { get; }
+        internal DesktopLeaseRetirement? Retirement => _retirement;
+
+        internal IFirstRunDesktopAudioLease? TakeLease()
+        {
+            var lease = Interlocked.Exchange(ref _lease, null);
+            if (Volatile.Read(ref _cancellationArmed) != 0)
+                _cancellationRegistration.Unregister();
+            return lease;
+        }
+        internal void CompleteRetirement()
+            => _retirement?.Complete();
+
+
+        internal void ReleaseOnCancellation(
+            CancellationToken cancellation,
+            Action<
+                IFirstRunDesktopAudioLease,
+                DesktopConfiguration,
+                DesktopLeaseRetirement> release)
+        {
+            if (!AcquiredLease ||
+                _retirement == null ||
+                Volatile.Read(ref _lease) == null)
+                return;
+            _cancellationRegistration = cancellation.Register(() =>
+            {
+                var lease = Interlocked.Exchange(ref _lease, null);
+                if (lease != null)
+                    release(lease, Configuration, _retirement);
+            });
+            Volatile.Write(ref _cancellationArmed, 1);
+            if (Volatile.Read(ref _lease) == null)
+                _cancellationRegistration.Dispose();
+        }
+    }
+
+    private readonly record struct DesktopPlaybackEvent(
+        int LeaseGeneration,
+        SidecarPlaybackState State);
+
+    private readonly record struct DesktopToneCompletion(
+        int LeaseGeneration,
+        int ToneGeneration,
+        bool Succeeded,
+        bool UsedDefaultFallback);
+
+    private readonly record struct DesktopFailureEvent(
+        int LeaseGeneration,
+        string Message,
+        DesktopFailureChannel Channel);
+
+    private readonly IFirstRunDesktopAudioHost _desktopHost;
+    private readonly SemaphoreSlim _desktopAcquisitionGate = new(1, 1);
+    private readonly SemaphoreSlim _desktopWorkerGate = new(1, 1);
+    private readonly ConcurrentQueue<DesktopOperationCompletion> _desktopCompletions = new();
+    private readonly ConcurrentQueue<DesktopPlaybackEvent> _playbackStates = new();
+    private readonly ConcurrentQueue<DesktopToneCompletion> _toneCompletions = new();
+    private readonly ConcurrentQueue<DesktopFailureEvent> _desktopFailures = new();
+    private IFirstRunDesktopAudioLease? _lease;
+    private CancellationTokenSource? _desktopOperationCancellation;
+    private CancellationTokenSource? _desktopSettingsCancellation;
+    private Task _desktopLeaseRelease = Task.CompletedTask;
+    private readonly object _desktopLeaseReleaseGate = new();
+    private readonly object _desktopToneStateGate = new();
+    private DesktopConfiguration? _lastDesktopSettings;
+    private int _desktopOperationGeneration;
     private int _desktopLeaseGeneration;
-    private readonly ConcurrentQueue<SidecarPlaybackState> _playbackStates = new();
     private FirstRunSetupDraft? _pendingSpeakerDraft;
     private string _pendingOutputDevice = string.Empty;
     private ulong _pendingPlaybackGeneration;
     private long _outputReadyDeadlineTick;
     private int _waitingForOutput;
+    private bool _desktopRouteAdmitted;
     private bool _outputSelectionAccepted;
     private string _confirmedOutputDevice = string.Empty;
     private ulong _confirmedPlaybackGeneration;
@@ -230,6 +459,7 @@ internal sealed class FirstRunAudioPreview : IDisposable
     private long _activeTonePlaybackGeneration;
     private long _desktopToneTerminalGeneration;
     private int _desktopTonePlaybackTerminated;
+    private int _desktopToneLeaseGeneration;
     private string _desktopInputDevice = string.Empty;
     private string _desktopOutputDevice = string.Empty;
 #endif
@@ -241,6 +471,22 @@ internal sealed class FirstRunAudioPreview : IDisposable
     private AndroidMicrophoneMonitor? _androidMonitor;
     private AndroidMicrophoneMonitorOutput? _androidMonitorOutput;
     private int _permissionGeneration;
+#endif
+
+#if WINDOWS
+    internal FirstRunAudioPreview()
+        : this(FirstRunDesktopAudioHost.Instance)
+    {
+    }
+
+    internal FirstRunAudioPreview(IFirstRunDesktopAudioHost desktopHost)
+    {
+        _desktopHost = desktopHost ?? throw new ArgumentNullException(nameof(desktopHost));
+    }
+#else
+    internal FirstRunAudioPreview()
+    {
+    }
 #endif
 
     internal float Level => float.IsFinite(_level) ? Math.Clamp(_level, 0f, 1f) : 0f;
@@ -262,6 +508,7 @@ internal sealed class FirstRunAudioPreview : IDisposable
 #else
         false;
 #endif
+    internal bool IsMicrophoneTestStarting => IsMicrophoneTestActive && !IsListening;
     internal bool IsSpeakerTestBusy => IsPlayingTone || IsPreparingTone;
     internal bool ConsumeUiRefresh() => Interlocked.Exchange(ref _uiRefreshPending, 0) != 0;
     internal bool MicrophoneSignalDetected => Volatile.Read(ref _microphoneSignalDetected) != 0;
@@ -343,21 +590,26 @@ internal sealed class FirstRunAudioPreview : IDisposable
             }
         }
 #if WINDOWS
-        if (Interlocked.Exchange(ref _desktopFailurePending, 0) != 0)
+        TickDesktopCompletions();
+        while (_desktopFailures.TryDequeue(out var failure))
         {
-            int channel = Volatile.Read(ref _desktopFailureChannel);
-            bool affectedOutput = Volatile.Read(ref _desktopFailureAffectedOutput) != 0;
-            if (channel == (int)DesktopFailureChannel.Output)
-                FailOutput(_desktopFailureMessage);
+            if (failure.LeaseGeneration != Volatile.Read(ref _desktopLeaseGeneration))
+                continue;
+            bool affectedOutput = IsSpeakerTestBusy;
+            if (failure.Channel == DesktopFailureChannel.Output)
+                FailOutput(failure.Message);
             else
             {
-                FailMicrophone(_desktopFailureMessage);
+                FailMicrophone(failure.Message);
                 if (affectedOutput)
                     FailOutput("The audio helper stopped during the speaker test");
             }
             StopDesktopLease();
+            Interlocked.Exchange(ref _uiRefreshPending, 1);
+            break;
         }
         TickDesktopOutputReadiness();
+        TickDesktopToneCompletions();
 #endif
 #if ANDROID
         _androidMicrophone?.Tick();
@@ -446,59 +698,28 @@ internal sealed class FirstRunAudioPreview : IDisposable
         }
 
 #if WINDOWS
-        int generation = Interlocked.Increment(ref _desktopLeaseGeneration);
-        var callbacks = new SidecarVoiceCallbacks(
-            (_, _) => { },
-            reason => FailDesktop(
-                "Microphone helper stopped: " + reason, generation, DesktopFailureChannel.Microphone),
-            (_, message) => FailDesktop(
-                "Microphone unavailable: " + message, generation, DesktopFailureChannel.Microphone),
-            (_, _, _, _) => { },
-            (_, _, _) => { },
-            (_, _, _) => { },
-            OnLevel,
-            _ => { },
-            _ => { },
-            OnPlaybackState);
-        _lease = SidecarVoiceHost.TryAcquire(callbacks, out string failure);
-        if (_lease == null)
-        {
-            FailMicrophone(failure.StartsWith("lease-active", StringComparison.Ordinal)
-                ? "Mic check is available from the main menu"
-                : "Could not start microphone check");
-            return;
-        }
-
-        if (!_lease.EnsureStarted(draft.MicrophoneDevice, draft.SpeakerDevice))
-        {
-            FailMicrophone("Could not start the Perfect Comms audio helper");
-            StopDesktopLease();
-            return;
-        }
-        _lease.SetDsp(
-            aec: draft.EchoCancellation,
-            agc: false,
-            ns: draft.NoiseSuppression,
-            nsVeryHigh: draft.StrongerNoiseSuppression,
-            hpf: true);
-        _lease.SetInput(draft.MicVolume, EffectiveVadThreshold(draft), EffectiveNoiseGateThreshold(draft));
-        _lease.SetMonitor(_monitorPlayback, _monitorDelayed, draft.MasterVolume);
-        _desktopInputDevice = draft.MicrophoneDevice ?? string.Empty;
-        _desktopOutputDevice = draft.SpeakerDevice ?? string.Empty;
-        if (!_lease.ConfigureAudioRoute(
-                _desktopInputDevice,
-                _desktopOutputDevice,
-                SidecarCaptureMode.Transmit,
-                synthetic: false))
-        {
-            FailMicrophone("Could not configure the microphone route");
-            StopDesktopLease();
-            return;
-        }
-        MarkListening();
+        int leaseGeneration = Interlocked.Increment(ref _desktopLeaseGeneration);
+        int operationGeneration = BeginDesktopOperation();
+        var configuration = CaptureDesktopConfiguration(
+            draft,
+            _monitorPlayback,
+            _monitorDelayed,
+            SidecarCaptureMode.Transmit,
+            microphoneRoute == MicrophoneRouteResolution.FellBackToDefault);
+        _desktopInputDevice = configuration.InputDevice;
+        _desktopOutputDevice = configuration.OutputDevice;
+        var callbacks = CreateDesktopCallbacks(leaseGeneration, DesktopFailureChannel.Microphone);
+        ScheduleDesktopOperation(new DesktopOperation(
+            operationGeneration,
+            leaseGeneration,
+            DesktopOperationKind.Microphone,
+            configuration,
+            callbacks,
+            ExistingLease: null,
+            _desktopOperationCancellation!.Token));
         if (microphoneRoute == MicrophoneRouteResolution.FellBackToDefault)
             SetMicrophonePriorityStatus(
-                "The saved microphone is unavailable - Mic Check is using Default", 6500);
+                "Starting Mic Check with Default because the saved microphone is unavailable...", 6500);
 #elif ANDROID
         if (Application.HasUserAuthorization(UserAuthorization.Microphone))
         {
@@ -538,14 +759,16 @@ internal sealed class FirstRunAudioPreview : IDisposable
             return;
         }
 #if WINDOWS
-        _lease?.SetDsp(
-            aec: draft.EchoCancellation,
-            agc: false,
-            ns: draft.NoiseSuppression,
-            nsVeryHigh: draft.StrongerNoiseSuppression,
-            hpf: true);
-        _lease?.SetInput(draft.MicVolume, EffectiveVadThreshold(draft), EffectiveNoiseGateThreshold(draft));
-        _lease?.SetMonitor(_monitorPlayback, _monitorDelayed, draft.MasterVolume);
+        var lease = _lease;
+        if (lease == null) return;
+        var configuration = CaptureDesktopConfiguration(
+            draft,
+            _monitorPlayback,
+            _monitorDelayed,
+            SidecarCaptureMode.Transmit);
+        if (_lastDesktopSettings == configuration) return;
+        _lastDesktopSettings = configuration;
+        ScheduleDesktopSettings(lease, configuration);
 #elif ANDROID
         _androidMicrophone?.SetVolume(draft.MicVolume);
         _androidMonitor?.Configure(
@@ -574,7 +797,6 @@ internal sealed class FirstRunAudioPreview : IDisposable
             SetMicrophoneStatus("Mic check is off");
         }
 #if WINDOWS
-        try { _lease?.SetMonitor(false, false, 1f); } catch { }
         StopDesktopLease();
 #elif ANDROID
         _permissionGeneration++;
@@ -595,7 +817,7 @@ internal sealed class FirstRunAudioPreview : IDisposable
 
     internal void PlayTestSound(FirstRunSetupDraft draft)
     {
-        if (_disposed || IsSpeakerTestBusy) return;
+        if (_disposed || IsSpeakerTestBusy || IsMicrophoneTestStarting) return;
         if (draft.MasterVolume < 0.099f)
         {
             FailOutput("Speaker Volume is below the supported 10% minimum", 4000);
@@ -603,34 +825,6 @@ internal sealed class FirstRunAudioPreview : IDisposable
         }
 
 #if WINDOWS
-        if (_lease == null)
-        {
-            // A speaker-only test still uses the same peerless helper lease.
-            int generation = Interlocked.Increment(ref _desktopLeaseGeneration);
-            var callbacks = new SidecarVoiceCallbacks(
-                (_, _) => { },
-                reason => FailDesktop(
-                    "Audio helper stopped: " + reason, generation, DesktopFailureChannel.Output),
-                (_, message) => FailDesktop(
-                    "Speaker unavailable: " + message, generation, DesktopFailureChannel.Output),
-                (_, _, _, _) => { },
-                (_, _, _) => { },
-                (_, _, _) => { },
-                OnLevel,
-                _ => { },
-                _ => { },
-                OnPlaybackState);
-            _lease = SidecarVoiceHost.TryAcquire(callbacks, out string failure);
-            if (_lease == null || !_lease.EnsureStarted(draft.MicrophoneDevice, draft.SpeakerDevice))
-            {
-                FailOutput(failure.StartsWith("lease-active", StringComparison.Ordinal)
-                    ? "Speaker test is available from the main menu"
-                    : "Could not start speaker test");
-                StopDesktopLease();
-                return;
-            }
-        }
-
         PauseMicrophoneForTone();
         BeginDesktopOutputTest(draft);
 #elif ANDROID
@@ -727,9 +921,7 @@ internal sealed class FirstRunAudioPreview : IDisposable
         var monitorRoom = _monitorRoom;
         _monitorRoom = null;
         try { monitorRoom?.SetLoopBack(false); } catch { }
-#if WINDOWS
-        try { _lease?.SetMonitor(false, false, 1f); } catch { }
-#elif ANDROID
+#if ANDROID
         _permissionGeneration++;
         StopAndroidCaptureOnly();
         try { _androidMonitor?.Configure(false, false, 1f); } catch { }
@@ -788,51 +980,70 @@ internal sealed class FirstRunAudioPreview : IDisposable
     private void BeginDesktopOutputTest(FirstRunSetupDraft draft)
     {
         CancelTone();
-        while (_playbackStates.TryDequeue(out var state))
-            UpdateConfirmedOutput(state);
+        int currentLeaseGeneration = Volatile.Read(ref _desktopLeaseGeneration);
+        while (_playbackStates.TryDequeue(out var queued))
+        {
+            if (queued.LeaseGeneration == currentLeaseGeneration)
+                UpdateConfirmedOutput(queued.State);
+        }
         _pendingSpeakerDraft = draft;
         _pendingOutputDevice = draft.SpeakerDevice ?? string.Empty;
         _pendingPlaybackGeneration = 0;
+        _desktopRouteAdmitted = false;
         _outputSelectionAccepted = false;
         _outputFallbackAttempted = false;
-        Volatile.Write(ref _activeTonePlaybackGeneration, 0);
-        Volatile.Write(ref _desktopToneTerminalGeneration, 0);
-        Interlocked.Exchange(ref _desktopTonePlaybackTerminated, 0);
-        _outputReadyDeadlineTick = Environment.TickCount64 + 5000;
+        lock (_desktopToneStateGate)
+        {
+            _activeTonePlaybackGeneration = 0;
+            _desktopToneTerminalGeneration = 0;
+            _desktopTonePlaybackTerminated = 0;
+        }
         Volatile.Write(ref _waitingForOutput, 1);
         Interlocked.Exchange(ref _outputTestCompleted, 0);
         SetOutputStatus("Opening the selected speaker...");
-        try
-        {
-            _desktopInputDevice = draft.MicrophoneDevice ?? string.Empty;
-            _desktopOutputDevice = _pendingOutputDevice;
-            if (_lease?.ConfigureAudioRoute(
-                    _desktopInputDevice,
-                    _pendingOutputDevice,
-                    SidecarCaptureMode.Stopped,
-                    synthetic: false) != true)
-            {
-                CancelDesktopOutputWait();
-                FailOutput("Could not send the selected speaker to the audio helper", 5000);
-            }
-        }
-        catch (Exception ex)
-        {
-            CancelDesktopOutputWait();
-            FailOutput("Could not select that speaker: " + ex.Message, 5000);
-        }
+
+        var existingLease = _lease;
+        int leaseGeneration = existingLease == null
+            ? Interlocked.Increment(ref _desktopLeaseGeneration)
+            : currentLeaseGeneration;
+        int operationGeneration = BeginDesktopOperation();
+        var configuration = CaptureDesktopConfiguration(
+            draft,
+            monitorEnabled: false,
+            monitorDelayed: false,
+            SidecarCaptureMode.Stopped);
+        _desktopInputDevice = configuration.InputDevice;
+        _desktopOutputDevice = configuration.OutputDevice;
+        var callbacks = existingLease == null
+            ? CreateDesktopCallbacks(leaseGeneration, DesktopFailureChannel.Output)
+            : null;
+        ScheduleDesktopOperation(new DesktopOperation(
+            operationGeneration,
+            leaseGeneration,
+            DesktopOperationKind.Output,
+            configuration,
+            callbacks,
+            existingLease,
+            _desktopOperationCancellation!.Token));
     }
 
-    private void OnPlaybackState(SidecarPlaybackState state)
+    private void OnPlaybackState(int leaseGeneration, SidecarPlaybackState state)
     {
-        long activeGeneration = Volatile.Read(ref _activeTonePlaybackGeneration);
-        if (FirstRunOutputPreviewPolicy.ShouldApplyTonePlaybackTerminal(
-                activeGeneration, state.StreamGeneration, state.State))
+        lock (_desktopToneStateGate)
         {
-            Volatile.Write(ref _desktopToneTerminalGeneration, activeGeneration);
-            Interlocked.Exchange(ref _desktopTonePlaybackTerminated, 1);
+            if (leaseGeneration == Volatile.Read(ref _desktopLeaseGeneration) &&
+                FirstRunOutputPreviewPolicy.IsTonePlaybackTerminal(state.State))
+            {
+                long activeGeneration = _activeTonePlaybackGeneration;
+                if (activeGeneration != 0 &&
+                    state.StreamGeneration == unchecked((ulong)activeGeneration))
+                {
+                    _desktopToneTerminalGeneration = activeGeneration;
+                    _desktopTonePlaybackTerminated = 1;
+                }
+            }
         }
-        _playbackStates.Enqueue(state);
+        _playbackStates.Enqueue(new DesktopPlaybackEvent(leaseGeneration, state));
     }
     private void UpdateConfirmedOutput(SidecarPlaybackState state)
     {
@@ -847,14 +1058,29 @@ internal sealed class FirstRunAudioPreview : IDisposable
 
     private void TickDesktopOutputReadiness()
     {
-        while (_playbackStates.TryDequeue(out var state))
+        while (_playbackStates.TryPeek(out var queued))
         {
+            if (queued.LeaseGeneration != Volatile.Read(ref _desktopLeaseGeneration))
+            {
+                _playbackStates.TryDequeue(out _);
+                continue;
+            }
+            if (Volatile.Read(ref _waitingForOutput) != 0 && !_desktopRouteAdmitted)
+                break;
+            if (!_playbackStates.TryDequeue(out queued)) continue;
+            var state = queued.State;
             UpdateConfirmedOutput(state);
             if (Volatile.Read(ref _waitingForOutput) == 0)
             {
-                long activeGeneration = Volatile.Read(ref _activeTonePlaybackGeneration);
-                bool terminalPending = Volatile.Read(ref _desktopTonePlaybackTerminated) != 0;
-                long terminalGeneration = Volatile.Read(ref _desktopToneTerminalGeneration);
+                long activeGeneration;
+                bool terminalPending;
+                long terminalGeneration;
+                lock (_desktopToneStateGate)
+                {
+                    activeGeneration = _activeTonePlaybackGeneration;
+                    terminalPending = _desktopTonePlaybackTerminated != 0;
+                    terminalGeneration = _desktopToneTerminalGeneration;
+                }
                 if (FirstRunOutputPreviewPolicy.ShouldApplyTonePlaybackTerminal(
                         activeGeneration,
                         state.StreamGeneration,
@@ -863,11 +1089,14 @@ internal sealed class FirstRunAudioPreview : IDisposable
                         terminalGeneration))
                 {
                     CancelTone();
-                    Volatile.Write(ref _activeTonePlaybackGeneration, 0);
+                    lock (_desktopToneStateGate)
+                    {
+                        _activeTonePlaybackGeneration = 0;
+                        _desktopToneTerminalGeneration = 0;
+                        _desktopTonePlaybackTerminated = 0;
+                    }
                     FailOutput(FirstRunOutputPreviewPolicy.DescribeNativeOutputFailure(
                         state.Error, state.ErrorCode, duringPlayback: true));
-                    Volatile.Write(ref _desktopToneTerminalGeneration, 0);
-                    Interlocked.Exchange(ref _desktopTonePlaybackTerminated, 0);
                 }
                 continue;
             }
@@ -927,6 +1156,8 @@ internal sealed class FirstRunAudioPreview : IDisposable
         }
 
         if (Volatile.Read(ref _waitingForOutput) != 0 &&
+            _desktopRouteAdmitted &&
+            Volatile.Read(ref _outputReadyDeadlineTick) != 0 &&
             Environment.TickCount64 >= Volatile.Read(ref _outputReadyDeadlineTick))
         {
             CancelDesktopOutputWait();
@@ -940,9 +1171,12 @@ internal sealed class FirstRunAudioPreview : IDisposable
         bool usedDefaultFallback = _outputFallbackAttempted;
         CancelDesktopOutputWait();
         if (draft == null) return;
-        Volatile.Write(ref _desktopToneTerminalGeneration, 0);
-        Interlocked.Exchange(ref _desktopTonePlaybackTerminated, 0);
-        Volatile.Write(ref _activeTonePlaybackGeneration, unchecked((long)playbackGeneration));
+        lock (_desktopToneStateGate)
+        {
+            _desktopToneTerminalGeneration = 0;
+            _desktopTonePlaybackTerminated = 0;
+            _activeTonePlaybackGeneration = unchecked((long)playbackGeneration);
+        }
         StartDesktopTone(draft.MasterVolume, usedDefaultFallback);
     }
 
@@ -958,30 +1192,50 @@ internal sealed class FirstRunAudioPreview : IDisposable
         _pendingOutputDevice = string.Empty;
         _pendingPlaybackGeneration = 0;
         _outputSelectionAccepted = false;
-        _outputReadyDeadlineTick = Environment.TickCount64 + 5000;
+        _desktopRouteAdmitted = false;
+        _outputReadyDeadlineTick = 0;
         string reason = FirstRunOutputPreviewPolicy.DescribeNativeOutputFailure(
             state.Error, state.ErrorCode);
         SetOutputStatus(reason + " Trying Default...");
-        try
-        {
-            _desktopOutputDevice = string.Empty;
-            if (_lease?.ConfigureAudioRoute(
-                    _desktopInputDevice,
-                    string.Empty,
-                    SidecarCaptureMode.Stopped,
-                    synthetic: false) != true)
-            {
-                CancelDesktopOutputWait();
-                FailOutput("Could not send Default to the audio helper", 6500);
-            }
-            return true;
-        }
-        catch (Exception ex)
+        var lease = _lease;
+        if (lease == null)
         {
             CancelDesktopOutputWait();
-            FailOutput("Could not switch the speaker test to Default: " + ex.Message, 6500);
+            FailOutput("Could not switch the speaker test to Default", 6500);
             return true;
         }
+        _desktopOutputDevice = string.Empty;
+        var configuration = (_lastDesktopSettings ?? new DesktopConfiguration(
+            _desktopInputDevice,
+            string.Empty,
+            EchoCancellation: false,
+            NoiseSuppression: false,
+            StrongerNoiseSuppression: false,
+            InputGain: 1f,
+            VadThreshold: 0.01f,
+            NoiseGateThreshold: 0.003f,
+            MonitorEnabled: false,
+            MonitorDelayed: false,
+            MonitorGain: 1f,
+            SidecarCaptureMode.Stopped,
+            InputFellBackToDefault: false)) with
+        {
+            OutputDevice = string.Empty,
+            MonitorEnabled = false,
+            MonitorDelayed = false,
+            MonitorGain = 1f,
+            CaptureMode = SidecarCaptureMode.Stopped,
+        };
+        int operationGeneration = BeginDesktopOperation();
+        ScheduleDesktopOperation(new DesktopOperation(
+            operationGeneration,
+            Volatile.Read(ref _desktopLeaseGeneration),
+            DesktopOperationKind.OutputFallback,
+            configuration,
+            Callbacks: null,
+            lease,
+            _desktopOperationCancellation!.Token));
+        return true;
     }
 
     private bool RequestedOutputMatches(SidecarPlaybackState state)
@@ -993,6 +1247,8 @@ internal sealed class FirstRunAudioPreview : IDisposable
     private void CancelDesktopOutputWait()
     {
         Volatile.Write(ref _waitingForOutput, 0);
+        _desktopRouteAdmitted = false;
+        _outputReadyDeadlineTick = 0;
         _outputSelectionAccepted = false;
         _pendingPlaybackGeneration = 0;
         _pendingSpeakerDraft = null;
@@ -1007,15 +1263,12 @@ internal sealed class FirstRunAudioPreview : IDisposable
         int toneGeneration = Interlocked.Increment(ref _toneGeneration);
         var cancellation = new CancellationTokenSource();
         var token = cancellation.Token;
+        Volatile.Write(ref _desktopToneLeaseGeneration, leaseGeneration);
         _toneCancellation = cancellation;
         Volatile.Write(ref _playingTone, 1);
         Interlocked.Exchange(ref _outputTestCompleted, 0);
         SetOutputStatus("Playing test sound...");
-        if (Volatile.Read(ref _desktopFailurePending) != 0)
-        {
-            try { cancellation.Cancel(); } catch { }
-            Volatile.Write(ref _playingTone, 0);
-        }
+        var completions = _toneCompletions;
         _ = Task.Run(async () =>
         {
             try
@@ -1023,71 +1276,537 @@ internal sealed class FirstRunAudioPreview : IDisposable
                 for (int frame = 0; frame < FirstRunToneGenerator.FrameCount; frame++)
                 {
                     token.ThrowIfCancellationRequested();
-                    // This worker must remain pure managed. FirstRunToneGenerator intentionally
-                    // has no engine/IL2CPP dependency.
-                    toneLease?.SendOutputTestFrame(FirstRunToneGenerator.CreateFrame(frame, volume));
-                    await Task.Delay(FirstRunToneGenerator.FrameMilliseconds, token).ConfigureAwait(false);
+                    if (toneLease == null ||
+                        !toneLease.SendOutputTestFrameAndWait(
+                            FirstRunToneGenerator.CreateFrame(frame, volume)))
+                    {
+                        completions.Enqueue(new DesktopToneCompletion(
+                            leaseGeneration,
+                            toneGeneration,
+                            Succeeded: false,
+                            usedDefaultFallback));
+                        return;
+                    }
+                    await Task.Delay(FirstRunToneGenerator.FrameMilliseconds, token)
+                        .ConfigureAwait(false);
                 }
                 await Task.Delay(220, token).ConfigureAwait(false);
-                if (DesktopToneIsCurrent(toneLease, leaseGeneration, toneGeneration, cancellation))
-                    CompleteOutputTest(usedDefaultFallback);
+                completions.Enqueue(new DesktopToneCompletion(
+                    leaseGeneration,
+                    toneGeneration,
+                    Succeeded: true,
+                    usedDefaultFallback));
             }
-            catch (OperationCanceledException) { }
+            catch (OperationCanceledException)
+            {
+            }
             catch (Exception)
             {
-                if (DesktopToneIsCurrent(toneLease, leaseGeneration, toneGeneration, cancellation))
-                    FailOutput("Could not play the test sound");
+                completions.Enqueue(new DesktopToneCompletion(
+                    leaseGeneration,
+                    toneGeneration,
+                    Succeeded: false,
+                    usedDefaultFallback));
             }
             finally
             {
-                if (toneGeneration == Volatile.Read(ref _toneGeneration))
-                {
-                    Volatile.Write(ref _playingTone, 0);
-                    Volatile.Write(ref _activeTonePlaybackGeneration, 0);
-                }
-                Interlocked.CompareExchange(ref _toneCancellation, null, cancellation);
                 cancellation.Dispose();
             }
         });
     }
 
-    private bool DesktopToneIsCurrent(
-        SidecarVoiceLease? toneLease,
-        int leaseGeneration,
-        int toneGeneration,
-        CancellationTokenSource cancellation)
-        => !_disposed && !cancellation.IsCancellationRequested &&
-           toneGeneration == Volatile.Read(ref _toneGeneration) &&
-           leaseGeneration == Volatile.Read(ref _desktopLeaseGeneration) &&
-           Volatile.Read(ref _desktopFailurePending) == 0 &&
-           Volatile.Read(ref _desktopTonePlaybackTerminated) == 0 &&
-           ReferenceEquals(_lease, toneLease);
+    private void TickDesktopToneCompletions()
+    {
+        while (_toneCompletions.TryDequeue(out var completion))
+        {
+            if (_disposed ||
+                completion.LeaseGeneration != Volatile.Read(ref _desktopLeaseGeneration) ||
+                completion.ToneGeneration != Volatile.Read(ref _toneGeneration))
+                continue;
+            if (completion.Succeeded)
+            {
+                lock (_desktopToneStateGate)
+                {
+                    if (_disposed ||
+                        completion.LeaseGeneration != Volatile.Read(ref _desktopLeaseGeneration) ||
+                        completion.ToneGeneration != Volatile.Read(ref _toneGeneration))
+                        continue;
+                    if (_desktopTonePlaybackTerminated != 0 &&
+                        _desktopToneTerminalGeneration == _activeTonePlaybackGeneration)
+                        continue;
+                    Interlocked.Exchange(ref _toneCancellation, null);
+                    Volatile.Write(ref _playingTone, 0);
+                    _activeTonePlaybackGeneration = 0;
+                    _desktopToneTerminalGeneration = 0;
+                    _desktopTonePlaybackTerminated = 0;
+                    Interlocked.Exchange(ref _outputTestCompleted, 1);
+                }
+                SetOutputStatus(completion.UsedDefaultFallback
+                    ? "Default speaker test completed - did you hear it?"
+                    : "Test sound completed - did you hear it?", 6000);
+            }
+            else
+            {
+                Interlocked.Exchange(ref _toneCancellation, null);
+                Volatile.Write(ref _playingTone, 0);
+                lock (_desktopToneStateGate)
+                    _activeTonePlaybackGeneration = 0;
+                FailOutput("Could not play the test sound");
+            }
+            Interlocked.Exchange(ref _uiRefreshPending, 1);
+        }
+    }
 
     private void StopDesktopLease()
     {
         CancelTone();
+        CancelDesktopOperation();
+        CancelDesktopSettings();
         Interlocked.Increment(ref _desktopLeaseGeneration);
-        Interlocked.Exchange(ref _desktopFailurePending, 0);
-        Volatile.Write(ref _desktopFailureChannel, 0);
-        Volatile.Write(ref _desktopFailureAffectedOutput, 0);
         CancelDesktopOutputWait();
-        Volatile.Write(ref _activeTonePlaybackGeneration, 0);
-        Volatile.Write(ref _desktopToneTerminalGeneration, 0);
-        Interlocked.Exchange(ref _desktopTonePlaybackTerminated, 0);
+        lock (_desktopToneStateGate)
+        {
+            _activeTonePlaybackGeneration = 0;
+            _desktopToneTerminalGeneration = 0;
+            _desktopTonePlaybackTerminated = 0;
+        }
         Volatile.Write(ref _listening, 0);
+        _lastDesktopSettings = null;
         var lease = _lease;
         _lease = null;
         if (lease == null) return;
+        ReleaseDesktopLeaseAsync(lease, _desktopInputDevice, _desktopOutputDevice);
+    }
+
+    private DesktopConfiguration CaptureDesktopConfiguration(
+        FirstRunSetupDraft draft,
+        bool monitorEnabled,
+        bool monitorDelayed,
+        SidecarCaptureMode captureMode,
+        bool inputFellBackToDefault = false)
+        => new(
+            draft.MicrophoneDevice ?? string.Empty,
+            draft.SpeakerDevice ?? string.Empty,
+            draft.EchoCancellation,
+            draft.NoiseSuppression,
+            draft.StrongerNoiseSuppression,
+            draft.MicVolume,
+            EffectiveVadThreshold(draft),
+            EffectiveNoiseGateThreshold(draft),
+            monitorEnabled,
+            monitorDelayed,
+            float.IsFinite(draft.MasterVolume)
+                ? Math.Clamp(draft.MasterVolume, 0f, 2f)
+                : 1f,
+            captureMode,
+            inputFellBackToDefault);
+
+    private SidecarVoiceCallbacks CreateDesktopCallbacks(
+        int leaseGeneration,
+        DesktopFailureChannel channel)
+        => new(
+            (_, _) => { },
+            reason => FailDesktop(
+                channel == DesktopFailureChannel.Output
+                    ? "Audio helper stopped: " + reason
+                    : "Microphone helper stopped: " + reason,
+                leaseGeneration,
+                channel),
+            (_, message) => FailDesktop(
+                channel == DesktopFailureChannel.Output
+                    ? "Speaker unavailable: " + message
+                    : "Microphone unavailable: " + message,
+                leaseGeneration,
+                channel),
+            (_, _, _, _) => { },
+            (_, _, _) => { },
+            (_, _, _) => { },
+            (peak, speaking) =>
+            {
+                if (leaseGeneration == Volatile.Read(ref _desktopLeaseGeneration))
+                    OnLevel(peak, speaking);
+            },
+            _ => { },
+            _ => { },
+            state => OnPlaybackState(leaseGeneration, state));
+
+    private int BeginDesktopOperation()
+    {
+        CancelDesktopOperation();
+        _desktopOperationCancellation = new CancellationTokenSource();
+        return Volatile.Read(ref _desktopOperationGeneration);
+    }
+
+    private void CancelDesktopOperation()
+    {
+        Interlocked.Increment(ref _desktopOperationGeneration);
+        var cancellation = Interlocked.Exchange(ref _desktopOperationCancellation, null);
+        if (cancellation == null) return;
+        try { cancellation.Cancel(); } catch { }
+        cancellation.Dispose();
+    }
+
+    private void ScheduleDesktopOperation(DesktopOperation operation)
+    {
+        var host = _desktopHost;
+        var acquisitionGate = _desktopAcquisitionGate;
+        var workerGate = _desktopWorkerGate;
+        var completions = _desktopCompletions;
+        _ = Task.Run(async () =>
+        {
+            bool enteredAcquisition = false;
+            try
+            {
+                if (operation.ExistingLease == null)
+                {
+                    await acquisitionGate.WaitAsync(operation.Cancellation)
+                        .ConfigureAwait(false);
+                    enteredAcquisition = true;
+                    Task leaseRelease;
+                    lock (_desktopLeaseReleaseGate)
+                        leaseRelease = _desktopLeaseRelease;
+                    await leaseRelease.WaitAsync(operation.Cancellation)
+                        .ConfigureAwait(false);
+                }
+                await RunDesktopOperationAsync(
+                        operation,
+                        host,
+                        workerGate,
+                        completions,
+                        ReserveDesktopLeaseRetirement,
+                        (lease, configuration, retirement) =>
+                            ReleaseReservedDesktopLeaseAsync(
+                                lease,
+                                configuration.InputDevice,
+                                configuration.OutputDevice,
+                                retirement))
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            finally
+            {
+                if (enteredAcquisition) acquisitionGate.Release();
+            }
+        });
+    }
+
+    private static async Task RunDesktopOperationAsync(
+        DesktopOperation operation,
+        IFirstRunDesktopAudioHost host,
+        SemaphoreSlim workerGate,
+        ConcurrentQueue<DesktopOperationCompletion> completions,
+        Func<DesktopLeaseRetirement> reserveRetirement,
+        Action<
+            IFirstRunDesktopAudioLease,
+            DesktopConfiguration,
+            DesktopLeaseRetirement> release)
+    {
+        IFirstRunDesktopAudioLease? lease = operation.ExistingLease;
+        bool acquiredLease = false;
+        bool entered = false;
+        DesktopLeaseRetirement? retirement = null;
         try
         {
-            lease.ConfigureAudioRoute(
-                _desktopInputDevice,
-                _desktopOutputDevice,
-                SidecarCaptureMode.Stopped,
-                synthetic: false);
+            await workerGate.WaitAsync(operation.Cancellation).ConfigureAwait(false);
+            entered = true;
+            operation.Cancellation.ThrowIfCancellationRequested();
+            if (lease == null)
+            {
+                lease = host.TryAcquire(operation.Callbacks!, out string failure);
+                if (lease == null)
+                {
+                    completions.Enqueue(new DesktopOperationCompletion(
+                        operation.OperationGeneration,
+                        operation.LeaseGeneration,
+                        operation.Kind,
+                        operation.Configuration,
+                        lease: null,
+                        acquiredLease: false,
+                        failure: failure));
+                    return;
+                }
+                acquiredLease = true;
+                if (!lease.EnsureStarted(
+                        operation.Configuration.InputDevice,
+                        operation.Configuration.OutputDevice))
+                {
+                    try { await lease.ReleaseAsync().ConfigureAwait(false); } catch { }
+                    lease = null;
+                    acquiredLease = false;
+                    completions.Enqueue(new DesktopOperationCompletion(
+                        operation.OperationGeneration,
+                        operation.LeaseGeneration,
+                        operation.Kind,
+                        operation.Configuration,
+                        lease: null,
+                        acquiredLease: false,
+                        failure: "ensure-started"));
+                    return;
+                }
+            }
+
+            operation.Cancellation.ThrowIfCancellationRequested();
+            lease.SetDsp(
+                operation.Configuration.EchoCancellation,
+                operation.Configuration.NoiseSuppression,
+                operation.Configuration.StrongerNoiseSuppression);
+            lease.SetInput(
+                operation.Configuration.InputGain,
+                operation.Configuration.VadThreshold,
+                operation.Configuration.NoiseGateThreshold);
+            lease.SetMonitor(
+                operation.Configuration.MonitorEnabled,
+                operation.Configuration.MonitorDelayed,
+                operation.Configuration.MonitorGain);
+            if (!lease.ConfigureAudioRoute(
+                    operation.Configuration.InputDevice,
+                    operation.Configuration.OutputDevice,
+                    operation.Configuration.CaptureMode))
+            {
+                if (acquiredLease)
+                {
+                    try { await lease.ReleaseAsync().ConfigureAwait(false); } catch { }
+                    lease = null;
+                    acquiredLease = false;
+                }
+                completions.Enqueue(new DesktopOperationCompletion(
+                    operation.OperationGeneration,
+                    operation.LeaseGeneration,
+                    operation.Kind,
+                    operation.Configuration,
+                    lease,
+                    acquiredLease,
+                    failure: "route"));
+                return;
+            }
+            operation.Cancellation.ThrowIfCancellationRequested();
+            retirement = acquiredLease ? reserveRetirement() : null;
+            var completion = new DesktopOperationCompletion(
+                operation.OperationGeneration,
+                operation.LeaseGeneration,
+                operation.Kind,
+                operation.Configuration,
+                lease,
+                acquiredLease,
+                failure: string.Empty,
+                retirement);
+            completion.ReleaseOnCancellation(operation.Cancellation, release);
+            completions.Enqueue(completion);
         }
-        catch { }
-        try { lease.Dispose(); } catch { }
+        catch (OperationCanceledException)
+        {
+            if (acquiredLease && lease != null)
+            {
+                try { await lease.ReleaseAsync().ConfigureAwait(false); } catch { }
+                retirement?.Complete();
+            }
+        }
+        catch (Exception)
+        {
+            if (acquiredLease && lease != null)
+            {
+                try { await lease.ReleaseAsync().ConfigureAwait(false); } catch { }
+                retirement?.Complete();
+                lease = null;
+                acquiredLease = false;
+            }
+            if (!operation.Cancellation.IsCancellationRequested)
+                completions.Enqueue(new DesktopOperationCompletion(
+                    operation.OperationGeneration,
+                    operation.LeaseGeneration,
+                    operation.Kind,
+                    operation.Configuration,
+                    lease,
+                    acquiredLease,
+                    failure: "operation-failed"));
+        }
+        finally
+        {
+            if (entered) workerGate.Release();
+        }
+    }
+
+    private void TickDesktopCompletions()
+    {
+        while (_desktopCompletions.TryDequeue(out var completion))
+        {
+            var lease = completion.TakeLease();
+            if (_disposed ||
+                completion.OperationGeneration != Volatile.Read(ref _desktopOperationGeneration) ||
+                completion.LeaseGeneration != Volatile.Read(ref _desktopLeaseGeneration))
+            {
+                if (completion.AcquiredLease &&
+                    lease != null &&
+                    completion.Retirement != null)
+                {
+                    ReleaseReservedDesktopLeaseAsync(
+                        lease,
+                        completion.Configuration.InputDevice,
+                        completion.Configuration.OutputDevice,
+                        completion.Retirement);
+                }
+                else if (!completion.AcquiredLease)
+                {
+                    completion.CompleteRetirement();
+                }
+                continue;
+            }
+
+            if (completion.Failure.Length != 0 || lease == null)
+            {
+                if (completion.Kind == DesktopOperationKind.Microphone)
+                {
+                    FailMicrophone(completion.Failure.StartsWith("lease-active", StringComparison.Ordinal)
+                        ? "Mic check is available from the main menu"
+                        : completion.Failure == "route"
+                            ? "Could not configure the microphone route"
+                            : "Could not start the Perfect Comms audio helper");
+                }
+                else
+                {
+                    CancelDesktopOutputWait();
+                    FailOutput(completion.Failure.StartsWith("lease-active", StringComparison.Ordinal)
+                        ? "Speaker test is available from the main menu"
+                        : completion.Failure == "route"
+                            ? "Could not send the selected speaker to the audio helper"
+                            : "Could not start speaker test");
+                }
+                if (lease != null && ReferenceEquals(_lease, lease))
+                    StopDesktopLease();
+                Interlocked.Exchange(ref _uiRefreshPending, 1);
+                continue;
+            }
+
+            if (completion.AcquiredLease)
+                _lease = lease;
+            completion.CompleteRetirement();
+            _desktopInputDevice = completion.Configuration.InputDevice;
+            _desktopOutputDevice = completion.Configuration.OutputDevice;
+            _lastDesktopSettings = completion.Configuration;
+            if (completion.Kind == DesktopOperationKind.Microphone)
+            {
+                MarkListening();
+                if (completion.Configuration.InputFellBackToDefault)
+                    SetMicrophonePriorityStatus(
+                        "The saved microphone is unavailable - Mic Check is using Default", 6500);
+            }
+            else
+            {
+                _desktopRouteAdmitted = true;
+                _outputReadyDeadlineTick = Environment.TickCount64 + 5000;
+                SetOutputStatus("Waiting for the selected speaker...");
+            }
+            Interlocked.Exchange(ref _uiRefreshPending, 1);
+        }
+    }
+
+    private void ScheduleDesktopSettings(
+        IFirstRunDesktopAudioLease lease,
+        DesktopConfiguration configuration)
+    {
+        CancelDesktopSettings();
+        var cancellation = new CancellationTokenSource();
+        _desktopSettingsCancellation = cancellation;
+        var token = cancellation.Token;
+        var workerGate = _desktopWorkerGate;
+        _ = Task.Run(async () =>
+        {
+            bool entered = false;
+            try
+            {
+                await workerGate.WaitAsync(token).ConfigureAwait(false);
+                entered = true;
+                token.ThrowIfCancellationRequested();
+                lease.SetDsp(
+                    configuration.EchoCancellation,
+                    configuration.NoiseSuppression,
+                    configuration.StrongerNoiseSuppression);
+                lease.SetInput(
+                    configuration.InputGain,
+                    configuration.VadThreshold,
+                    configuration.NoiseGateThreshold);
+                lease.SetMonitor(
+                    configuration.MonitorEnabled,
+                    configuration.MonitorDelayed,
+                    configuration.MonitorGain);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch
+            {
+            }
+            finally
+            {
+                if (entered) workerGate.Release();
+                cancellation.Dispose();
+            }
+        });
+    }
+
+    private void CancelDesktopSettings()
+    {
+        var cancellation = Interlocked.Exchange(ref _desktopSettingsCancellation, null);
+        if (cancellation == null) return;
+        try { cancellation.Cancel(); } catch { }
+        cancellation.Dispose();
+    }
+
+    private DesktopLeaseRetirement ReserveDesktopLeaseRetirement()
+    {
+        lock (_desktopLeaseReleaseGate)
+        {
+            var retirement = new DesktopLeaseRetirement(_desktopLeaseRelease);
+            _desktopLeaseRelease = retirement.Barrier;
+            return retirement;
+        }
+    }
+
+    private void ReleaseDesktopLeaseAsync(
+        IFirstRunDesktopAudioLease lease,
+        string inputDevice,
+        string outputDevice)
+    {
+        var retirement = ReserveDesktopLeaseRetirement();
+        ReleaseReservedDesktopLeaseAsync(lease, inputDevice, outputDevice, retirement);
+    }
+
+    private void ReleaseReservedDesktopLeaseAsync(
+        IFirstRunDesktopAudioLease lease,
+        string inputDevice,
+        string outputDevice,
+        DesktopLeaseRetirement retirement)
+    {
+        var workerGate = _desktopWorkerGate;
+        _ = Task.Run(async () =>
+        {
+            bool entered = false;
+            try
+            {
+                await retirement.Previous.ConfigureAwait(false);
+                await workerGate.WaitAsync().ConfigureAwait(false);
+                entered = true;
+                try
+                {
+                    lease.SetMonitor(false, false, 1f);
+                    lease.ConfigureAudioRoute(
+                        inputDevice,
+                        outputDevice,
+                        SidecarCaptureMode.Stopped);
+                }
+                catch
+                {
+                }
+                try { await lease.ReleaseAsync().ConfigureAwait(false); } catch { }
+            }
+            finally
+            {
+                if (entered) workerGate.Release();
+                retirement.Complete();
+            }
+        });
     }
 
     private void FailDesktop(
@@ -1096,12 +1815,12 @@ internal sealed class FirstRunAudioPreview : IDisposable
         DesktopFailureChannel channel)
     {
         if (generation != Volatile.Read(ref _desktopLeaseGeneration)) return;
-        _desktopFailureMessage = message;
-        Volatile.Write(ref _desktopFailureChannel, (int)channel);
-        Volatile.Write(ref _desktopFailureAffectedOutput, IsSpeakerTestBusy ? 1 : 0);
-        Interlocked.Exchange(ref _desktopFailurePending, 1);
-        try { Volatile.Read(ref _toneCancellation)?.Cancel(); } catch { }
-        Volatile.Write(ref _playingTone, 0);
+        _desktopFailures.Enqueue(new DesktopFailureEvent(generation, message, channel));
+        var cancellation = Volatile.Read(ref _toneCancellation);
+        if (generation != Volatile.Read(ref _desktopLeaseGeneration) ||
+            generation != Volatile.Read(ref _desktopToneLeaseGeneration))
+            return;
+        try { cancellation?.Cancel(); } catch { }
     }
 #endif
 

@@ -1300,8 +1300,163 @@ fn write_frame(conn: &Arc<Mutex<TcpStream>>, bytes: &[u8]) -> std::io::Result<()
     s.flush()
 }
 
+struct PlaybackWorker {
+    stop: Arc<AtomicBool>,
+    handle: std::thread::JoinHandle<()>,
+}
+
+enum PlaybackLifecycleState {
+    Idle,
+    Running(PlaybackWorker),
+    Stopping { generation: u64 },
+    Replacing { generation: u64 },
+    FailedClosed,
+}
+
+struct PlaybackLifecycle {
+    generation: u64,
+    state: PlaybackLifecycleState,
+}
+
+impl Default for PlaybackLifecycle {
+    fn default() -> Self {
+        Self {
+            generation: 0,
+            state: PlaybackLifecycleState::Idle,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct PlaybackReplacement {
+    generation: u64,
+}
+
+impl PlaybackLifecycle {
+    fn worker_running(&self) -> bool {
+        matches!(
+            &self.state,
+            PlaybackLifecycleState::Running(worker) if !worker.handle.is_finished()
+        )
+    }
+
+    fn worker_present(&self) -> bool {
+        matches!(&self.state, PlaybackLifecycleState::Running(_))
+    }
+
+    fn worker_missing_or_finished(&self) -> bool {
+        match &self.state {
+            PlaybackLifecycleState::Running(worker) => worker.handle.is_finished(),
+            PlaybackLifecycleState::Idle
+            | PlaybackLifecycleState::Stopping { .. }
+            | PlaybackLifecycleState::Replacing { .. }
+            | PlaybackLifecycleState::FailedClosed => true,
+        }
+    }
+
+    fn begin_replacement(
+        &mut self,
+    ) -> Result<(PlaybackReplacement, Option<PlaybackWorker>), String> {
+        if matches!(
+            &self.state,
+            PlaybackLifecycleState::Stopping { .. } | PlaybackLifecycleState::FailedClosed
+        ) {
+            return Err("playback lifecycle is not replaceable".to_string());
+        }
+        self.generation = self.generation.saturating_add(1);
+        let replacement = PlaybackReplacement {
+            generation: self.generation,
+        };
+        let prior = std::mem::replace(&mut self.state, PlaybackLifecycleState::Idle);
+        let worker = match prior {
+            PlaybackLifecycleState::Running(worker) => {
+                worker.stop.store(true, Ordering::Release);
+                self.state = PlaybackLifecycleState::Stopping {
+                    generation: replacement.generation,
+                };
+                Some(worker)
+            }
+            PlaybackLifecycleState::Idle | PlaybackLifecycleState::Replacing { .. } => {
+                self.state = PlaybackLifecycleState::Replacing {
+                    generation: replacement.generation,
+                };
+                None
+            }
+            PlaybackLifecycleState::Stopping { .. } | PlaybackLifecycleState::FailedClosed => {
+                unreachable!()
+            }
+        };
+        Ok((replacement, worker))
+    }
+
+    fn finish_stop(&mut self, replacement: PlaybackReplacement) -> bool {
+        match &self.state {
+            PlaybackLifecycleState::Stopping { generation }
+                if *generation == replacement.generation =>
+            {
+                self.state = PlaybackLifecycleState::Replacing {
+                    generation: replacement.generation,
+                };
+                true
+            }
+            PlaybackLifecycleState::Replacing { generation }
+                if *generation == replacement.generation =>
+            {
+                true
+            }
+            _ => false,
+        }
+    }
+
+    fn complete_replacement(&mut self, replacement: PlaybackReplacement) -> bool {
+        match &self.state {
+            PlaybackLifecycleState::Replacing { generation }
+                if *generation == replacement.generation =>
+            {
+                self.state = PlaybackLifecycleState::Idle;
+                true
+            }
+            _ => false,
+        }
+    }
+
+    fn fail_replacement(&mut self, replacement: PlaybackReplacement) {
+        if matches!(
+            &self.state,
+            PlaybackLifecycleState::Stopping { generation }
+            | PlaybackLifecycleState::Replacing { generation }
+                if *generation == replacement.generation
+        ) {
+            self.state = PlaybackLifecycleState::FailedClosed;
+        }
+    }
+
+    fn can_admit_worker(&self) -> bool {
+        matches!(&self.state, PlaybackLifecycleState::Idle)
+    }
+
+    fn install_worker(&mut self, stop: Arc<AtomicBool>, handle: std::thread::JoinHandle<()>) {
+        assert!(self.can_admit_worker());
+        self.generation = self.generation.saturating_add(1);
+        self.state = PlaybackLifecycleState::Running(PlaybackWorker { stop, handle });
+    }
+
+    fn take_finished_worker(&mut self) -> Option<PlaybackWorker> {
+        if !matches!(
+            &self.state,
+            PlaybackLifecycleState::Running(worker) if worker.handle.is_finished()
+        ) {
+            return None;
+        }
+        match std::mem::replace(&mut self.state, PlaybackLifecycleState::Idle) {
+            PlaybackLifecycleState::Running(worker) => Some(worker),
+            _ => unreachable!(),
+        }
+    }
+}
+
 fn spawn_playback_watchdog(
-    out_thread: Arc<Mutex<Option<std::thread::JoinHandle<()>>>>,
+    lifecycle: Arc<Mutex<PlaybackLifecycle>>,
     playback: Arc<Mutex<PlaybackRing>>,
     spawned_ns: Arc<AtomicU64>,
     supervision: PlaybackSupervision,
@@ -1312,11 +1467,7 @@ fn spawn_playback_watchdog(
             let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 let mut watchdog = PlaybackWatchdog::default();
                 while !supervision.session.stopping.load(Ordering::Acquire) {
-                    let worker_running = out_thread
-                        .lock()
-                        .unwrap()
-                        .as_ref()
-                        .is_some_and(|handle| !handle.is_finished());
+                    let worker_running = lifecycle.lock().unwrap().worker_running();
                     let queued_pairs = if worker_running {
                         playback.lock().unwrap().len()
                     } else {
@@ -1351,34 +1502,34 @@ fn spawn_playback_watchdog(
 }
 
 fn stop_playback_bounded(
-    out_thread: &Mutex<Option<std::thread::JoinHandle<()>>>,
-    out_stop: &AtomicBool,
+    lifecycle: &Mutex<PlaybackLifecycle>,
     progress: &PlaybackProgress,
     timeout: Duration,
-) -> Result<(), String> {
-    out_stop.store(true, Ordering::Release);
-    let handle = out_thread.lock().unwrap().take();
-    if let Some(handle) = handle {
-        join_thread_bounded(handle, "output worker", timeout)?;
+) -> Result<PlaybackReplacement, String> {
+    let (replacement, worker) = lifecycle.lock().unwrap().begin_replacement()?;
+    if let Some(worker) = worker {
+        if let Err(error) = join_thread_bounded(worker.handle, "output worker", timeout) {
+            lifecycle.lock().unwrap().fail_replacement(replacement);
+            return Err(error);
+        }
+    }
+    if !lifecycle.lock().unwrap().finish_stop(replacement) {
+        return Err("playback stop completion was stale".to_string());
     }
     progress.reset();
-    Ok(())
+    Ok(replacement)
 }
 
 fn reap_finished_playback_worker(
-    worker: &mut Option<std::thread::JoinHandle<()>>,
+    lifecycle: &mut PlaybackLifecycle,
     progress: &PlaybackProgress,
     aec_timing: &AecTiming,
 ) -> bool {
-    if !worker.as_ref().is_some_and(|handle| handle.is_finished()) {
+    let Some(worker) = lifecycle.take_finished_worker() else {
         return false;
-    }
-    if let Some(handle) = worker.take() {
-        handle.join().ok();
-    }
+    };
+    worker.handle.join().ok();
     progress.reset();
-    // Invalidate the dead output route immediately. This must happen even when the spawn throttle
-    // delays replacement, otherwise reverse audio can look renderable against stale output timing.
     aec_timing.reset_playback_path();
     true
 }
@@ -1405,11 +1556,10 @@ fn playback_request_changed(
 
 #[allow(clippy::too_many_arguments)]
 fn ensure_playback(
-    out_thread: &Mutex<Option<std::thread::JoinHandle<()>>>,
+    lifecycle: &Mutex<PlaybackLifecycle>,
     out_selected: &Mutex<Option<String>>,
     out_override: &Mutex<Option<String>>,
     transition: &Mutex<HfpTransitionState>,
-    out_stop: &Arc<AtomicBool>,
     playback: &Arc<Mutex<PlaybackRing>>,
     monitor_playback: &Arc<Mutex<PlaybackRing>>,
     monitor_state: &Arc<MicrophoneMonitorState>,
@@ -1418,129 +1568,123 @@ fn ensure_playback(
     supervision: &PlaybackSupervision,
 ) {
     if supervision.session.stopping.load(Ordering::Acquire) {
-        out_stop.store(true, Ordering::Release);
         return;
     }
     if transition.lock().unwrap().pending {
         return;
     }
-    let mut guard = out_thread.lock().unwrap();
+    let mut guard = lifecycle.lock().unwrap();
     if supervision.session.stopping.load(Ordering::Acquire) {
-        out_stop.store(true, Ordering::Release);
         return;
     }
     let reaped_finished_worker =
         reap_finished_playback_worker(&mut guard, &supervision.progress, &supervision.aec_timing);
-    if guard.is_none() {
-        let now = monotonic_ns();
-        let last = last_spawn_ns.load(Ordering::Relaxed);
-        if last != 0 && now.saturating_sub(last) < duration_ns(PLAYBACK_SPAWN_THROTTLE) {
-            return;
-        }
-        last_spawn_ns.store(now, Ordering::Release);
-        let requested = out_selected.lock().unwrap().clone();
-        let playback_override = out_override.lock().unwrap().clone();
-        let (dev, requested) = playback_route_selection(&requested, &playback_override);
-        let requested_device = requested.clone().unwrap_or_default();
-        let requested_default = requested_device.is_empty();
-        let pb = playback.clone();
-        let monitor_pb = monitor_playback.clone();
-        let monitor = monitor_state.clone();
-        let st = out_stop.clone();
-        let stats = counters.clone();
-        let playback_progress = supervision.progress.clone();
-        let aec_timing = supervision.aec_timing.clone();
-        // Initial starts and explicit device switches set the spawn marker to zero. A failed
-        // worker was already invalidated when reaped, including when a prior call returned at the
-        // throttle above, so do not advance the timing epoch again for that replacement.
-        if !reaped_finished_worker && last == 0 {
-            aec_timing.reset_playback_path();
-        } else {
-            // A failed worker advances the epoch as soon as it is reaped, even if the spawn
-            // throttle delays its replacement. Drop render observations accumulated during that
-            // outage before the replacement starts, without advancing the same epoch twice.
-            aec_timing.clear_playback_measurements();
-        }
-        let media_diagnostics = supervision.media_diagnostics.clone();
-        let media_events = supervision.media_events.clone();
-        let stream_generation = media_diagnostics
-            .playback
-            .begin_stream(requested.as_deref());
-        let playback_diagnostics = media_diagnostics.playback.clone();
-        let worker_supervisor = supervision.session.clone();
-        supervision.progress.reset();
-        st.store(false, Ordering::Release);
-        counters
-            .playback_spawn_attempts
-            .fetch_add(1, Ordering::Relaxed);
-        *guard = Some(std::thread::spawn(move || {
-            let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                spawn_cubeb_playback(
-                    dev,
-                    requested,
-                    pb,
-                    monitor_pb,
-                    monitor,
-                    st,
-                    stats.clone(),
-                    playback_progress,
-                    aec_timing,
-                    playback_diagnostics.clone(),
-                    stream_generation,
-                    media_events.clone(),
-                )
-            }));
-            match outcome {
-                Ok(Ok(())) => {}
-                Ok(Err(error)) => {
-                    stats.playback_errors.fetch_add(1, Ordering::Relaxed);
-                    playback_diagnostics.mark_error();
-                    let error_code = playback_error_code(&error).to_string();
-                    let error = compact_playback_error(&error);
-                    send_media_state(
-                        &media_events,
-                        MediaStateEvent {
-                            direction: "playback".to_string(),
-                            state: "error".to_string(),
-                            error_code,
-                            error: error.clone(),
-                            stream_generation,
-                            running: false,
-                            requested_device: requested_device.clone(),
-                            requested_default,
-                            ..Default::default()
-                        },
-                    );
-                    eprintln!("pc-capture: playback error: {error}");
-                }
-                Err(payload) => {
-                    playback_diagnostics.mark_error();
-                    let error = format!(
-                        "playback worker panicked: {}",
-                        panic_detail(payload.as_ref())
-                    );
-                    send_media_state(
-                        &media_events,
-                        MediaStateEvent {
-                            direction: "playback".to_string(),
-                            state: "error".to_string(),
-                            error_code: "worker-panic".to_string(),
-                            error: compact_playback_error(&error),
-                            stream_generation,
-                            running: false,
-                            requested_device: requested_device.clone(),
-                            requested_default,
-                            ..Default::default()
-                        },
-                    );
-                    worker_supervisor.report(
-                        "playback worker",
-                        &format!("panicked: {}", panic_detail(payload.as_ref())),
-                    );
-                }
-            }
-        }));
+    if !guard.can_admit_worker() {
+        return;
     }
+    let now = monotonic_ns();
+    let last = last_spawn_ns.load(Ordering::Relaxed);
+    if last != 0 && now.saturating_sub(last) < duration_ns(PLAYBACK_SPAWN_THROTTLE) {
+        return;
+    }
+    last_spawn_ns.store(now, Ordering::Release);
+    let requested = out_selected.lock().unwrap().clone();
+    let playback_override = out_override.lock().unwrap().clone();
+    let (dev, requested) = playback_route_selection(&requested, &playback_override);
+    let requested_device = requested.clone().unwrap_or_default();
+    let requested_default = requested_device.is_empty();
+    let pb = playback.clone();
+    let monitor_pb = monitor_playback.clone();
+    let monitor = monitor_state.clone();
+    let stop = Arc::new(AtomicBool::new(false));
+    let worker_stop = stop.clone();
+    let stats = counters.clone();
+    let playback_progress = supervision.progress.clone();
+    let aec_timing = supervision.aec_timing.clone();
+    if !reaped_finished_worker && last == 0 {
+        aec_timing.reset_playback_path();
+    } else {
+        aec_timing.clear_playback_measurements();
+    }
+    let media_diagnostics = supervision.media_diagnostics.clone();
+    let media_events = supervision.media_events.clone();
+    let stream_generation = media_diagnostics
+        .playback
+        .begin_stream(requested.as_deref());
+    let playback_diagnostics = media_diagnostics.playback.clone();
+    let worker_supervisor = supervision.session.clone();
+    supervision.progress.reset();
+    counters
+        .playback_spawn_attempts
+        .fetch_add(1, Ordering::Relaxed);
+    let handle = std::thread::spawn(move || {
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            spawn_cubeb_playback(
+                dev,
+                requested,
+                pb,
+                monitor_pb,
+                monitor,
+                worker_stop,
+                stats.clone(),
+                playback_progress,
+                aec_timing,
+                playback_diagnostics.clone(),
+                stream_generation,
+                media_events.clone(),
+            )
+        }));
+        match outcome {
+            Ok(Ok(())) => {}
+            Ok(Err(error)) => {
+                stats.playback_errors.fetch_add(1, Ordering::Relaxed);
+                playback_diagnostics.mark_error();
+                let error_code = playback_error_code(&error).to_string();
+                let error = compact_playback_error(&error);
+                send_media_state(
+                    &media_events,
+                    MediaStateEvent {
+                        direction: "playback".to_string(),
+                        state: "error".to_string(),
+                        error_code,
+                        error: error.clone(),
+                        stream_generation,
+                        running: false,
+                        requested_device: requested_device.clone(),
+                        requested_default,
+                        ..Default::default()
+                    },
+                );
+                eprintln!("pc-capture: playback error: {error}");
+            }
+            Err(payload) => {
+                playback_diagnostics.mark_error();
+                let error = format!(
+                    "playback worker panicked: {}",
+                    panic_detail(payload.as_ref())
+                );
+                send_media_state(
+                    &media_events,
+                    MediaStateEvent {
+                        direction: "playback".to_string(),
+                        state: "error".to_string(),
+                        error_code: "worker-panic".to_string(),
+                        error: compact_playback_error(&error),
+                        stream_generation,
+                        running: false,
+                        requested_device: requested_device.clone(),
+                        requested_default,
+                        ..Default::default()
+                    },
+                );
+                worker_supervisor.report(
+                    "playback worker",
+                    &format!("panicked: {}", panic_detail(payload.as_ref())),
+                );
+            }
+        }
+    });
+    guard.install_worker(stop, handle);
 }
 
 const RTC_MAX_PENDING_PEERS: usize = 64;
@@ -2376,7 +2520,6 @@ fn run_authenticated_session(
             "Pion transport init failed: {detail}"
         )));
     }
-
     let dsp = Arc::new(Mutex::new(crate::dsp::Dsp::new(
         crate::dsp::DspConfig::default(),
     )));
@@ -2390,11 +2533,10 @@ fn run_authenticated_session(
     let playback = Arc::new(Mutex::new(PlaybackRing::new(8 * proto::AUDIO_OUT_FRAMES)));
     let monitor_playback = Arc::new(Mutex::new(PlaybackRing::new(MONITOR_RING_CAPACITY_PAIRS)));
     let monitor_state = Arc::new(MicrophoneMonitorState::default());
-    let out_stop = Arc::new(AtomicBool::new(false));
+    let playback_lifecycle = Arc::new(Mutex::new(PlaybackLifecycle::default()));
     let out_selected: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
     let out_override: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
     let hfp_transition = Arc::new(Mutex::new(HfpTransitionState::default()));
-    let out_thread: Arc<Mutex<Option<std::thread::JoinHandle<()>>>> = Arc::new(Mutex::new(None));
     let out_spawn_ns = Arc::new(AtomicU64::new(0));
     let out_progress = Arc::new(PlaybackProgress::default());
     let aec_timing = Arc::new(AecTiming::default());
@@ -2417,7 +2559,7 @@ fn run_authenticated_session(
     let critical_monitor_handle =
         spawn_critical_failure_monitor(stream.try_clone()?, session_stopping.clone(), critical_rx);
     let playback_watchdog_handle = spawn_playback_watchdog(
-        out_thread.clone(),
+        playback_lifecycle.clone(),
         playback.clone(),
         out_spawn_ns.clone(),
         playback_supervision.clone(),
@@ -2922,11 +3064,10 @@ fn run_authenticated_session(
     let drain_monitor_state = monitor_state.clone();
     let drain_dsp = dsp.clone();
     let drain_gs = game_state.clone();
-    let drain_out_thread = out_thread.clone();
+    let drain_playback_lifecycle = playback_lifecycle.clone();
     let drain_out_selected = out_selected.clone();
     let drain_out_override = out_override.clone();
     let drain_hfp_transition = hfp_transition.clone();
-    let drain_out_stop = out_stop.clone();
     let drain_out_spawn = out_spawn_ns.clone();
     let drain_playback_supervision = playback_supervision.clone();
     let drain_telemetry = telemetry.clone();
@@ -3115,11 +3256,10 @@ fn run_authenticated_session(
                     drain_counters.record_mix(&stereo);
 
                     ensure_playback(
-                        &drain_out_thread,
+                        &drain_playback_lifecycle,
                         &drain_out_selected,
                         &drain_out_override,
                         &drain_hfp_transition,
-                        &drain_out_stop,
                         &drain_playback,
                         &drain_monitor_playback,
                         &drain_monitor_state,
@@ -3191,11 +3331,10 @@ fn run_authenticated_session(
         match frame {
             Frame::AudioOut(frame) => {
                 ensure_playback(
-                    &out_thread,
+                    &playback_lifecycle,
                     &out_selected,
                     &out_override,
                     &hfp_transition,
-                    &out_stop,
                     &playback,
                     &monitor_playback,
                     &monitor_state,
@@ -3233,6 +3372,19 @@ fn run_authenticated_session(
                     }
                     InboundOp::SelectOutputDevice { id } => {
                         let requested_output = id.clone();
+                        let replacement = match stop_playback_bounded(
+                            &playback_lifecycle,
+                            &out_progress,
+                            PLAYBACK_STOP_TIMEOUT,
+                        ) {
+                            Ok(replacement) => replacement,
+                            Err(error) => {
+                                eprintln!(
+                                    "pc-capture: critical media failure: playback device switch: {error}"
+                                );
+                                break 'control;
+                            }
+                        };
                         *out_selected.lock().unwrap() = Some(id);
                         *out_override.lock().unwrap() = None;
                         hfp_transition.lock().unwrap().cancel();
@@ -3241,25 +3393,8 @@ fn run_authenticated_session(
                         monitor_state.reset_playout(|| {
                             monitor_playback.lock().unwrap().discard_all();
                         });
-
-                        if let Err(error) = stop_playback_bounded(
-                            &out_thread,
-                            &out_stop,
-                            &out_progress,
-                            PLAYBACK_STOP_TIMEOUT,
-                        ) {
-                            eprintln!(
-                                "pc-capture: critical media failure: playback device switch: {error}"
-                            );
-                            break 'control;
-                        }
-                        out_stop.store(false, Ordering::Release);
                         out_spawn_ns.store(0, Ordering::Release);
                         playback.lock().unwrap().discard_all();
-                        // This event is emitted only after the previous worker has fully stopped.
-                        // Managed setup can therefore ignore stale playback events, wait for the
-                        // following stream-started/first-callback pair, and avoid feeding its test
-                        // chime into a ring whose output device is still opening.
                         send_media_state(
                             &playback_supervision.media_events,
                             MediaStateEvent {
@@ -3273,12 +3408,18 @@ fn run_authenticated_session(
                                 ..Default::default()
                             },
                         );
+                        if !playback_lifecycle
+                            .lock()
+                            .unwrap()
+                            .complete_replacement(replacement)
+                        {
+                            break 'control;
+                        }
                         ensure_playback(
-                            &out_thread,
+                            &playback_lifecycle,
                             &out_selected,
                             &out_override,
                             &hfp_transition,
-                            &out_stop,
                             &playback,
                             &monitor_playback,
                             &monitor_state,
@@ -3327,13 +3468,10 @@ fn run_authenticated_session(
                                     .handle
                                     .as_ref()
                                     .is_some_and(|handle| !handle.is_finished()));
-                        let playback_route_live = out_thread
-                            .lock()
-                            .unwrap()
-                            .as_ref()
-                            .is_some_and(|handle| !handle.is_finished())
-                            && out_selected.lock().unwrap().as_deref().unwrap_or_default()
-                                == output_id;
+                        let playback_route_live =
+                            playback_lifecycle.lock().unwrap().worker_running()
+                                && out_selected.lock().unwrap().as_deref().unwrap_or_default()
+                                    == output_id;
                         let hfp_plan = if capture_route_live && playback_route_live {
                             hfp_route_cache.lookup(&request)
                         } else {
@@ -3387,31 +3525,35 @@ fn run_authenticated_session(
                                         requested_default: requested_output.is_empty(),
                                         requested_device: requested_output,
                                         changed: false,
-                                        running: out_thread.lock().unwrap().is_some(),
+                                        running: playback_lifecycle
+                                            .lock()
+                                            .unwrap()
+                                            .worker_present(),
                                         ..Default::default()
                                     },
                                 );
                                 continue 'control;
                             }
                             let transition_generation = hfp_transition.lock().unwrap().begin();
-                            if let Err(error) = stop_playback_bounded(
-                                &out_thread,
-                                &out_stop,
+                            let playback_replacement = match stop_playback_bounded(
+                                &playback_lifecycle,
                                 &out_progress,
                                 PLAYBACK_STOP_TIMEOUT,
                             ) {
-                                eprintln!(
-                                    "pc-capture: critical media failure: HFP playback stop: {error}"
-                                );
-                                break 'control;
-                            }
+                                Ok(replacement) => replacement,
+                                Err(error) => {
+                                    eprintln!(
+                                        "pc-capture: critical media failure: HFP playback stop: {error}"
+                                    );
+                                    break 'control;
+                                }
+                            };
                             aec_timing.reset_playback_path();
                             *out_selected.lock().unwrap() = Some(output_id);
                             *out_override.lock().unwrap() = Some(plan.playback_override);
                             monitor_state.reset_playout(|| {
                                 monitor_playback.lock().unwrap().discard_all();
                             });
-                            out_stop.store(false, Ordering::Release);
                             out_spawn_ns.store(0, Ordering::Release);
                             playback.lock().unwrap().discard_all();
 
@@ -3454,10 +3596,9 @@ fn run_authenticated_session(
                             let resume_transition = hfp_transition.clone();
                             let resume_capture_diagnostics = media_diagnostics.capture.clone();
                             let resume_session_stopping = session_stopping.clone();
-                            let resume_out_thread = out_thread.clone();
+                            let resume_playback_lifecycle = playback_lifecycle.clone();
                             let resume_out_selected = out_selected.clone();
                             let resume_out_override = out_override.clone();
-                            let resume_out_stop = out_stop.clone();
                             let resume_playback = playback.clone();
                             let resume_monitor_playback = monitor_playback.clone();
                             let resume_monitor_state = monitor_state.clone();
@@ -3487,21 +3628,25 @@ fn run_authenticated_session(
                                             if resume_session_stopping.load(Ordering::Acquire) {
                                                 break;
                                             }
-                                            if !resume_transition
-                                                .lock()
-                                                .unwrap()
-                                                .complete(transition_generation)
-                                            {
+                                            let mut transition = resume_transition.lock().unwrap();
+                                            if !transition.complete(transition_generation) {
                                                 break;
                                             }
                                             resume_playback.lock().unwrap().discard_all();
                                             resume_monitor_playback.lock().unwrap().discard_all();
+                                            if !resume_playback_lifecycle
+                                                .lock()
+                                                .unwrap()
+                                                .complete_replacement(playback_replacement)
+                                            {
+                                                break;
+                                            }
+                                            drop(transition);
                                             ensure_playback(
-                                                &resume_out_thread,
+                                                &resume_playback_lifecycle,
                                                 &resume_out_selected,
                                                 &resume_out_override,
                                                 &resume_transition,
-                                                &resume_out_stop,
                                                 &resume_playback,
                                                 &resume_monitor_playback,
                                                 &resume_monitor_state,
@@ -3517,17 +3662,19 @@ fn run_authenticated_session(
                         } else {
                             if qualified_hfp_route {
                                 let release_generation = hfp_transition.lock().unwrap().begin();
-                                if let Err(error) = stop_playback_bounded(
-                                    &out_thread,
-                                    &out_stop,
+                                let playback_replacement = match stop_playback_bounded(
+                                    &playback_lifecycle,
                                     &out_progress,
                                     PLAYBACK_STOP_TIMEOUT,
                                 ) {
-                                    eprintln!(
-                                        "pc-capture: critical media failure: HFP playback release: {error}"
-                                    );
-                                    break 'control;
-                                }
+                                    Ok(replacement) => replacement,
+                                    Err(error) => {
+                                        eprintln!(
+                                            "pc-capture: critical media failure: HFP playback release: {error}"
+                                        );
+                                        break 'control;
+                                    }
+                                };
                                 let capture_result = if stop_capture_before_clearing_override(
                                     qualified_hfp_route,
                                     capture_mode,
@@ -3569,7 +3716,6 @@ fn run_authenticated_session(
                                 monitor_state.reset_playout(|| {
                                     monitor_playback.lock().unwrap().discard_all();
                                 });
-                                out_stop.store(false, Ordering::Release);
                                 out_spawn_ns.store(0, Ordering::Release);
                                 playback.lock().unwrap().discard_all();
                                 send_media_state(
@@ -3588,12 +3734,18 @@ fn run_authenticated_session(
                                 if !hfp_transition.lock().unwrap().complete(release_generation) {
                                     break 'control;
                                 }
+                                if !playback_lifecycle
+                                    .lock()
+                                    .unwrap()
+                                    .complete_replacement(playback_replacement)
+                                {
+                                    break 'control;
+                                }
                                 ensure_playback(
-                                    &out_thread,
+                                    &playback_lifecycle,
                                     &out_selected,
                                     &out_override,
                                     &hfp_transition,
-                                    &out_stop,
                                     &playback,
                                     &monitor_playback,
                                     &monitor_state,
@@ -3605,11 +3757,10 @@ fn run_authenticated_session(
                                 hfp_transition.lock().unwrap().cancel();
                                 let selected = out_selected.lock().unwrap().clone();
                                 let playback_override = out_override.lock().unwrap().clone();
-                                let output_worker_missing = out_thread
+                                let output_worker_missing = playback_lifecycle
                                     .lock()
                                     .unwrap()
-                                    .as_ref()
-                                    .is_none_or(|handle| handle.is_finished());
+                                    .worker_missing_or_finished();
                                 let output_changed = output_worker_missing
                                     || playback_request_changed(
                                         &selected,
@@ -3617,23 +3768,24 @@ fn run_authenticated_session(
                                         &playback_override,
                                     );
                                 if output_changed {
+                                    let playback_replacement = match stop_playback_bounded(
+                                        &playback_lifecycle,
+                                        &out_progress,
+                                        PLAYBACK_STOP_TIMEOUT,
+                                    ) {
+                                        Ok(replacement) => replacement,
+                                        Err(error) => {
+                                            eprintln!(
+                                                "pc-capture: critical media failure: playback route switch: {error}"
+                                            );
+                                            break 'control;
+                                        }
+                                    };
                                     *out_selected.lock().unwrap() = Some(output_id);
                                     *out_override.lock().unwrap() = None;
                                     monitor_state.reset_playout(|| {
                                         monitor_playback.lock().unwrap().discard_all();
                                     });
-                                    if let Err(error) = stop_playback_bounded(
-                                        &out_thread,
-                                        &out_stop,
-                                        &out_progress,
-                                        PLAYBACK_STOP_TIMEOUT,
-                                    ) {
-                                        eprintln!(
-                                        "pc-capture: critical media failure: playback route switch: {error}"
-                                    );
-                                        break 'control;
-                                    }
-                                    out_stop.store(false, Ordering::Release);
                                     out_spawn_ns.store(0, Ordering::Release);
                                     playback.lock().unwrap().discard_all();
                                     send_media_state(
@@ -3649,12 +3801,18 @@ fn run_authenticated_session(
                                             ..Default::default()
                                         },
                                     );
+                                    if !playback_lifecycle
+                                        .lock()
+                                        .unwrap()
+                                        .complete_replacement(playback_replacement)
+                                    {
+                                        break 'control;
+                                    }
                                     ensure_playback(
-                                        &out_thread,
+                                        &playback_lifecycle,
                                         &out_selected,
                                         &out_override,
                                         &hfp_transition,
-                                        &out_stop,
                                         &playback,
                                         &monitor_playback,
                                         &monitor_state,
@@ -3840,11 +3998,10 @@ fn run_authenticated_session(
                             break 'control;
                         }
                         ensure_playback(
-                            &out_thread,
+                            &playback_lifecycle,
                             &out_selected,
                             &out_override,
                             &hfp_transition,
-                            &out_stop,
                             &playback,
                             &monitor_playback,
                             &monitor_state,
@@ -4005,13 +4162,14 @@ fn run_authenticated_session(
         eprintln!("pc-capture: capture teardown exceeded its bound: {error}");
     }
     stop.store(true, Ordering::Relaxed);
-    out_stop.store(true, Ordering::Relaxed);
+    if let Err(error) =
+        stop_playback_bounded(&playback_lifecycle, &out_progress, PLAYBACK_STOP_TIMEOUT)
+    {
+        eprintln!("pc-capture: playback teardown exceeded its bound: {error}");
+    }
     rtc_stop.store(true, Ordering::Relaxed);
     telemetry_stop.store(true, Ordering::Release);
     playback_watchdog_handle.join().ok();
-    if let Some(h) = out_thread.lock().unwrap().take() {
-        h.join().ok();
-    }
     writer_handle.join().ok();
     drain_handle.join().ok();
     telemetry_handle.join().ok();
@@ -4496,20 +4654,194 @@ mod tests {
             std::thread::yield_now();
         }
         assert!(handle.is_finished());
-        let mut worker = Some(handle);
+        let mut lifecycle = PlaybackLifecycle::default();
+        lifecycle.install_worker(Arc::new(AtomicBool::new(false)), handle);
 
         assert!(reap_finished_playback_worker(
-            &mut worker,
+            &mut lifecycle,
             &progress,
             &timing,
         ));
 
-        assert!(worker.is_none());
+        assert!(lifecycle.can_admit_worker());
         assert_eq!(progress.snapshot(), (0, 0));
         assert_eq!(
             timing.snapshot(monotonic_ns()).playback_timing_epoch,
             previous_epoch + 1
         );
+    }
+
+    #[test]
+    fn concurrent_playback_stop_excludes_worker_admission() {
+        let lifecycle = Arc::new(Mutex::new(PlaybackLifecycle::default()));
+        let progress = Arc::new(PlaybackProgress::default());
+        let stop = Arc::new(AtomicBool::new(false));
+        let worker_stop = stop.clone();
+        let stop_observed = Arc::new(std::sync::Barrier::new(2));
+        let release_worker = Arc::new(std::sync::Barrier::new(2));
+        let worker_stop_observed = stop_observed.clone();
+        let worker_release = release_worker.clone();
+        let handle = std::thread::spawn(move || {
+            while !worker_stop.load(Ordering::Acquire) {
+                std::thread::yield_now();
+            }
+            worker_stop_observed.wait();
+            worker_release.wait();
+        });
+        lifecycle.lock().unwrap().install_worker(stop, handle);
+
+        let stop_lifecycle = lifecycle.clone();
+        let stop_progress = progress.clone();
+        let (replacement_tx, replacement_rx) = std::sync::mpsc::channel();
+        let stopper = std::thread::spawn(move || {
+            replacement_tx
+                .send(
+                    stop_playback_bounded(&stop_lifecycle, &stop_progress, Duration::from_secs(1))
+                        .unwrap(),
+                )
+                .unwrap();
+        });
+
+        stop_observed.wait();
+        assert!(!lifecycle.lock().unwrap().can_admit_worker());
+        release_worker.wait();
+        let replacement = replacement_rx.recv().unwrap();
+        stopper.join().unwrap();
+        assert!(!lifecycle.lock().unwrap().can_admit_worker());
+        assert!(lifecycle.lock().unwrap().complete_replacement(replacement));
+    }
+
+    #[test]
+    fn playback_replacement_never_clears_the_old_stop_token() {
+        let lifecycle = Mutex::new(PlaybackLifecycle::default());
+        let progress = PlaybackProgress::default();
+        let old_stop = Arc::new(AtomicBool::new(false));
+        let worker_stop = old_stop.clone();
+        let (stopped_tx, stopped_rx) = std::sync::mpsc::channel();
+        let handle = std::thread::spawn(move || {
+            while !worker_stop.load(Ordering::Acquire) {
+                std::thread::yield_now();
+            }
+            stopped_tx.send(()).unwrap();
+        });
+        lifecycle
+            .lock()
+            .unwrap()
+            .install_worker(old_stop.clone(), handle);
+
+        let replacement =
+            stop_playback_bounded(&lifecycle, &progress, Duration::from_secs(1)).unwrap();
+        stopped_rx.recv().unwrap();
+        assert!(old_stop.load(Ordering::Acquire));
+        assert!(lifecycle.lock().unwrap().complete_replacement(replacement));
+
+        let new_stop = Arc::new(AtomicBool::new(false));
+        let worker_new_stop = new_stop.clone();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let new_handle = std::thread::spawn(move || {
+            release_rx.recv().unwrap();
+            assert!(worker_new_stop.load(Ordering::Acquire));
+        });
+        lifecycle
+            .lock()
+            .unwrap()
+            .install_worker(new_stop.clone(), new_handle);
+        assert!(old_stop.load(Ordering::Acquire));
+        assert!(!new_stop.load(Ordering::Acquire));
+        let (_, worker) = lifecycle.lock().unwrap().begin_replacement().unwrap();
+        release_tx.send(()).unwrap();
+        worker.unwrap().handle.join().unwrap();
+    }
+
+    #[test]
+    fn playback_replacement_admits_only_after_matching_completion() {
+        let lifecycle = Arc::new(Mutex::new(PlaybackLifecycle::default()));
+        let release_completion = Arc::new(std::sync::Barrier::new(2));
+        let worker_lifecycle = lifecycle.clone();
+        let worker_release = release_completion.clone();
+        let (replacement_tx, replacement_rx) = std::sync::mpsc::channel();
+        let (completed_tx, completed_rx) = std::sync::mpsc::channel();
+        let completer = std::thread::spawn(move || {
+            let (replacement, worker) = worker_lifecycle
+                .lock()
+                .unwrap()
+                .begin_replacement()
+                .unwrap();
+            assert!(worker.is_none());
+            replacement_tx.send(replacement).unwrap();
+            worker_release.wait();
+            completed_tx
+                .send(
+                    worker_lifecycle
+                        .lock()
+                        .unwrap()
+                        .complete_replacement(replacement),
+                )
+                .unwrap();
+        });
+
+        let replacement = replacement_rx.recv().unwrap();
+        let mismatched = PlaybackReplacement {
+            generation: replacement.generation.saturating_add(1),
+        };
+        assert!(!lifecycle.lock().unwrap().complete_replacement(mismatched));
+        assert!(!lifecycle.lock().unwrap().can_admit_worker());
+        release_completion.wait();
+        assert!(completed_rx.recv().unwrap());
+        completer.join().unwrap();
+        assert!(lifecycle.lock().unwrap().can_admit_worker());
+    }
+
+    #[test]
+    fn stale_playback_completion_cannot_release_newer_replacement() {
+        let lifecycle = Arc::new(Mutex::new(PlaybackLifecycle::default()));
+        let release_stale = Arc::new(std::sync::Barrier::new(2));
+        let stale_lifecycle = lifecycle.clone();
+        let stale_release = release_stale.clone();
+        let (old_tx, old_rx) = std::sync::mpsc::channel();
+        let (stale_tx, stale_rx) = std::sync::mpsc::channel();
+        let stale_completer = std::thread::spawn(move || {
+            let (old, worker) = stale_lifecycle.lock().unwrap().begin_replacement().unwrap();
+            assert!(worker.is_none());
+            old_tx.send(old).unwrap();
+            stale_release.wait();
+            stale_tx
+                .send(stale_lifecycle.lock().unwrap().complete_replacement(old))
+                .unwrap();
+        });
+
+        let old = old_rx.recv().unwrap();
+        let (newer, worker) = lifecycle.lock().unwrap().begin_replacement().unwrap();
+        assert!(worker.is_none());
+        assert!(newer.generation > old.generation);
+        release_stale.wait();
+        assert!(!stale_rx.recv().unwrap());
+        stale_completer.join().unwrap();
+        assert!(!lifecycle.lock().unwrap().can_admit_worker());
+        assert!(lifecycle.lock().unwrap().complete_replacement(newer));
+        assert!(lifecycle.lock().unwrap().can_admit_worker());
+    }
+
+    #[test]
+    fn playback_stop_timeout_fails_closed() {
+        let lifecycle = Mutex::new(PlaybackLifecycle::default());
+        let progress = PlaybackProgress::default();
+        let stop = Arc::new(AtomicBool::new(false));
+        let worker_stop = stop.clone();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let (finished_tx, finished_rx) = std::sync::mpsc::channel();
+        let handle = std::thread::spawn(move || {
+            release_rx.recv().unwrap();
+            assert!(worker_stop.load(Ordering::Acquire));
+            finished_tx.send(()).unwrap();
+        });
+        lifecycle.lock().unwrap().install_worker(stop, handle);
+
+        assert!(stop_playback_bounded(&lifecycle, &progress, Duration::from_millis(1)).is_err());
+        assert!(!lifecycle.lock().unwrap().can_admit_worker());
+        assert!(lifecycle.lock().unwrap().begin_replacement().is_err());
+        release_tx.send(()).unwrap();
+        finished_rx.recv().unwrap();
     }
 
     #[test]

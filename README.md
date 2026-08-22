@@ -101,6 +101,15 @@ Perfect Comms works on its own as a proximity voice mod. Some mods unlock extra 
 > - **Team Radio:** when your role and the host settings allow a private channel,
 >   hold `V` to talk and press `G` to cycle available channels.
 
+### Android touch controls
+
+The Starlight tester build uses in-game touch controls instead of desktop keybinds:
+
+- In **Open Mic** mode, tap the microphone button to mute or unmute.
+- In **Push To Talk** mode, hold the microphone button while speaking and release it to stop.
+- When Team Radio is available, tap its button to change channel or hold it to transmit.
+- Tap the speaker button to deafen or undeafen. Deafening mutes playback and pauses microphone transmission.
+
 **Platform notes**
 
 - **Desktop:** Press and release `Right Alt` to mute or unmute, and `Right Ctrl`
@@ -146,29 +155,14 @@ BepInEx/
 
 ### Android on Starlight
 
-The managed Android tester artifact is `PerfectCommsStarlight.dll`. It is a
-self-contained managed assembly: the required managed media stack is merged
-into the DLL, and the managed dependency notices and complete SIPSorcery terms
-are embedded in it. It has no companion DLLs.
-
-Use `PerfectCommsStarlight.dll` only through an All Of Us staff-approved test
-or a Starlight beta/local-mod testing build, following the
+Android support is available as the single managed `PerfectCommsStarlight.dll`
+tester build. It is not an APK and should be used only in an All Of Us
+staff-approved test or Starlight beta/local-mod build, following the
 [Starlight developer testing guide](https://allofus.dev/guides/starlight-dev-guide/#testing).
-This testing path does not imply public Starlight availability or approval.
-There is no Perfect Comms APK or native Android payload. No APK, manifest, or
-native-library staging is involved.
 
-Capture uses Starlight's built-in recording bridge and Unity playback. The DLL
-does not ship either native component. Starlight 1.6.3 exposes only the Android
-platform-default recording route, so the Starlight build does not present a
-device selector that the host cannot honor.
-
-The Starlight build interoperates with desktop `PerfectComms.dll` players in
-the same voice lobby. The desktop build and its native media stack are
-unchanged.
-
-Launch Among Us and open Perfect Comms from the Options menu. On desktop, `F10`
-opens Voice Settings and `F11` opens Host Voice Settings.
+It uses Starlight recording and Unity playback, follows Android's system audio
+route, and interoperates with desktop players in the same voice lobby. Open
+Perfect Comms from the in-game Options menu.
 
 Perfect Comms installs beside mods that use Reactor or MiraAPI (such as TOU-Mira) without replacing their loader or dependencies. For BepInEx setup help, see the [official IL2CPP installation guide](https://docs.bepinex.dev/master/articles/user_guide/installation/unity_il2cpp.html).
 
@@ -184,7 +178,7 @@ Making a roles mod? You can add your own voice behaviours to Perfect Comms **wit
                   PrivateAssets="all" />
 ```
 
-`4.1.7.1` is the corrected API-package revision for the Perfect Comms 4.1.7 runtime; the player-facing mod version remains 4.1.7. Players still install Perfect Comms separately. Declare it as a soft dependency and register your rules only when it is present:
+`4.1.7.1` is the reference-only API package revision and is versioned independently from the player-facing mod. It supports Perfect Comms 4.1.7 and later runtimes that retain this API contract. Players still install Perfect Comms separately. Declare it as a soft dependency and register your rules only when it is present:
 
 ```csharp
 [BepInDependency("com.edgetel.perfectcomms", BepInDependency.DependencyFlags.SoftDependency)]

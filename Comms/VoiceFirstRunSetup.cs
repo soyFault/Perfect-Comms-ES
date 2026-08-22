@@ -417,7 +417,7 @@ internal static class VoiceFirstRunSetup
         _speakerTestButton = AddButton(devices, "Test output", 146f, 44f,
             cardW - 166f, -11f, ButtonKind.Secondary,
             () => _audioPreview?.PlayTestSound(_draft),
-            () => _audioPreview?.IsSpeakerTestBusy != true);
+            () => _audioPreview is { IsSpeakerTestBusy: false, IsMicrophoneTestStarting: false });
         AddRow(new VoiceUiKit.StepperRow(
                 DraftMicrophoneIndexForUi,
                 i =>
@@ -1013,7 +1013,9 @@ internal static class VoiceFirstRunSetup
                 ? SetupSuccess
                 : SetupTextSecondary;
         }
-        _micTestButton?.SetText(_audioPreview.IsMicrophoneTestActive ? "Stop mic test" : "Test mic");
+        _micTestButton?.SetText(_audioPreview.IsMicrophoneTestStarting
+            ? "Cancel mic start"
+            : _audioPreview.IsMicrophoneTestActive ? "Stop mic test" : "Test mic");
         _speakerTestButton?.SetText(_audioPreview.IsPlayingTone
             ? "Playing..."
             : _audioPreview.IsPreparingTone ? "Opening output..." : "Test output");
@@ -1533,11 +1535,11 @@ internal static class VoiceFirstRunSetup
             ("Open voice menu", draft.OpenVoiceSettings),
         };
         for (int i = 0; i < bindings.Length; i++)
-        for (int j = i + 1; j < bindings.Length; j++)
-        {
-            if (!BindingsConflict(bindings[i].Binding, bindings[j].Binding)) continue;
-            return $"{bindings[i].Name} and {bindings[j].Name} use the same shortcut. Edit Controls before saving.";
-        }
+            for (int j = i + 1; j < bindings.Length; j++)
+            {
+                if (!BindingsConflict(bindings[i].Binding, bindings[j].Binding)) continue;
+                return $"{bindings[i].Name} and {bindings[j].Name} use the same shortcut. Edit Controls before saving.";
+            }
         return null;
     }
 

@@ -22,8 +22,142 @@ internal sealed class SidecarVoiceClient : ISidecarVoiceClient
 
     private readonly record struct ReaderLoopState(
         NetworkStream Stream,
+        WriterSession Writer,
         int ManagedGeneration,
         HeartbeatState Heartbeat);
+
+    private sealed class WriteRequest
+    {
+        internal byte[] Frame = Array.Empty<byte>();
+        internal byte[][]? Batch;
+        internal readonly ManualResetEventSlim Completed = new();
+        internal Exception? Error;
+        internal bool Final;
+    }
+
+    private sealed class WriterSession
+    {
+        private readonly NetworkStream _stream;
+        private readonly Action? _beforeWrite;
+        private readonly object _gate = new();
+        private readonly Queue<WriteRequest> _queue = new();
+        private readonly AutoResetEvent _available = new(false);
+        private readonly Thread _thread;
+        private Exception? _failure;
+        private bool _accepting = true;
+
+        internal WriterSession(NetworkStream stream, int generation, Action? beforeWrite)
+        {
+            _stream = stream;
+            _beforeWrite = beforeWrite;
+            _thread = new Thread(Run)
+            {
+                IsBackground = true,
+                Name = $"SidecarVoiceWriter-{generation}",
+            };
+            _thread.Start();
+        }
+
+
+        internal void Write(byte[] frame)
+        {
+            _beforeWrite?.Invoke();
+            var request = new WriteRequest { Frame = frame };
+            lock (_gate)
+            {
+                if (!_accepting)
+                    throw new System.IO.IOException("sidecar writer closed");
+                _queue.Enqueue(request);
+                _available.Set();
+            }
+            request.Completed.Wait();
+            if (request.Error != null)
+                throw new System.IO.IOException("sidecar write failed", request.Error);
+        }
+
+        internal void WriteBatch(byte[][] frames)
+        {
+            _beforeWrite?.Invoke();
+            var request = new WriteRequest { Batch = frames };
+            lock (_gate)
+            {
+                if (!_accepting)
+                    throw new System.IO.IOException("sidecar writer closed");
+                _queue.Enqueue(request);
+                _available.Set();
+            }
+            request.Completed.Wait();
+            if (request.Error != null)
+                throw new System.IO.IOException("sidecar write batch failed", request.Error);
+        }
+
+        internal void WriteFinalAndStop(byte[] frame)
+        {
+            var request = new WriteRequest { Frame = frame, Final = true };
+            lock (_gate)
+            {
+                if (!_accepting) return;
+                _accepting = false;
+                _queue.Enqueue(request);
+                _available.Set();
+            }
+            request.Completed.Wait();
+            if (request.Error != null)
+                throw new System.IO.IOException("sidecar final write failed", request.Error);
+        }
+
+        internal void Join()
+        {
+            if (_thread == Thread.CurrentThread) return;
+            try { _thread.Join(2000); } catch { }
+        }
+
+        private void Run()
+        {
+            while (true)
+            {
+                WriteRequest? request = null;
+                lock (_gate)
+                {
+                    if (_queue.Count != 0)
+                        request = _queue.Dequeue();
+                }
+                if (request == null)
+                {
+                    _available.WaitOne();
+                    continue;
+                }
+                try
+                {
+                    if (_failure != null)
+                        request.Error = _failure;
+                    else
+                    {
+                        if (request.Batch != null)
+                        {
+                            foreach (var frame in request.Batch)
+                                _stream.Write(frame, 0, frame.Length);
+                        }
+                        else
+                        {
+                            _stream.Write(request.Frame, 0, request.Frame.Length);
+                        }
+                        _stream.Flush();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _failure = ex;
+                    request.Error = ex;
+                }
+                finally
+                {
+                    request.Completed.Set();
+                }
+                if (request.Final) return;
+            }
+        }
+    }
 
     // Protocol 14 generation-scopes every peer operation so stale queued SDP/ICE work cannot
     // mutate a replacement peer. Protocol 13 adds local microphone monitoring with optional
@@ -65,8 +199,9 @@ internal sealed class SidecarVoiceClient : ISidecarVoiceClient
 
 
     private readonly Func<string, string, SidecarLaunchResult> _launch;
+    private readonly Action? _beforeWrite;
     private readonly object _gate = new();
-    private readonly object _writeLock = new();
+    private WriterSession? _writer;
     private TcpClient? _client;
     private NetworkStream? _stream;
     private SidecarLaunchResult? _launchResult;
@@ -102,9 +237,12 @@ internal sealed class SidecarVoiceClient : ISidecarVoiceClient
     public IReadOnlyList<VoiceDeviceInfo> OutputDevices => _outputDevices;
     public bool CleanupComplete => Volatile.Read(ref _cleanupComplete) != 0;
 
-    public SidecarVoiceClient(Func<string, string, SidecarLaunchResult> launch)
+    public SidecarVoiceClient(
+        Func<string, string, SidecarLaunchResult> launch,
+        Action? beforeWrite = null)
     {
         _launch = launch;
+        _beforeWrite = beforeWrite;
     }
 
     public bool Start(string? micDevice, string? spkDevice)
@@ -191,19 +329,23 @@ internal sealed class SidecarVoiceClient : ISidecarVoiceClient
             return false;
         }
 
+        var writer = new WriterSession(stream, generation, _beforeWrite);
         var reader = new Thread(ReadLoop) { IsBackground = true, Name = "SidecarVoiceReader" };
         var heartbeat = new Thread(HeartbeatLoop) { IsBackground = true, Name = "SidecarVoiceHeartbeat" };
         lock (_gate)
         {
             if (Volatile.Read(ref _startGeneration) != generation)
             {
+                try { writer.WriteFinalAndStop(SidecarProtocol.StopFrame()); } catch { }
                 try { client.Close(); } catch { }
+                writer.Join();
                 KillLaunch();
                 SetHealth(CaptureHealth.Dead);
                 return false;
             }
             _client = client;
             _stream = stream;
+            _writer = writer;
             _reader = reader;
             _heartbeat = heartbeat;
             ResetDeadNotification(ref _deadNotificationState, generation);
@@ -214,7 +356,7 @@ internal sealed class SidecarVoiceClient : ISidecarVoiceClient
         {
             LastInboundTick = Environment.TickCount64,
         };
-        var workerState = new ReaderLoopState(stream, generation, heartbeatState);
+        var workerState = new ReaderLoopState(stream, writer, generation, heartbeatState);
         reader.Start(workerState);
         heartbeat.Start(workerState);
         VoiceDiagnostics.Log("sidecar.lifecycle", $"event=running proto={Proto} pid={launch.Pid}");
@@ -238,14 +380,18 @@ internal sealed class SidecarVoiceClient : ISidecarVoiceClient
 
     private void Write(byte[] frame)
     {
-        NetworkStream? s;
-        lock (_gate) { s = _stream; }
-        if (s == null) throw new System.IO.IOException("sidecar stream closed");
-        lock (_writeLock)
-        {
-            s.Write(frame, 0, frame.Length);
-            s.Flush();
-        }
+        WriterSession? writer;
+        lock (_gate) { writer = _writer; }
+        if (writer == null) throw new System.IO.IOException("sidecar stream closed");
+        writer.Write(frame);
+    }
+
+    private void WriteBatch(byte[][] frames)
+    {
+        WriterSession? writer;
+        lock (_gate) { writer = _writer; }
+        if (writer == null) throw new System.IO.IOException("sidecar stream closed");
+        writer.WriteBatch(frames);
     }
 
     private bool SendCommand(
@@ -262,10 +408,20 @@ internal sealed class SidecarVoiceClient : ISidecarVoiceClient
             return false;
         }
 
-        byte[]? frame = null;
+        byte[] frame;
         try
         {
             frame = frameFactory();
+        }
+        catch (Exception ex)
+        {
+            if (logFailure)
+                LogCommand(op, "failed", 0, details + " error=" + ExceptionDiagnostic(ex));
+            return false;
+        }
+
+        try
+        {
             Write(frame);
             if (logSuccess)
                 LogCommand(op, "written", frame.Length, details);
@@ -274,7 +430,8 @@ internal sealed class SidecarVoiceClient : ISidecarVoiceClient
         catch (Exception ex)
         {
             if (logFailure)
-                LogCommand(op, "failed", frame?.Length ?? 0, details + " error=" + ExceptionDiagnostic(ex));
+                LogCommand(op, "failed", frame.Length, details + " error=" + ExceptionDiagnostic(ex));
+            RaiseDead(op + " write failed", Volatile.Read(ref _startGeneration));
             return false;
         }
     }
@@ -333,40 +490,75 @@ internal sealed class SidecarVoiceClient : ISidecarVoiceClient
             return false;
         }
 
-        if (!SendCommand(
-                "set-dsp",
-                () => SidecarProtocol.SetDspFrame(aec, agc, ns, nsVeryHigh, hpf),
-                $"aec={aec} agc={agc} ns={ns} nsVeryHigh={ns && nsVeryHigh} hpf={hpf}")) return false;
         var diagnosticsEnabled = VoiceDiagnostics.IsEnabled;
-        if (!SendCommand(
-                "set-diagnostics",
-                () => SidecarProtocol.SetDiagnosticsFrame(diagnosticsEnabled),
-                $"enabled={diagnosticsEnabled}")) return false;
-        Volatile.Write(ref _lastDiagnosticsEnabled, diagnosticsEnabled ? 1 : 0);
-        if (!SendCommand(
-                "set-input",
-                () => SidecarProtocol.SetInputFrame(gain, vadThreshold, noiseGateThreshold),
-                $"gain={FormatFloat(gain)} vadThreshold={FormatFloat(vadThreshold)} noiseGateThreshold={FormatFloat(noiseGateThreshold)}")) return false;
-        if (!SendCommand(
-                "set-monitor",
-                () => SidecarProtocol.SetMonitorFrame(monitorEnabled, monitorDelayed, monitorGain),
-                $"enabled={monitorEnabled} delayed={monitorDelayed} gain={FormatFloat(monitorGain)}")) return false;
-        if (iceServers != null)
-        {
-            var snapshot = SnapshotIceServers(iceServers);
-            if (!SendCommand(
-                    "set-ice-servers",
-                    () => SidecarProtocol.SetIceServersFrame(snapshot),
-                    DescribeIceServers(snapshot))) return false;
-        }
-
         var captureMode = micActive
             ? SidecarCaptureMode.Transmit
             : micWarm || monitorEnabled
                 ? SidecarCaptureMode.Warm
                 : SidecarCaptureMode.Stopped;
-        if (!ConfigureAudioRoute(micDevice, outputDevice, captureMode, synthetic)) return false;
+        var commands = new List<(string Op, byte[] Frame, string Details)>(6);
+        try
+        {
+            commands.Add((
+                "set-dsp",
+                SidecarProtocol.SetDspFrame(aec, agc, ns, nsVeryHigh, hpf),
+                $"aec={aec} agc={agc} ns={ns} nsVeryHigh={ns && nsVeryHigh} hpf={hpf}"));
+            commands.Add((
+                "set-diagnostics",
+                SidecarProtocol.SetDiagnosticsFrame(diagnosticsEnabled),
+                $"enabled={diagnosticsEnabled}"));
+            commands.Add((
+                "set-input",
+                SidecarProtocol.SetInputFrame(gain, vadThreshold, noiseGateThreshold),
+                $"gain={FormatFloat(gain)} vadThreshold={FormatFloat(vadThreshold)} noiseGateThreshold={FormatFloat(noiseGateThreshold)}"));
+            commands.Add((
+                "set-monitor",
+                SidecarProtocol.SetMonitorFrame(monitorEnabled, monitorDelayed, monitorGain),
+                $"enabled={monitorEnabled} delayed={monitorDelayed} gain={FormatFloat(monitorGain)}"));
+            if (iceServers != null)
+            {
+                var snapshot = SnapshotIceServers(iceServers);
+                commands.Add((
+                    "set-ice-servers",
+                    SidecarProtocol.SetIceServersFrame(snapshot),
+                    DescribeIceServers(snapshot)));
+            }
+            commands.Add((
+                "configure-audio-route",
+                SidecarProtocol.ConfigureAudioRouteFrame(
+                    micDevice ?? string.Empty,
+                    outputDevice ?? string.Empty,
+                    captureMode,
+                    synthetic),
+                $"captureMode={SidecarProtocol.CaptureModeValue(captureMode)} synthetic={synthetic} input={DescribeDeviceForDiagnostics(micDevice)} output={DescribeDeviceForDiagnostics(outputDevice)}"));
+        }
+        catch (Exception ex)
+        {
+            LogCommand("initial-config", "failed", 0, "error=" + ExceptionDiagnostic(ex));
+            return false;
+        }
 
+        var frames = new byte[commands.Count][];
+        for (var i = 0; i < commands.Count; i++)
+            frames[i] = commands[i].Frame;
+        try
+        {
+            WriteBatch(frames);
+        }
+        catch (Exception ex)
+        {
+            LogCommand(
+                "initial-config",
+                "failed",
+                frames.Length == 0 ? 0 : frames[0].Length,
+                "error=" + ExceptionDiagnostic(ex));
+            RaiseDead("initial-config write failed", Volatile.Read(ref _startGeneration));
+            return false;
+        }
+
+        foreach (var command in commands)
+            LogCommand(command.Op, "written", command.Frame.Length, command.Details);
+        Volatile.Write(ref _lastDiagnosticsEnabled, diagnosticsEnabled ? 1 : 0);
         VoiceDiagnostics.Log(
             "sidecar.command",
             $"op=initial-config result=complete captureMode={SidecarProtocol.CaptureModeValue(captureMode)} input={DescribeDeviceForDiagnostics(micDevice)} output={DescribeDeviceForDiagnostics(outputDevice)}");
@@ -414,9 +606,12 @@ internal sealed class SidecarVoiceClient : ISidecarVoiceClient
     }
 
     public void SendOutputTestFrame(float[] interleavedStereo)
+        => SendOutputTestFrameAndWait(interleavedStereo);
+
+    public bool SendOutputTestFrameAndWait(float[] interleavedStereo)
     {
         if (interleavedStereo == null) throw new ArgumentNullException(nameof(interleavedStereo));
-        SendCommand(
+        return SendCommand(
             "output-test-audio",
             () => SidecarProtocol.OutputAudioFrame(interleavedStereo),
             $"samples={interleavedStereo.Length}",
@@ -718,6 +913,7 @@ internal sealed class SidecarVoiceClient : ISidecarVoiceClient
     {
         TcpClient? client;
         NetworkStream? stream;
+        WriterSession? writer;
         Thread? reader;
         Thread? heartbeat;
         bool wasRunning;
@@ -728,10 +924,12 @@ internal sealed class SidecarVoiceClient : ISidecarVoiceClient
             _running = false;
             client = _client;
             stream = _stream;
+            writer = _writer;
             reader = _reader;
             heartbeat = _heartbeat;
             _client = null;
             _stream = null;
+            _writer = null;
             _reader = null;
             _heartbeat = null;
             SetHealth(CaptureHealth.Dead);
@@ -748,22 +946,19 @@ internal sealed class SidecarVoiceClient : ISidecarVoiceClient
         {
             try
             {
-                if (stream != null)
+                if (writer != null)
                 {
                     try
                     {
                         var stop = SidecarProtocol.StopFrame();
-                        lock (_writeLock)
-                        {
-                            stream.Write(stop, 0, stop.Length);
-                            stream.Flush();
-                        }
+                        writer.WriteFinalAndStop(stop);
                         LogCommand("stop", "written", stop.Length, "phase=shutdown");
                     }
                     catch (Exception ex)
                     {
                         LogCommand("stop", "failed", 0, "phase=shutdown error=" + ExceptionDiagnostic(ex));
                     }
+                    writer.Join();
                 }
                 try { client?.Close(); } catch { }
                 KillLaunch(launch);
@@ -1874,7 +2069,7 @@ internal sealed class SidecarVoiceClient : ISidecarVoiceClient
     private void HeartbeatLoop(object? state)
     {
         var workerState = (ReaderLoopState)state!;
-        var stream = workerState.Stream;
+        var writer = workerState.Writer;
         var managedGeneration = workerState.ManagedGeneration;
         var heartbeatState = workerState.Heartbeat;
         var ping = SidecarProtocol.PingFrame();
@@ -1909,12 +2104,8 @@ internal sealed class SidecarVoiceClient : ISidecarVoiceClient
             }
             try
             {
-                lock (_writeLock)
-                {
-                    Interlocked.Increment(ref heartbeatState.SentPingRound);
-                    stream.Write(ping, 0, ping.Length);
-                    stream.Flush();
-                }
+                Interlocked.Increment(ref heartbeatState.SentPingRound);
+                writer.Write(ping);
             }
             catch (Exception ex)
             {
@@ -1977,15 +2168,23 @@ internal sealed class SidecarVoiceClient : ISidecarVoiceClient
             expected) == expected;
     }
 
+    internal static bool TryBeginCurrentGenerationDeath(
+        ref long state,
+        bool running,
+        int currentGeneration,
+        int failingGeneration)
+        => IsWorkerGenerationCurrent(running, currentGeneration, failingGeneration)
+           && TryBeginDeadNotification(ref state, failingGeneration);
+
     private void RaiseDead(string reason, int managedGeneration)
     {
         lock (_gate)
         {
-            if (!IsWorkerGenerationCurrent(
+            if (!TryBeginCurrentGenerationDeath(
+                    ref _deadNotificationState,
                     _running,
                     Volatile.Read(ref _startGeneration),
-                    managedGeneration)
-                || !TryBeginDeadNotification(ref _deadNotificationState, managedGeneration))
+                    managedGeneration))
                 return;
 
             SetHealth(CaptureHealth.Dead);

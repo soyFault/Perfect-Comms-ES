@@ -2569,7 +2569,7 @@ internal sealed class PerfectCommsVoiceBackend : IVoiceBackend
                 bool corrected;
                 try
                 {
-                    corrected = voice.TryConfigureAudioRouteIf(
+                    corrected = voice.TryConfigureAudioRouteIfAndWait(
                         _lastMicDeviceName,
                         latestSpeaker,
                         SidecarProtocol.ResolveCaptureMode(

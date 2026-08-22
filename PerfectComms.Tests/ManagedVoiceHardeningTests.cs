@@ -706,7 +706,7 @@ public sealed class ManagedVoiceHardeningTests
         Assert.False(SidecarProtocol.TryReadPeerLevels(tooMany, out _));
     }
 
-    #if WINDOWS
+#if WINDOWS
     [Fact]
     public void DesktopRpcWaitsForConfiguredHealthyHelper()
     {
@@ -737,6 +737,91 @@ public sealed class ManagedVoiceHardeningTests
 
         Assert.False(SidecarVoiceClient.TryBeginDeadNotification(ref state, generation: 7));
         Assert.True(SidecarVoiceClient.TryBeginDeadNotification(ref state, generation: 8));
+    }
+
+    [Fact]
+    public async Task ConcurrentWriterAndHeartbeatFailuresRaiseOneCurrentGenerationDeath()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var bothWritesEntered = new ManualResetEventSlim();
+        using var releaseWrites = new ManualResetEventSlim();
+        using var serverCancellation =
+            CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var listener = new System.Net.Sockets.TcpListener(
+            System.Net.IPAddress.Loopback,
+            0);
+        listener.Start();
+        var port = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
+        var writeAttempts = 0;
+        var deadNotifications = 0;
+        var client = new SidecarVoiceClient(
+            (_, _) => new SidecarLaunchResult
+            {
+                Success = true,
+                Port = port,
+            },
+            () =>
+            {
+                if (Interlocked.Increment(ref writeAttempts) == 2)
+                    bothWritesEntered.Set();
+                releaseWrites.Wait(cancellationToken);
+                throw new System.IO.IOException("injected concurrent write failure");
+            })
+        {
+            PingIntervalMs = 10,
+        };
+        client.OnDead += _ => Interlocked.Increment(ref deadNotifications);
+        var server = Task.Run(
+            async () =>
+            {
+                using var connection =
+                    await listener.AcceptTcpClientAsync(serverCancellation.Token);
+                var ready = SidecarProtocol.EncodeControl(
+                    $"{{\"op\":\"ready\",\"proto\":{SidecarVoiceClient.Proto},\"format\":{{\"rate\":48000,\"channels\":2,\"sample\":\"f32\"}}}}");
+                await connection.GetStream().WriteAsync(ready, serverCancellation.Token);
+                await Task.Run(
+                    () => releaseWrites.Wait(serverCancellation.Token),
+                    serverCancellation.Token);
+            },
+            serverCancellation.Token);
+
+        try
+        {
+            Assert.True(client.Start(null, null));
+            var command = Task.Run(
+                () => client.SelectOutputDevice("concurrent-failure"),
+                cancellationToken);
+
+            Assert.True(await Task.Run(
+                () => bothWritesEntered.Wait(TimeSpan.FromSeconds(2), cancellationToken),
+                cancellationToken));
+            releaseWrites.Set();
+            Assert.False(await command);
+
+            for (var attempt = 0;
+                 attempt < 200
+                 && (Volatile.Read(ref deadNotifications) != 1 || client.AnyWorkerAlive());
+                 attempt++)
+                await Task.Delay(10, cancellationToken);
+
+            Assert.Equal(2, Volatile.Read(ref writeAttempts));
+            Assert.Equal(1, Volatile.Read(ref deadNotifications));
+            Assert.False(client.AnyWorkerAlive());
+        }
+        finally
+        {
+            releaseWrites.Set();
+            client.Dispose();
+            serverCancellation.Cancel();
+            listener.Stop();
+            try
+            {
+                await server;
+            }
+            catch (OperationCanceledException) when (serverCancellation.IsCancellationRequested)
+            {
+            }
+        }
     }
 
     [Fact]
@@ -771,6 +856,14 @@ public sealed class ManagedVoiceHardeningTests
         Assert.True(client.IsHeartbeatUnresponsive(6, 0, 0, 6_078));
         Assert.False(client.IsHeartbeatUnresponsive(9, 0, 6_000, 10_000));
         Assert.True(client.IsHeartbeatUnresponsive(10, 0, 10_000, 10_000));
+    }
+
+    [Fact]
+    public void OutputTestFrameCompletionReportsClientWriteRejection()
+    {
+        var client = new SidecarVoiceClient((_, _) => throw new InvalidOperationException());
+
+        Assert.False(client.SendOutputTestFrameAndWait(new[] { 0.25f, -0.25f }));
     }
 
     [Fact]
@@ -873,7 +966,7 @@ public sealed class ManagedVoiceHardeningTests
         }
     }
 
-    #endif
+#endif
 
     [Theory]
     [InlineData(true, true, true)]
@@ -945,7 +1038,7 @@ public sealed class ManagedVoiceHardeningTests
         Assert.True(VoiceChatHudState.ShouldApplyMicStateWhileHudUnavailable(VoiceGamePhase.Meeting));
     }
 
-    #if WINDOWS
+#if WINDOWS
     [Fact]
     public void RpcPumpDeadlinesAdvanceIndependently()
     {
@@ -1009,5 +1102,5 @@ public sealed class ManagedVoiceHardeningTests
             previous: 0.5f, previousTicks: start, next: 0.8f,
             nowTicks: start + TimeSpan.FromMilliseconds(10).Ticks));
     }
-    #endif
+#endif
 }
