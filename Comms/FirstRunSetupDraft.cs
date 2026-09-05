@@ -14,7 +14,7 @@ internal readonly record struct FirstRunSetupBinding(
 
     internal string Label
         => Key == KeyCode.None
-            ? "None"
+            ? "Ninguna"
             : Modifier == KeyCode.None
                 ? VoiceKeybind.FormatKey(Key)
                 : VoiceKeybind.FormatModifier(Modifier, ModifierMatch) + "+" +
@@ -40,34 +40,34 @@ internal static class FirstRunHudPresets
     internal static readonly IReadOnlyList<FirstRunHudPreset> All =
         new FirstRunHudPreset[]
         {
-            new("Top Middle", "The familiar default above the action, wrapping cleanly in full lobbies",
+            new("Arriba al centro", "El diseño predeterminado sobre la acción, adaptándose bien en lobbies llenos",
                 SpeakingBarPosition.TopMiddle, SpeakingBarSideLayout.Wrapped,
                 SpeakingBarNamePosition.Auto, 1.00f, true),
-            new("Middle Right", "A single vertical lane on the right with no wrapping",
+            new("Derecha al centro", "Una sola fila vertical a la derecha sin envoltura",
                 SpeakingBarPosition.MiddleRight, SpeakingBarSideLayout.SingleLane,
                 SpeakingBarNamePosition.Auto, 1.00f, true),
-            new("Middle Left", "A single vertical lane on the left with no wrapping",
+            new("Izquierda al centro", "Una sola fila vertical a la izquierda sin envoltura",
                 SpeakingBarPosition.MiddleLeft, SpeakingBarSideLayout.SingleLane,
                 SpeakingBarNamePosition.Auto, 1.00f, true),
-            new("Compact", "A smaller clean bar with no backdrop",
+            new("Compacto", "Una barra más pequeña y limpia, sin fondo",
                 SpeakingBarPosition.TopMiddle, SpeakingBarSideLayout.Wrapped,
                 SpeakingBarNamePosition.Auto, 0.78f, false),
-            new("Top Left", "A familiar corner layout with vertical flow",
+            new("Arriba a la izquierda", "Un diseño clásico en la esquina con distribución vertical",
                 SpeakingBarPosition.TopLeft, SpeakingBarSideLayout.Wrapped,
                 SpeakingBarNamePosition.Auto, 0.90f, true),
-            new("Top Right", "Corner layout beside the voice controls",
+            new("Arriba a la derecha", "Diseño en la esquina junto a los controles de voz",
                 SpeakingBarPosition.TopRight, SpeakingBarSideLayout.Wrapped,
                 SpeakingBarNamePosition.Auto, 0.90f, true),
-            new("Left Stack", "A wrapped side stack that keeps the center clear",
+            new("Pila izquierda", "Una pila lateral ajustada que mantiene el centro despejado",
                 SpeakingBarPosition.MiddleLeft, SpeakingBarSideLayout.Wrapped,
                 SpeakingBarNamePosition.Auto, 0.84f, true),
-            new("Right Stack", "A wrapped side stack near the HUD edge",
+            new("Pila derecha", "Una pila lateral ajustada cerca del borde del HUD",
                 SpeakingBarPosition.MiddleRight, SpeakingBarSideLayout.Wrapped,
                 SpeakingBarNamePosition.Auto, 0.84f, true),
-            new("Bottom Center", "Centered below the action with wrapped rows",
+            new("Abajo al centro", "Centrado debajo de la acción con filas ajustadas",
                 SpeakingBarPosition.BottomMiddle, SpeakingBarSideLayout.Wrapped,
                 SpeakingBarNamePosition.Auto, 0.90f, true),
-            new("Minimal", "Small, quiet, and tucked into the bottom right",
+            new("Minimalista", "Pequeño, discreto y ubicado abajo a la derecha",
                 SpeakingBarPosition.BottomRight, SpeakingBarSideLayout.SingleLane,
                 SpeakingBarNamePosition.Auto, 0.75f, false),
         };
@@ -420,10 +420,10 @@ internal sealed class FirstRunSetupDraft
         string savedName,
         IReadOnlyList<VoiceDeviceInfo> devices)
     {
-        if (string.IsNullOrEmpty(savedId)) return "System Default";
+        if (string.IsNullOrEmpty(savedId)) return "Predeterminado del sistema";
         for (int i = 1; i < devices.Count; i++)
             if (string.Equals(savedId, devices[i].Id, StringComparison.Ordinal))
                 return devices[i].Name;
-        return string.IsNullOrWhiteSpace(savedName) ? "Saved device" : savedName;
+        return string.IsNullOrWhiteSpace(savedName) ? "Dispositivo guardado" : savedName;
     }
 }
