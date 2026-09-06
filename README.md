@@ -23,6 +23,8 @@
 Perfect Comms hace que el chat de voz se sienta como parte de la partida. Los jugadores pueden hablar dentro del juego, escuchar a quienes están cerca, encontrar salas con chat de voz y jugar con reglas de voz adaptadas a la forma en que realmente se juega Among Us.
 
 **Esta es una traducción no oficial realizada por mí, Fault. No está vinculada en ninguna forma al proyecto oficial y podría no ser compatible con la versión en inglés. La hice específicamente para jugar con mis amigos en Discord pero si tienes un problema / error y necesitas que haga algún cambio para que te funcione a ti, puedes pedirlo con confianza en un Issue de GitHub o en el [Discord donde jugamos](https://discord.gg/fFfPazRK2W)**
+
+*OJO: Este fork es mantenido por mí, NO molesten a los desarrolladores de PerfectComms en inglés porque no harán una versión en español. Si no actualizo con cada release es por falta de tiempo, crea un issue y lo revisaré. También puedes unirte al discord donde jugamos Among Us con mods y ahí respondo rápido.*
 <br>
 
 ## Por qué los jugadores lo usan
