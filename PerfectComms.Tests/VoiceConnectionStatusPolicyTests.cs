@@ -101,7 +101,7 @@ public sealed class VoiceConnectionStatusPolicyTests
         var progress = Evaluate(snapshotReady: false, routingPolicyReady: true);
 
         Assert.Equal(VoiceConnectionStage.SyncingSession, progress.Stage);
-        Assert.Equal("Connectando voz.... sincronizando sesión", Build(progress, 1));
+        Assert.Equal("Conectando voz.... sincronizando sesión", Build(progress, 1));
     }
 
     [Fact]
@@ -125,7 +125,7 @@ public sealed class VoiceConnectionStatusPolicyTests
             retainReadyDuringSnapshotGap: false);
 
         Assert.Equal(VoiceConnectionStage.SyncingSession, progress.Stage);
-        Assert.Equal("Connectando voz... sincronizando sesión", Build(progress, 0));
+        Assert.Equal("Conectando voz... sincronizando sesión", Build(progress, 0));
     }
 
     [Fact]
@@ -138,7 +138,7 @@ public sealed class VoiceConnectionStatusPolicyTests
             expectedPlayers: 3);
 
         Assert.Equal(VoiceConnectionStage.SyncingSession, progress.Stage);
-        Assert.Equal("Connectando voz..... sincronizando sesión", Build(progress, 2));
+        Assert.Equal("Conectando voz..... sincronizando sesión", Build(progress, 2));
     }
 
     [Fact]
@@ -151,7 +151,7 @@ public sealed class VoiceConnectionStatusPolicyTests
             expectedPlayers: 3);
 
         Assert.Equal(VoiceConnectionStage.ConnectingPlayers, progress.Stage);
-        Assert.Equal("Connectando voz..... 1/3 jugadores conectados", Build(progress, 2));
+        Assert.Equal("Conectando voz..... 1/3 jugadores conectados", Build(progress, 2));
     }
 
     [Fact]
