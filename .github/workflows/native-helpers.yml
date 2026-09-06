@@ -80,12 +80,14 @@ jobs:
       - name: Bullseye build prerequisites
         run: |
           set -e
-          sed -i \
-            's|http://deb.debian.org/debian-security|http://security.debian.org/debian-security|g' \
-            /etc/apt/sources.list
+          printf '%s\n' \
+            'deb [check-valid-until=no] http://archive.debian.org/debian bullseye main' \
+            'deb [check-valid-until=no] http://archive.debian.org/debian bullseye-updates main' \
+            > /etc/apt/sources.list
+
           rm -rf /var/lib/apt/lists/*
           apt-get clean
-          apt-get update -o Acquire::Retries=5
+          apt-get -o Acquire::Check-Valid-Until=false update
           apt-get install -y --no-install-recommends \
             build-essential \
             ca-certificates \
@@ -94,7 +96,7 @@ jobs:
               echo "APT install failed, refreshing indexes and retrying..."
               rm -rf /var/lib/apt/lists/*
               apt-get clean
-              apt-get update -o Acquire::Retries=5
+              apt-get -o Acquire::Check-Valid-Until=false update
               apt-get install -y --no-install-recommends \
                 build-essential \
                 ca-certificates \
@@ -167,12 +169,14 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - name: Cubeb PulseAudio/ALSA headers, C/C++, cmake, nasm
         run: |
-          sed -i \
-            's|http://deb.debian.org/debian-security|http://security.debian.org/debian-security|g' \
-            /etc/apt/sources.list
+          set -e
+          printf '%s\n' \
+            'deb [check-valid-until=no] http://archive.debian.org/debian bullseye main' \
+            'deb [check-valid-until=no] http://archive.debian.org/debian bullseye-updates main' \
+            > /etc/apt/sources.list
           rm -rf /var/lib/apt/lists/*
           apt-get clean
-          apt-get update -o Acquire::Retries=5
+          apt-get -o Acquire::Check-Valid-Until=false update
           apt-get install -y --no-install-recommends \
             build-essential \
             libpulse-dev \
@@ -183,7 +187,7 @@ jobs:
               echo "APT install failed, refreshing indexes and retrying..."
               rm -rf /var/lib/apt/lists/*
               apt-get clean
-              apt-get update -o Acquire::Retries=5
+              apt-get -o Acquire::Check-Valid-Until=false update
               apt-get install -y --no-install-recommends \
                 build-essential \
                 libpulse-dev \
@@ -322,12 +326,13 @@ jobs:
       - name: Toolchains (meson, ninja, mingw cross)
         run: |
           set -e
-          sed -i \
-            's|http://deb.debian.org/debian-security|http://security.debian.org/debian-security|g' \
-            /etc/apt/sources.list
+          printf '%s\n' \
+            'deb [check-valid-until=no] http://archive.debian.org/debian bullseye main' \
+            'deb [check-valid-until=no] http://archive.debian.org/debian bullseye-updates main' \
+            > /etc/apt/sources.list
           rm -rf /var/lib/apt/lists/*
           apt-get clean
-          apt-get update -o Acquire::Retries=5
+          apt-get -o Acquire::Check-Valid-Until=false update
           apt-get install -y --no-install-recommends \
             build-essential \
             pkg-config \
@@ -341,7 +346,7 @@ jobs:
               echo "APT install failed, refreshing package indexes and retrying..."
               rm -rf /var/lib/apt/lists/*
               apt-get clean
-              apt-get update -o Acquire::Retries=5
+              apt-get -o Acquire::Check-Valid-Until=false update
               apt-get install -y --no-install-recommends \
                 build-essential \
                 pkg-config \
@@ -558,9 +563,14 @@ jobs:
           path: dl
       - name: Cubeb PulseAudio/ALSA headers, C/C++, cmake, nasm
         run: |
+          set -e
+          printf '%s\n' \
+            'deb [check-valid-until=no] http://archive.debian.org/debian bullseye main' \
+            'deb [check-valid-until=no] http://archive.debian.org/debian bullseye-updates main' \
+            > /etc/apt/sources.list
           rm -rf /var/lib/apt/lists/*
           apt-get clean
-          apt-get update -o Acquire::Retries=5
+          apt-get -o Acquire::Check-Valid-Until=false update
           apt-get install -y --no-install-recommends \
             build-essential \
             libpulse-dev \
@@ -571,7 +581,7 @@ jobs:
               echo "APT install failed, refreshing indexes and retrying..."
               rm -rf /var/lib/apt/lists/*
               apt-get clean
-              apt-get update -o Acquire::Retries=5
+              apt-get -o Acquire::Check-Valid-Until=false update
               apt-get install -y --no-install-recommends \
                 build-essential \
                 libpulse-dev \
