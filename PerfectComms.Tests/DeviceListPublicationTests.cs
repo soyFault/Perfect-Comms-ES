@@ -48,7 +48,7 @@ public sealed class DeviceListPublicationTests
 
         VoiceChatLocalSettings.SetMicDevicesFromSidecar(devices);
 
-        Assert.Equal(new[] { "Default", "Same Name", "Same Name" }, VoiceChatLocalSettings.MicDeviceNames);
+        Assert.Equal(new[] { "Predeterminado", "Same Name", "Same Name" }, VoiceChatLocalSettings.MicDeviceNames);
         Assert.Equal("stable-a-" + suffix, VoiceChatLocalSettings.MicDevices[1].Id);
         Assert.Equal("stable-b-" + suffix, VoiceChatLocalSettings.MicDevices[2].Id);
     }
@@ -135,8 +135,8 @@ public sealed class DeviceListPublicationTests
             SidecarDeviceEnumerationResult.Success(
                 Array.Empty<VoiceDeviceInfo>(), Array.Empty<VoiceDeviceInfo>())));
 
-        Assert.Equal(new[] { "Default" }, VoiceChatLocalSettings.MicDeviceNames);
-        Assert.Equal(new[] { "Default" }, VoiceChatLocalSettings.SpkDeviceNames);
+        Assert.Equal(new[] { "Predeterminado" }, VoiceChatLocalSettings.MicDeviceNames);
+        Assert.Equal(new[] { "Predeterminado" }, VoiceChatLocalSettings.SpkDeviceNames);
         Assert.Single(VoiceChatLocalSettings.MicDevices);
         Assert.Single(VoiceChatLocalSettings.SpkDevices);
     }
