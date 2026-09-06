@@ -59,9 +59,9 @@ public sealed class VoiceCompactStatusPolicyTests
     }
 
     [Theory]
-    [InlineData(true, false, "Muted")]
-    [InlineData(false, true, "Deafened")]
-    [InlineData(true, true, "Muted / Deafened")]
+    [InlineData(true, false, "Silenciado")]
+    [InlineData(false, true, "Ensordecido")]
+    [InlineData(true, true, "Silenciado / Ensordecido")]
     public void StateWordingIsExplicit(bool muted, bool deafened, string expected)
     {
         Assert.Equal(expected, VoiceCompactStatusPolicy.StateText(muted, deafened));

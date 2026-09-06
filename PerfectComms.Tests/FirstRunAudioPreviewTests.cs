@@ -66,7 +66,7 @@ public sealed class FirstRunAudioPreviewTests
             preview.Tick();
             Assert.False(preview.IsMicrophoneTestActive);
             Assert.False(preview.IsListening);
-            Assert.Equal("Mic check is off", preview.MicrophoneStatus);
+            Assert.Equal("La prueba de micrófono está desactivada", preview.MicrophoneStatus);
         }
         finally
         {
@@ -318,7 +318,7 @@ public sealed class FirstRunAudioPreviewTests
             preview.Tick();
             Assert.False(preview.OutputTestCompleted);
             Assert.False(preview.IsSpeakerTestBusy);
-            Assert.Contains("stopped responding", preview.OutputStatus, StringComparison.Ordinal);
+            Assert.Contains("dejó de responder", preview.OutputStatus, StringComparison.Ordinal);
         }
         finally
         {
@@ -398,7 +398,7 @@ public sealed class FirstRunAudioPreviewTests
             await PumpUntilAsync(preview, () => preview.OutputTestCompleted);
 
             Assert.True(preview.OutputTestCompleted);
-            Assert.Contains("complete", preview.OutputStatus, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("completada", preview.OutputStatus, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -446,7 +446,7 @@ public sealed class FirstRunAudioPreviewTests
 
             Assert.False(preview.OutputTestCompleted);
             Assert.Equal(FirstRunToneGenerator.FrameCount, lease.OutputFrames);
-            Assert.Equal("Could not play the test sound", preview.OutputStatus);
+            Assert.Equal("No se pudo reproducir el sonido de prueba", preview.OutputStatus);
         }
         finally
         {

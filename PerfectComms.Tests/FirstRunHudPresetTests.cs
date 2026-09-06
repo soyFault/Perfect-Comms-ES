@@ -26,7 +26,7 @@ public sealed class FirstRunHudPresetTests
     {
         Assert.Equal(3, FirstRunHudPresets.CommonCount);
         Assert.Equal(
-            new[] { "Top Middle", "Middle Right", "Middle Left" },
+            new[] { "Arriba al centro", "Centro a la derecha", "Centro a la izquierda" },
             FirstRunHudPresets.All.Take(FirstRunHudPresets.CommonCount).Select(p => p.Name));
 
         var top = FirstRunHudPresets.All[0];

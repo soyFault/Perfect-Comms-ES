@@ -26,10 +26,10 @@ public sealed class FirstRunOutputPreviewPolicyTests
     }
 
     [Theory]
-    [InlineData("device-unavailable", "That speaker is no longer available. Reconnect it, select it again, or use Default.")]
-    [InlineData("device-busy", "That speaker is busy in another app. Close the other audio session or use Default.")]
-    [InlineData("permission-denied", "The system denied access to that speaker. Check audio permissions or use Default.")]
-    [InlineData("timeout", "The speaker did not respond in time. Reconnect it or use Default.")]
+    [InlineData("device-unavailable", "Ese altavoz ya no está disponible. Reconéctalo, selecciónalo de nuevo o usa Predeterminado.")]
+    [InlineData("device-busy", "Ese altavoz está ocupado en otra aplicación. Cierra la otra sesión de audio o usa Predeterminado.")]
+    [InlineData("permission-denied", "El sistema denegó el acceso a ese altavoz. Revisa los permisos de audio o usa Predeterminado..")]
+    [InlineData("timeout", "El altavoz no respondió a tiempo. Reconéctalo o usa Predeterminado.")]
     public void StructuredNativeErrorCodesRemainActionableAcrossAudioBackends(
         string errorCode,
         string expected)
