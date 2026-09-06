@@ -223,7 +223,7 @@ public sealed class ManagedVoiceHardeningTests
     [Fact]
     public void DeafenCopyMatchesTheFailClosedPlaybackAndTransmitBehavior()
     {
-        Assert.Equal("Toggle Deafen", VoiceChatKeybinds.ToggleDeafenDisplayName);
+        Assert.Equal("Alternar ensordecimiento", VoiceChatKeybinds.ToggleDeafenDisplayName);
         Assert.Contains("mutes voice playback", VoiceChatKeybinds.ToggleDeafenHelpText);
         Assert.Contains("pauses microphone transmission", VoiceChatKeybinds.ToggleDeafenHelpText);
         Assert.True(VoiceChatHudState.CombineTransmitMute(

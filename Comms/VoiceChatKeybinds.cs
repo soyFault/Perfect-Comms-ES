@@ -6,7 +6,7 @@ namespace VoiceChatPlugin.VoiceChat;
 
 public static class VoiceChatKeybinds
 {
-    internal const string ToggleDeafenDisplayName = "Alternar ensordecimiento2";
+    internal const string ToggleDeafenDisplayName = "Alternar ensordecimiento";
     internal const string ToggleDeafenHelpText =
         "Te ensordece o deja de ensordecerte. Ensordecerte silencia las voces y pausa la transmisión del micrófono.";
 
