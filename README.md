@@ -102,24 +102,9 @@ Perfect Comms funciona por sí solo como un mod de voz por proximidad. Algunos m
 > * **Radio de Equipo:** cuando tu rol y los ajustes del anfitrión permitan un canal privado,
 >   mantén `V` para hablar y pulsa `G` para cambiar entre los canales disponibles.
 
-### Controles táctiles de Android
+### Sobre el DLL de Starlight
 
-La versión de prueba de Starlight utiliza controles táctiles dentro del juego en lugar de los atajos de escritorio:
-
-* En el modo **Micrófono Abierto**, pulsa el botón del micrófono para silenciarlo o activarlo.
-* En el modo **Pulsar para Hablar**, mantén presionado el botón del micrófono mientras hablas y suéltalo para dejar de transmitir.
-* Cuando la Radio de Equipo esté disponible, pulsa su botón para cambiar de canal o mantenlo presionado para transmitir.
-* Pulsa el botón del altavoz para ensordecer o dejar de ensordecer. Ensordecer silencia el audio recibido y pausa la transmisión del micrófono.
-
-**Notas de plataforma**
-
-* **Escritorio:** Pulsa y suelta `Alt derecho` para silenciar o activar el micrófono, y `Ctrl derecho`
-  para ensordecer o dejar de ensordecer. Si pulsas cualquiera de estas teclas junto con otra,
-  Perfect Comms no silenciará ni ensordecerá. Ambos controles funcionan de forma predeterminada
-  mientras el chat está abierto; puedes elegir qué otros atajos funcionan en el chat desde
-  **Ajustes de Voz > Atajos**.
-* **Recordatorio del HUD:** Activa **Ajustes de Voz > HUD > Recordatorio de estado de
-  silencio / ensordecimiento** para mantener visible si estás silenciado o ensordecido.
+Realísticamente hablando, pocos tendrán acceso a las builds de testeo de Starlight así que producir un DLL para Android es de momento poco plausible, ya veremos cómo hacemos compatible esto cuando el equipo oficial de Perfect Comms lo portee a Starlight, de momento solo estaré actualizando la versión para PC.
 
 ## Instalación
 
@@ -155,19 +140,6 @@ BepInEx/
    └─ PerfectComms.dll
 ```
 
-### Android con Starlight
-
-La compatibilidad con Android está disponible mediante la versión de prueba administrada `PerfectCommsStarlight.dll`.
-No es un APK y solo debe utilizarse en una prueba de All Of Us aprobada por el equipo
-o en una compilación beta/de mods locales de Starlight, siguiendo la
-[guía de pruebas para desarrolladores de Starlight](https://allofus.dev/guides/starlight-dev-guide/#testing).
-
-Utiliza la grabación de Starlight y la reproducción de Unity, sigue la ruta de audio
-del sistema de Android y es compatible con jugadores de escritorio dentro de la misma sala de voz.
-Abre Perfect Comms desde el menú de Opciones dentro del juego.
-
-Perfect Comms puede instalarse junto a mods que utilizan Reactor o MiraAPI (como TOU-Mira) sin reemplazar su cargador ni sus dependencias. Para obtener ayuda con la configuración de BepInEx, consulta la [guía oficial de instalación de IL2CPP](https://docs.bepinex.dev/master/articles/user_guide/installation/unity_il2cpp.html).
-
 <br>
 
 ## Para desarrolladores de mods
@@ -197,6 +169,7 @@ La guía completa, todas las funciones y ejemplos listos para copiar se encuentr
 
 ## Créditos
 
+* Repositorio en inglés: https://github.com/artriy/Perfect-Comms
 * Repositorio original: https://github.com/FangkuaiYa/AmongUs-VoiceChat
 * BetterCrewLink: https://github.com/OhMyGuus/BetterCrewLink
 * Transporte entre pares: [Pion WebRTC](https://github.com/pion/webrtc)
@@ -209,3 +182,5 @@ La guía completa, todas las funciones y ejemplos listos para copiar se encuentr
 </div>
 
 > Perfect Comms es un mod no oficial. No está afiliado con Innersloth, Among Us, BepInEx, MiraAPI, Reactor, BetterCrewLink ni con ninguno de los mods compatibles.
+
+> Yo, Fault, no soy ni el creador de Perfect Comms ni parte del equipo de desarrollo, mi único trabajo aquí fue traducir la mayor parte del texto y cambiar segmentos de código para poder ejecutar la compilación en Github.
