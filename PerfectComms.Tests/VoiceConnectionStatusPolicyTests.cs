@@ -78,7 +78,7 @@ public sealed class VoiceConnectionStatusPolicyTests
         var progress = Evaluate(backendAvailable: false, snapshotReady: false);
 
         Assert.Equal(VoiceConnectionStage.StartingAudio, progress.Stage);
-        Assert.Equal("Connectando voz... iniciando audio", Build(progress, 0));
+        Assert.Equal("Conectando voz... iniciando audio", Build(progress, 0));
     }
 
     [Fact]

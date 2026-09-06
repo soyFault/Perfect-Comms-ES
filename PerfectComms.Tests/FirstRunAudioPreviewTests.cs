@@ -66,7 +66,7 @@ public sealed class FirstRunAudioPreviewTests
             preview.Tick();
             Assert.False(preview.IsMicrophoneTestActive);
             Assert.False(preview.IsListening);
-            Assert.Equal("La prueba de micrófono está desactivada", preview.MicrophoneStatus);
+            Assert.Equal("La prueba del micrófono está desactivada", preview.MicrophoneStatus);
         }
         finally
         {

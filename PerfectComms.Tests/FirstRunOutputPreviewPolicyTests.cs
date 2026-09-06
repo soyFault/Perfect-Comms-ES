@@ -59,10 +59,10 @@ public sealed class FirstRunOutputPreviewPolicyTests
     public void MissingNativeReasonRetainsCompatibleGenericStatus()
     {
         Assert.Equal(
-            "Could not open the selected speaker",
+            "No se pudo abrir el altavoz seleccionado",
             FirstRunOutputPreviewPolicy.DescribeNativeOutputFailure(null));
         Assert.Equal(
-            "The selected speaker stopped during the test",
+            "El altavoz seleccionado se detuvo durante la prueba",
             FirstRunOutputPreviewPolicy.DescribeNativeOutputFailure("", duringPlayback: true));
     }
 

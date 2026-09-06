@@ -9,7 +9,7 @@ public sealed class VoiceSettingsPlatformLayoutTests
     [Fact]
     public void DesktopSettingsKeepExistingCategoryOrder()
     {
-        string[] expectedNames = { "AUDIO", "DEVICES", "KEYBINDS", "HUD", "ADVANCED" };
+        string[] expectedNames = { "AUDIO", "DISPOSITIVOS", "ATAJOS", "HUD", "AVANZADO" };
         VoiceSettingsCategory[] expectedOrder =
         {
             VoiceSettingsCategory.Audio,

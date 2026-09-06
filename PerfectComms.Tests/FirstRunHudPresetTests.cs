@@ -26,7 +26,7 @@ public sealed class FirstRunHudPresetTests
     {
         Assert.Equal(3, FirstRunHudPresets.CommonCount);
         Assert.Equal(
-            new[] { "Arriba al centro", "Centro a la derecha", "Centro a la izquierda" },
+            new[] { "Arriba al centro", "Derecha al centro", "Izquierda al centro" },
             FirstRunHudPresets.All.Take(FirstRunHudPresets.CommonCount).Select(p => p.Name));
 
         var top = FirstRunHudPresets.All[0];
@@ -253,7 +253,7 @@ public sealed class FirstRunHudPresetTests
 
         Assert.Equal(0, fresh.SelectedHudPreset);
         Assert.False(fresh.OriginalHudSelected);
-        Assert.Equal("Top Middle", FirstRunHudPresets.All[0].Name);
+        Assert.Equal("Arriba al centro", FirstRunHudPresets.All[0].Name);
         Assert.Equal(FirstRunHudPresets.All[0].Position, fresh.Hud.Position);
         Assert.Equal(FirstRunHudPresets.All[0].SideLayout, fresh.Hud.SideLayout);
         Assert.Equal(FirstRunHudPresets.All[0].Scale, fresh.Hud.Scale);
