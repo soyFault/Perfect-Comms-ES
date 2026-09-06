@@ -79,8 +79,25 @@ jobs:
     steps:
       - name: Bullseye build prerequisites
         run: |
-          apt-get update
-          apt-get install -y build-essential ca-certificates git python3
+          set -e
+          rm -rf /var/lib/apt/lists/*
+          apt-get clean
+          apt-get update -o Acquire::Retries=5
+          apt-get install -y --no-install-recommends \
+            build-essential \
+            ca-certificates \
+            git \
+            python3 || {
+              echo "APT install failed, refreshing indexes and retrying..."
+              rm -rf /var/lib/apt/lists/*
+              apt-get clean
+              apt-get update -o Acquire::Retries=5
+              apt-get install -y --no-install-recommends \
+                build-essential \
+                ca-certificates \
+                git \
+                python3
+            }
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -147,8 +164,28 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - name: Cubeb PulseAudio/ALSA headers, C/C++, cmake, nasm
         run: |
-          apt-get update
-          apt-get install -y build-essential libpulse-dev libasound2-dev pkg-config nasm python3-pip
+          rm -rf /var/lib/apt/lists/*
+          apt-get clean
+          apt-get update -o Acquire::Retries=5
+          apt-get install -y --no-install-recommends \
+            build-essential \
+            libpulse-dev \
+            libasound2-dev \
+            pkg-config \
+            nasm \
+            python3-pip || {
+              echo "APT install failed, refreshing indexes and retrying..."
+              rm -rf /var/lib/apt/lists/*
+              apt-get clean
+              apt-get update -o Acquire::Retries=5
+              apt-get install -y --no-install-recommends \
+                build-essential \
+                libpulse-dev \
+                libasound2-dev \
+                pkg-config \
+                nasm \
+                python3-pip
+            }
           # Debian Bullseye ships CMake 3.18; Cubeb requires 3.19 or newer.
           python3 -m pip install --no-cache-dir cmake==3.31.6
           cmake --version
@@ -512,8 +549,28 @@ jobs:
           path: dl
       - name: Cubeb PulseAudio/ALSA headers, C/C++, cmake, nasm
         run: |
-          apt-get update
-          apt-get install -y build-essential libpulse-dev libasound2-dev pkg-config nasm python3-pip
+          rm -rf /var/lib/apt/lists/*
+          apt-get clean
+          apt-get update -o Acquire::Retries=5
+          apt-get install -y --no-install-recommends \
+            build-essential \
+            libpulse-dev \
+            libasound2-dev \
+            pkg-config \
+            nasm \
+            python3-pip || {
+              echo "APT install failed, refreshing indexes and retrying..."
+              rm -rf /var/lib/apt/lists/*
+              apt-get clean
+              apt-get update -o Acquire::Retries=5
+              apt-get install -y --no-install-recommends \
+                build-essential \
+                libpulse-dev \
+                libasound2-dev \
+                pkg-config \
+                nasm \
+                python3-pip
+            }
           # Debian Bullseye ships CMake 3.18; Cubeb requires 3.19 or newer.
           python3 -m pip install --no-cache-dir cmake==3.31.6
           cmake --version
