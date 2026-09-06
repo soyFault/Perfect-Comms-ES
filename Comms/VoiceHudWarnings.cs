@@ -37,8 +37,8 @@ internal static class VoiceHudWarnings
             int secs = VoiceRoleMuteState.GracePeriodSecondsRemaining;
             var local = PlayerControl.LocalPlayer;
             if (local != null && VoiceRoleMuteState.GracePeriodCallerId == local.PlayerId)
-                return $"you have the floor ({secs}s)";
-            return $"caller has the floor ({secs}s)";
+                return $"tienes la palabra ({secs}s)";
+            return $"quien convocó tiene la palabra ({secs}s)";
         }
 
         var connection = room.ConnectionProgress;

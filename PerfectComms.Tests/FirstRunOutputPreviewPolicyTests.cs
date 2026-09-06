@@ -42,16 +42,16 @@ public sealed class FirstRunOutputPreviewPolicyTests
     [Theory]
     [InlineData(
         "pc-capture: playback error: selected output device is unavailable",
-        "That speaker is no longer available. Reconnect it, select it again, or use Default.")]
+        "Ese altavoz ya no está disponible. Reconéctalo, selecciónalo de nuevo o usa Predeterminado.")]
     [InlineData(
         "build output stream: device is busy\r\nclose exclusive app",
-        "The system could not open that speaker: device is busy close exclusive app")]
+        "El sistema no pudo abrir ese altavoz: device is busy close exclusive app")]
     [InlineData(
         "output stream play: permission denied",
-        "The speaker opened, but playback could not start: permission denied")]
+        "El altavoz se abrió, pero no se pudo iniciar la reproducción: permission denied")]
     [InlineData(
         "output device callback failed",
-        "The speaker stopped responding after playback began. Reconnect it or use Default.")]
+        "El altavoz dejó de responder después de comenzar la reproducción. Reconéctalo o usa Predeterminado.")]
     public void NativePlaybackReasonsBecomeActionableStatus(string nativeReason, string expected)
         => Assert.Equal(expected, FirstRunOutputPreviewPolicy.DescribeNativeOutputFailure(nativeReason));
 

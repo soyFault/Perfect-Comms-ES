@@ -18,7 +18,7 @@ public sealed class VoiceCompactStatusPolicyTests
             "Voice connection refreshed", null, false, true, true);
 
         Assert.Equal(
-            "<color=#FFCC66>Voice connection refreshed</color>\n<color=#FF7373>Deafened</color>",
+            "<color=#FFCC66>Voice connection refreshed</color>\n<color=#FF7373>Ensordecido</color>",
             text);
     }
 
@@ -26,10 +26,10 @@ public sealed class VoiceCompactStatusPolicyTests
     public void OperationalWarningIsRetainedWithCombinedManualStates()
     {
         string text = VoiceCompactStatusPolicy.Compose(
-            null, "caller has the floor (5s)", true, true, true);
+            null, "quien convocó tiene la palabra (5s)", true, true, true);
 
         Assert.Equal(
-            "<color=#FFCC66>caller has the floor (5s)</color>\n<color=#FF7373>Muted / Deafened</color>",
+            "<color=#FFCC66>quien convocó tiene la palabra (5s)</color>\n<color=#FF7373>Silenciado / Ensordecido</color>",
             text);
     }
 
@@ -37,10 +37,10 @@ public sealed class VoiceCompactStatusPolicyTests
     public void ExistingOperationalWarningRemainsVisibleDuringTransientStatus()
     {
         string text = VoiceCompactStatusPolicy.Compose(
-            "Voice connection refreshed", "caller has the floor (5s)", false, true, true);
+            "Conexión de voz actualizada", "quien convocó tiene la palabra (5s)", false, true, true);
 
         Assert.Equal(
-            "<color=#FFCC66>Voice connection refreshed\ncaller has the floor (5s)</color>\n<color=#FF7373>Deafened</color>",
+            "<color=#FFCC66>Conexión de voz actualizada\nquien convocó tiene la palabra (5s)</color>\n<color=#FF7373>Ensordecido</color>",
             text);
     }
 
