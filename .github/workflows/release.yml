@@ -8,7 +8,12 @@ on:
   push:
     tags: ["v*"]
   workflow_dispatch:
-   
+    inputs:
+      publish_api:
+        description: Publish only the reference-only PerfectComms.Api package to NuGet.org
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
