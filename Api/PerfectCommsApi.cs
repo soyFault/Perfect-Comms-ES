@@ -127,9 +127,9 @@ public sealed record VoiceRuleResult(VoiceVerdict Verdict, string Reason)
 {
     public static readonly VoiceRuleResult Pass = new(VoiceVerdict.Pass, string.Empty);
     /// <summary>Mute the speaker in every voice phase, including dead-player routes.</summary>
-    public static VoiceRuleResult Mute(string reason) => new(VoiceVerdict.Mute, reason ?? "Muted");
+    public static VoiceRuleResult Mute(string reason) => new(VoiceVerdict.Mute, reason ?? "Silenciado");
     /// <summary>Muffle this speaker without affecting other incoming audio.</summary>
-    public static VoiceRuleResult Muffle(string reason) => new(VoiceVerdict.Muffle, reason ?? "Muffled");
+    public static VoiceRuleResult Muffle(string reason) => new(VoiceVerdict.Muffle, reason ?? "Atenuado");
 }
 
 /// <summary>Inputs for option-aware global gates.</summary>
@@ -197,15 +197,15 @@ public sealed record VoicePairResult(VoicePairVerdict Verdict, string Reason)
     public Vector2? ListenerOrigin { get; init; }
 
     public static readonly VoicePairResult Pass = new(VoicePairVerdict.Pass, string.Empty);
-    public static VoicePairResult Mute(string reason) => new(VoicePairVerdict.Mute, reason ?? "Muted");
-    public static VoicePairResult Muffle(string reason) => new(VoicePairVerdict.Muffle, reason ?? "Muffled");
+    public static VoicePairResult Mute(string reason) => new(VoicePairVerdict.Mute, reason ?? "Silenciado");
+    public static VoicePairResult Muffle(string reason) => new(VoicePairVerdict.Muffle, reason ?? "Atenuado");
     public static VoicePairResult Route(
         VoicePairRouteShape shape,
         float volume = 1f,
         Vector2? speakerOrigin = null,
         Vector2? listenerOrigin = null,
-        string reason = "Mod Route")
-        => new(VoicePairVerdict.Route, reason ?? "Mod Route")
+        string reason = "Ruta del mod")
+        => new(VoicePairVerdict.Route, reason ?? "Ruta del mod")
         {
             Shape = shape,
             Volume = volume,

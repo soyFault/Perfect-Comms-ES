@@ -46,7 +46,7 @@ public static class VoiceOptionsMenuEntry
         if (_chip.Built) return;
         try
         {
-            _chip.Build("PERFECT COMMS", "VOICE SETTINGS",
+            _chip.Build("PERFECT COMMS", "OPCIONES DE VOZ",
                 new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f),
                 new Vector2(14f, 0f),
                 VoiceSettingsPanel.Show,

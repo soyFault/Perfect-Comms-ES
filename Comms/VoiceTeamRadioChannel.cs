@@ -39,9 +39,9 @@ internal static class VoiceTeamRadioChannels
     public static string DisplayName(VoiceTeamRadioChannel channel)
         => Normalize(channel) switch
         {
-            VoiceTeamRadioChannel.Impostors => "Impostors",
-            VoiceTeamRadioChannel.External => "Managed",
-            VoiceTeamRadioChannel.All => "All Teams",
-            _ => "Unavailable",
+            VoiceTeamRadioChannel.Impostors => "Impostores",
+            VoiceTeamRadioChannel.External => "Gestionado",
+            VoiceTeamRadioChannel.All => "Todos los equipos",
+            _ => "No disponible",
         };
 }

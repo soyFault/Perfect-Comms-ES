@@ -134,7 +134,7 @@ internal sealed class SpeakingBarLivePreview
         _viewportMaxHeight = embedded ? EmbeddedViewportMaxHeight : DefaultViewportMaxHeight;
         _revealSlide = embedded ? EmbeddedRevealSlide : DefaultRevealSlide;
         _presentationStartScale = embedded ? 1f : 0.96f;
-        _liveBadgeLabel = embedded ? "LIVE" : "\u25CF  LIVE";
+        _liveBadgeLabel = embedded ? "LIVE" : "\u25CF  EN VIVO";
 
         float cardWidth = embedded
             ? EmbeddedCardWidth
@@ -213,7 +213,7 @@ internal sealed class SpeakingBarLivePreview
         var title = VoiceUiKit.Text(
             "PreviewTitle",
             header,
-            embedded ? "HUD PREVIEW" : "HUD LIVE PREVIEW",
+            embedded ? "HUD PREVIEW" : "VISTA PREVIA EN VIVO DEL HUD",
             embedded ? 20f : 25f,
             VoiceUiKit.TextBright,
             TextAlignmentOptions.Left,
@@ -328,7 +328,7 @@ internal sealed class SpeakingBarLivePreview
         _detailText = VoiceUiKit.Text(
             "PreviewDetails",
             CardRoot,
-            "10 alive / 5 ghosts / synthetic voice activity",
+            "10 vivos / 5 fantasmas / actividad de voz simulada",
             14f,
             VoiceUiKit.TextMuted,
             TextAlignmentOptions.Center);
@@ -347,7 +347,7 @@ internal sealed class SpeakingBarLivePreview
             var note = VoiceUiKit.Text(
                 "PreviewNote",
                 CardRoot,
-                "Canvas-only preview / isolated from the real game HUD",
+                "Vista previa solo en Canvas / aislada del HUD real del juego",
                 12f,
                 VoiceUiKit.TextFaint,
                 TextAlignmentOptions.Center);
@@ -429,10 +429,10 @@ internal sealed class SpeakingBarLivePreview
 
     private void SetWarmupStatus()
     {
-        _badgeText.text = "LOADING";
+        _badgeText.text = "CARGANDO";
         _badgeText.color = VoiceUiKit.TextMuted;
-        _statusText.text = "PREPARING PREVIEW";
-        _detailText.text = "Building the canvas HUD preview";
+        _statusText.text = "PREPARANDO VISTA PREVIA";
+        _detailText.text = "Creando la vista previa del HUD";
     }
 
     private void AdvanceSlotBuild()
@@ -934,26 +934,26 @@ internal sealed class SpeakingBarLivePreview
     private void UpdateStatus(SpeakingBarPreviewSettings settings, int lineCount)
     {
         string placement = settings.ManualLayout
-            ? $"MANUAL {settings.ManualOrientation.ToString().ToUpperInvariant()}"
+            ? $"{settings.ManualOrientation.ToString().ToUpperInvariant()} MANUAL"
             : PositionLabel(settings.Position);
-        string layout = lineCount == 1 ? "1 LANE" : $"{lineCount} LINES";
+        string layout = lineCount == 1 ? "1 FILA" : $"{lineCount} FILAS";
         int percent = Mathf.RoundToInt(settings.Scale * 100f);
         _statusText.text = $"{placement} / {layout} / {percent}%";
         _detailText.text = settings.Backdrop
-            ? "10 alive / 5 ghosts / backdrop on"
-            : "10 alive / 5 ghosts / backdrop off";
+            ? "10 vivos / 5 fantasmas / fondo activado"
+            : "10 vivos / 5 fantasmas / fondo desactivado";
     }
 
     private static string PositionLabel(SpeakingBarPosition position) => position switch
     {
-        SpeakingBarPosition.TopLeft => "TOP LEFT",
-        SpeakingBarPosition.TopMiddle => "TOP MIDDLE",
-        SpeakingBarPosition.TopRight => "TOP RIGHT",
-        SpeakingBarPosition.MiddleLeft => "MIDDLE LEFT",
-        SpeakingBarPosition.MiddleRight => "MIDDLE RIGHT",
-        SpeakingBarPosition.BottomLeft => "BOTTOM LEFT",
-        SpeakingBarPosition.BottomMiddle => "BOTTOM MIDDLE",
-        SpeakingBarPosition.BottomRight => "BOTTOM RIGHT",
-        _ => "SPEAKING BAR",
+        SpeakingBarPosition.TopLeft => "ARRIBA A LA IZQUIERDA",
+        SpeakingBarPosition.TopMiddle => "ARRIBA AL CENTRO",
+        SpeakingBarPosition.TopRight => "ARRIBA A LA DERECHA",
+        SpeakingBarPosition.MiddleLeft => "CENTRO A LA IZQUIERDA",
+        SpeakingBarPosition.MiddleRight => "CENTRO A LA DERECHA",
+        SpeakingBarPosition.BottomLeft => "ABAJO A LA IZQUIERDA",
+        SpeakingBarPosition.BottomMiddle => "ABAJO AL CENTRO",
+        SpeakingBarPosition.BottomRight => "ABAJO A LA DERECHA",
+        _ => "BARRA DE VOZ",
     };
 }

@@ -100,7 +100,7 @@ public static class VoiceVolumeMenu
 
     private static void Build()
     {
-        _shell = new VoiceUiKit.PanelShell("VC_VolumeMenu", "PLAYER VOLUMES", PanelW, PanelH, HeaderClose, rail: false, backdrop: false);
+        _shell = new VoiceUiKit.PanelShell("VC_VolumeMenu", "VOLUMEN DE JUGADORES", PanelW, PanelH, HeaderClose, rail: false, backdrop: false);
         RebuildRows();
     }
 
@@ -152,7 +152,7 @@ public static class VoiceVolumeMenu
 
         if (players.Count == 0)
         {
-            var empty = VoiceUiKit.Text("Empty", _shell.PaneRoot, "No other players in the room yet", 18f,
+            var empty = VoiceUiKit.Text("Empty", _shell.PaneRoot, "Aún no hay otros jugadores en la sala", 18f,
                 VoiceUiKit.TextMuted, TMPro.TextAlignmentOptions.Center);
             empty.rectTransform.Anchor(new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f));
             empty.rectTransform.sizeDelta = new Vector2(0f, 40f);

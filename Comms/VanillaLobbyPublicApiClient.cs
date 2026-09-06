@@ -37,7 +37,7 @@ internal sealed class VanillaLobbyMetadata
     public int RegionId { get; init; }
     public IReadOnlyList<VanillaLobbyModMetadata> Mods { get; init; } = Array.Empty<VanillaLobbyModMetadata>();
 
-    public string StatusLabel => string.IsNullOrWhiteSpace(Status) ? "Unknown" : Status.Trim();
+    public string StatusLabel => string.IsNullOrWhiteSpace(Status) ? "Desconocido" : Status.Trim();
 
     public bool HasMod(string id)
     {
@@ -50,7 +50,7 @@ internal sealed class VanillaLobbyMetadata
 
     public string GetModSummary(int maxMods)
     {
-        if (Mods.Count == 0) return "None reported";
+        if (Mods.Count == 0) return "Ninguno reportado";
 
         var parts = new List<string>(Math.Min(maxMods, Mods.Count));
         for (var i = 0; i < Mods.Count && parts.Count < maxMods; i++)
@@ -62,8 +62,8 @@ internal sealed class VanillaLobbyMetadata
                 : $"{mod.DisplayName} {mod.Version}");
         }
 
-        if (Mods.Count > parts.Count) parts.Add($"+{Mods.Count - parts.Count} more");
-        return parts.Count == 0 ? "None reported" : string.Join(", ", parts);
+        if (Mods.Count > parts.Count) parts.Add($"+{Mods.Count - parts.Count} más");
+        return parts.Count == 0 ? "Ninguno reportado" : string.Join(", ", parts);
     }
 }
 
@@ -125,8 +125,8 @@ internal static class VanillaLobbyPublicApiClient
             result[code] = new VanillaLobbyMetadata
             {
                 Code = code,
-                HostName = Clamp(game.HostName, 32, "Unknown host"),
-                Status = Clamp(game.Status, 24, "Unknown"),
+                HostName = Clamp(game.HostName, 32, "Anfitrión desconocido"),
+                Status = Clamp(game.Status, 24, "Desconocido"),
                 PlayerCount = Math.Max(0, game.PlayerCount),
                 MaxPlayers = Math.Max(game.MaxPlayers, game.PlayerCount),
                 ChatMode = game.ChatMode,

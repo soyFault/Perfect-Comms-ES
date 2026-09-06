@@ -32,64 +32,64 @@ public class VoiceChatGameOptions
 
     private VoiceChatGameOptions(ConfigFile cfg)
     {
-        PublicVoiceLobby = new ToggleHolder(cfg, Section, "PublicVoiceLobby", "Public Voice Lobby", false,
-            "Publishes this voice-enabled lobby to the Perfect Comms live directory so other Perfect Comms players can find it.");
-        MaxChatDistance = new NumberHolder(cfg, Section, "MaxChatDistance", "Max Distance", 6f, 1.5f, 20f, 0.5f, "0.0",
-            "Sets the maximum task-phase distance at which nearby players can hear one another.");
-        FalloffMode = new EnumHolder(cfg, Section, "FalloffMode", "Voice Falloff",
+        PublicVoiceLobby = new ToggleHolder(cfg, Section, "PublicVoiceLobby", "Sala de Voz pública", false,
+            "Publica este lobby con chat de voz en el directorio de Perfect Comms para que otros jugadores puedan encontrarlo.");
+        MaxChatDistance = new NumberHolder(cfg, Section, "MaxChatDistance", "Distancia Máxima", 6f, 1.5f, 20f, 0.5f, "0.0",
+            "Establece la distancia máxima a la que los jugadores cercanos pueden escucharse durante las tareas.");
+        FalloffMode = new EnumHolder(cfg, Section, "FalloffMode", "Atenuación de Voz",
             (int)VoiceFalloffMode.Smooth, typeof(VoiceFalloffMode),
-            new[] { "Linear", "Smooth", "Voice Focused" },
-            "Chooses how voice volume fades as a player approaches the maximum hearing distance.");
-        OcclusionMode = new EnumHolder(cfg, Section, "OcclusionMode", "Voice Occlusion",
+            new[] { "Lineal", "Suave", "Enfocado en la voz" },
+            "Elige cómo disminuye el volumen de voz al acercarse a la distancia máxima de escucha.");
+        OcclusionMode = new EnumHolder(cfg, Section, "OcclusionMode", "Oclusión de Voz",
             (int)VoiceOcclusionMode.VisionOnly, typeof(VoiceOcclusionMode),
-            new[] { "Off", "Soft Muffle", "Soft Fade", "Hard Block", "Vision Only" },
-            "Chooses how walls and lost line of sight affect nearby voice audio during tasks.");
-        WallsBlockSound = new ToggleHolder(cfg, Section, "WallsBlockSound", "Walls Block Audio", true,
-            "Lets map walls obstruct voice audio according to the selected Voice Occlusion mode.");
-        OnlyHearInSight = new ToggleHolder(cfg, Section, "OnlyHearInSight", "Hear People in Vision Only", true,
-            "Restricts normal task-phase voice to players inside the listener's current vision range.");
-        ImpostorHearGhosts = new ToggleHolder(cfg, Section, "ImpostorHearGhosts", "Impostors Hear Dead", false,
-            "Allows living impostors to hear dead players when the other ghost voice rules permit them to speak.");
-        HearInVent = new ToggleHolder(cfg, Section, "HearInVent", "Hear Impostors in Vents", false,
-            "Allows nearby players to hear an impostor who is currently inside a vent.");
-        VentPrivateChat = new ToggleHolder(cfg, Section, "VentPrivateChat", "Private Talk in Vents", true,
-            "Prevents players outside vents from hearing a player who is currently vented, keeping vent speech private.");
-        CommsSabDisables = new ToggleHolder(cfg, Section, "CommsSabDisables", "Comms Sabotage Disables Voice", true,
-            "Disables normal voice communication while the Communications sabotage is active.");
-        CameraCanHear = new ToggleHolder(cfg, Section, "CameraCanHear", "Hear Through Cameras", true,
-            "Lets a player using security cameras hear nearby voice around the active camera position.");
-        TeamRadio = new ToggleHolder(cfg, Section, "TeamRadio", "Team Radio", true,
-            "Enables private hold-to-talk radio channels for eligible teams and roles.");
-        TeamRadioImpostors = new ToggleHolder(cfg, Section, "TeamRadioImpostors", "Team Radio - Impostors", true,
-            "Enables the private impostor team-radio channel when Team Radio is on.")
+            new[] { "Desactivado", "Amortiguación suave", "Atenuación suave", "Bloqueo total", "Solo visión" },
+            "Elige cómo afectan las paredes y la pérdida de línea de visión al audio de voz cercano durante las tareas.");
+        WallsBlockSound = new ToggleHolder(cfg, Section, "WallsBlockSound", "Paredes Bloquean el Audio", true,
+            "Permite que los muros del mapa obstruyan las voces según el modo de Oclusión de voz seleccionado.");
+        OnlyHearInSight = new ToggleHolder(cfg, Section, "OnlyHearInSight", "Escuchar Solo en el Campo de Visión", true,
+            "Limita las voces durante las tareas a los jugadores dentro de tu rango de visión.");
+        ImpostorHearGhosts = new ToggleHolder(cfg, Section, "ImpostorHearGhosts", "Impostores Escuchan a los Muertos", false,
+            "Permite que los impostores vivos escuchen a los jugadores muertos cuando las demás reglas de voz de fantasmas les permitan hablar.");
+        HearInVent = new ToggleHolder(cfg, Section, "HearInVent", "Escuchar Impostores en los Ductos", false,
+            "Permite que los jugadores cercanos escuchen a un impostor que está actualmente dentro de un Ducto");
+        VentPrivateChat = new ToggleHolder(cfg, Section, "VentPrivateChat", "Conversación Privada en los Ductos", true,
+            "Evita que los jugadores fuera de los ductos escuchen a un jugador que está actualmente en un ducto, manteniendo la conversación en los ductos privada.");
+        CommsSabDisables = new ToggleHolder(cfg, Section, "CommsSabDisables", "Sabotaje de Comunicaciones Desactiva la Voz", true,
+            "Desactiva la comunicación por voz mientras el sabotaje de comunicaciones esté activo.");
+        CameraCanHear = new ToggleHolder(cfg, Section, "CameraCanHear", "Escuchar mediante cámaras", true,
+             "Permite que quien use las cámaras de seguridad escuche las voces cercanas a la cámara activa.");
+        TeamRadio = new ToggleHolder(cfg, Section, "TeamRadio", "Radio de equipo", true,
+            "Activa canales de radio privados de pulsar para hablar para los equipos y roles elegibles.");
+        TeamRadioImpostors = new ToggleHolder(cfg, Section, "TeamRadioImpostors", "Radio de equipo - Impostores", true,
+            "Activa el canal privado de radio de los impostores cuando Radio de equipo está activada.")
         {
             Visible = TeamRadioSubOptionsVisible
         };
-        TeamRadioInMeetings = new ToggleHolder(cfg, Section, "TeamRadioInMeetings", "Team Radio - Usable in Meetings", false,
-            "Allows eligible players to use team radio during meetings.")
+        TeamRadioInMeetings = new ToggleHolder(cfg, Section, "TeamRadioInMeetings", "Radio de equipo - Disponible en reuniones", false,
+            "Permite que los jugadores elegibles usen la radio de equipo durante las reuniones.")
         {
             Visible = TeamRadioSubOptionsVisible
         };
-        TeamRadioInTasks = new ToggleHolder(cfg, Section, "TeamRadioInTasks", "Team Radio - Usable in Tasks Phase", true,
-            "Allows eligible players to use team radio during normal task gameplay.")
+        TeamRadioInTasks = new ToggleHolder(cfg, Section, "TeamRadioInTasks", "Radio de equipo - Disponible durante tareas", true,
+            "Permite que los jugadores elegibles usen la radio de equipo durante las tareas.")
         {
             Visible = TeamRadioInMeetingsVisible
         };
-        OnlyGhostsCanTalk = new ToggleHolder(cfg, Section, "OnlyGhostsCanTalk", "Only Ghosts can Talk/Hear", false,
-            "Restricts task-phase voice communication to dead players only.");
-        GhostsHearEachOtherUnlimited = new ToggleHolder(cfg, Section, "GhostsHearEachOtherUnlimited", "Ghosts Hear Each Other Anywhere", false,
-            "Lets dead players hear one another across the entire map instead of using proximity distance.");
-        OnlyMeetingOrLobby = new ToggleHolder(cfg, Section, "OnlyMeetingOrLobby", "Meetings/Lobby Only", false,
-            "Disables living-player voice during tasks so normal voice is available only in lobbies and meetings.");
-        OnlyMeetingOrLobbyAffectsGhosts = new ToggleHolder(cfg, Section, "OnlyMeetingOrLobbyAffectsGhosts", "Ghosts Also Meeting/Lobby Only", false,
-            "Applies Meetings/Lobby Only to dead players as well as living players.")
+        OnlyGhostsCanTalk = new ToggleHolder(cfg, Section, "OnlyGhostsCanTalk", "Solo los fantasmas pueden hablar/escuchar", false,
+            "Limita la comunicación por voz durante las tareas únicamente a los jugadores muertos.");
+        GhostsHearEachOtherUnlimited = new ToggleHolder(cfg, Section, "GhostsHearEachOtherUnlimited", "Los fantasmas se escuchan desde cualquier lugar", false,
+            "Permite que los jugadores muertos se escuchen por todo el mapa sin importar la distancia.");
+        OnlyMeetingOrLobby = new ToggleHolder(cfg, Section, "OnlyMeetingOrLobby", "Solo reuniones/lobby", false,
+            "Desactiva la voz de los jugadores vivos durante las tareas, dejándola disponible solo en el lobby y las reuniones.");
+        OnlyMeetingOrLobbyAffectsGhosts = new ToggleHolder(cfg, Section, "OnlyMeetingOrLobbyAffectsGhosts", "También para fantasmas", false,
+            "Aplica Solo reuniones/lobby a los jugadores muertos además de los vivos.")
         {
             Visible = MeetingLobbySubOptionsVisible
         };
-        GracePeriodEnabled = new ToggleHolder(cfg, Section, "GracePeriodEnabled", "Meeting Floor Grace Period", false,
-            "Gives the player who called the meeting an exclusive voice floor for a short time when the meeting begins.");
-        GracePeriodSeconds = new NumberHolder(cfg, Section, "GracePeriodSeconds", "Grace Period Seconds", 5f, 0f, 15f, 1f, "0",
-            "Sets how many seconds the meeting-floor grace period lasts after a meeting is called.")
+        GracePeriodEnabled = new ToggleHolder(cfg, Section, "GracePeriodEnabled", "Periodo de gracia al iniciar reunión", false,
+            "Da al jugador que convocó la reunión el uso exclusivo de la voz durante unos segundos al comenzar.");
+        GracePeriodSeconds = new NumberHolder(cfg, Section, "GracePeriodSeconds", "Duración del periodo de gracia", 5f, 0f, 15f, 1f, "0",
+            "Establece cuántos segundos dura el periodo de gracia después de convocar una reunión.")
         {
             Visible = GracePeriodSubOptionVisible
         };

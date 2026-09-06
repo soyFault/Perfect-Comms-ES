@@ -6,9 +6,9 @@ namespace VoiceChatPlugin.VoiceChat;
 
 public static class VoiceChatKeybinds
 {
-    internal const string ToggleDeafenDisplayName = "Toggle Deafen";
+    internal const string ToggleDeafenDisplayName = "Alternar ensordecimiento2";
     internal const string ToggleDeafenHelpText =
-        "Deafens or undeafens Perfect Comms. Deafening mutes voice playback and pauses microphone transmission.";
+        "Te ensordece o deja de ensordecerte. Ensordecerte silencia las voces y pausa la transmisión del micrófono.";
 
     private static VoiceKeybind[] _allBindings = Array.Empty<VoiceKeybind>();
     internal static VoiceKeybind[] AllBindings => _allBindings;
@@ -31,41 +31,41 @@ public static class VoiceChatKeybinds
     public static void Initialize(ConfigFile config)
     {
         const string s = "Keybinds";
-        ToggleMute = new VoiceKeybind(config, s, "Mute / Unmute Mic", KeyCode.RightAlt,
+        ToggleMute = new VoiceKeybind(config, s, "Silenciar / activar micrófono", KeyCode.RightAlt,
             KeyCode.None, VoiceModifierMatch.Exact,
-            helpText: "Toggles whether your microphone sends voice.");
+            helpText: "Alterna si tu micrófono transmite tu voz.");
         // Preserve the original persisted key so existing preview-build bindings survive the rename.
         PushToMute = new VoiceKeybind(
-            config, s, "Push To Mute", "Hold To Mute", KeyCode.None,
-            helpText: "Mutes your microphone only while the key is held; releasing restores your previous mute state.");
-        TeamRadio = new VoiceKeybind(config, s, "Team Radio (Hold)", KeyCode.V,
-            helpText: "While held, transmits over your selected private team channel when your role and the host settings allow it.");
-        CycleTeamRadioChannel = new VoiceKeybind(config, s, "Cycle Team Radio Channel", KeyCode.G,
-            helpText: "Cycles through the built-in and mod-registered team-radio channels available to you.");
-        PushToTalk = new VoiceKeybind(config, s, "Push To Talk (Hold)", KeyCode.C,
-            helpText: "While held, transmits your microphone when Mic Mode is set to Push To Talk.");
-        ToggleMicMode = new VoiceKeybind(config, s, "Toggle Open Mic / Push To Talk", KeyCode.None,
-            helpText: "Switches your microphone between Open Mic and Push To Talk mode.");
+            config, s, "Pulsar para silenciar", "Hold To Mute", KeyCode.None,
+            helpText: "Silencia tu micrófono mientras mantienes presionada la tecla; al soltarla, restaura su estado anterior.");
+        TeamRadio = new VoiceKeybind(config, s, "Radio de equipo (mantener)", KeyCode.V,
+            helpText: "Mientras mantengas la tecla, transmite por el canal privado de equipo seleccionado si tu rol y los ajustes del host lo permiten.");
+        CycleTeamRadioChannel = new VoiceKeybind(config, s, "Cambiar canal de radio de equipo", KeyCode.G,
+            helpText: "Alterna entre los canales de radio de equipo disponibles, incluidos los agregados por otros mods.");
+        PushToTalk = new VoiceKeybind(config, s, "Pulsar para hablar (mantener)", KeyCode.C,
+            helpText: "Mientras mantengas la tecla, transmite tu voz cuando el Modo del micrófono esté en Pulsar para hablar.");
+        ToggleMicMode = new VoiceKeybind(config, s, "Alternar Micrófono abierto / Pulsar para hablar", KeyCode.None,
+            helpText: "Alterna el modo del micrófono entre Micrófono abierto y Pulsar para hablar.");
         // Keep the pre-v4 persisted key so the clearer deafen label does not reset existing binds.
         ToggleSpeaker = new VoiceKeybind(
             config, s, ToggleDeafenDisplayName, "Toggle Speaker", KeyCode.RightControl,
             ToggleDeafenHelpText);
         VolumeMenu = new VoiceKeybind(
-            config, s, "Player Volumes", KeyCode.B, KeyCode.LeftShift, VoiceModifierMatch.EitherSide,
-            helpText: "Opens the local per-player volume mixer. Its adjustments affect only what you hear.");
+            config, s, "Volumen de jugadores", KeyCode.B, KeyCode.LeftShift, VoiceModifierMatch.EitherSide,
+            helpText: "Abre el mezclador de volumen individual de los jugadores. Sus ajustes solo afectan lo que tú escuchas.");
         AliveLouderDeadQuieter = new VoiceKeybind(
-            config, s, "Alive Louder / Dead Quieter (Hold)", KeyCode.None,
-            helpText: "While held, applies this binding's configured Alive and Dead volume levels. Releasing restores both groups to 100%. If both mix bindings are held, neither profile is applied.");
+            config, s, "Vivos más alto / Muertos más bajo (mantener)", KeyCode.None,
+            helpText: "Mientras mantengas la tecla, aplica los niveles de volumen configurados para Vivos y Muertos. Al soltarla, ambos grupos vuelven al 100%. Si mantienes ambos atajos de mezcla, no se aplicará ninguno.");
         AliveQuieterDeadLouder = new VoiceKeybind(
-            config, s, "Alive Quieter / Dead Louder (Hold)", KeyCode.None,
-            helpText: "While held, applies this binding's separately configured Alive and Dead volume levels. Releasing restores both groups to 100%. If both mix bindings are held, neither profile is applied.");
-        LocalVoiceRefresh = new VoiceKeybind(config, s, "Refresh Voice Connection", KeyCode.F7,
-            helpText: "Rejoins only your local voice session to repair stuck audio. It has a 10-second cooldown.");
+            config, s, "Vivos más bajo / Muertos más alto (mantener)", KeyCode.None,
+            helpText: "Mientras mantengas la tecla, aplica los niveles de volumen configurados por separado para Vivos y Muertos. Al soltarla, ambos grupos vuelven al 100%. Si mantienes ambos atajos de mezcla, no se aplicará ninguno.");
+        LocalVoiceRefresh = new VoiceKeybind(config, s, "Reconectar chat de voz", KeyCode.F7,
+            helpText: "Reconecta solo tu sesión de voz para solucionar problemas de audio. Tiene 10 segundos de recarga.");
         RemoveRetiredHostRefreshBindings(config, s);
-        OpenVoiceMenu = new VoiceKeybind(config, s, "Open Voice Menu", KeyCode.F10,
-            helpText: "Opens or closes this local Perfect Comms settings menu.");
-        OpenHostVoiceSettings = new VoiceKeybind(config, s, "Open Host Voice Settings", KeyCode.F11,
-            helpText: "Opens the host-only voice rules for the current lobby. It does nothing if you are not the host.");
+        OpenVoiceMenu = new VoiceKeybind(config, s, "Abrir menú de voz", KeyCode.F10,
+            helpText: "Abre o cierra este menú de ajustes de Perfect Comms.");
+        OpenHostVoiceSettings = new VoiceKeybind(config, s, "Abrir ajustes de voz del host", KeyCode.F11,
+            helpText: "Abre las reglas de voz del host para el lobby actual. No hace nada si no eres el host.");
         _allBindings = new[]
         {
             ToggleMute,

@@ -1229,7 +1229,7 @@ public static partial class VoiceChatHudState
         InvalidateAudioPolicyCache();
         ApplyMicState();
         RefreshButtonVisuals();
-        ShowCompactStatus(next == VoiceMicMode.PushToTalk ? "Push To Talk" : "Open Mic");
+        ShowCompactStatus(next == VoiceMicMode.PushToTalk ? "Pulsar para Hablar" : "Micrófono abierto");
     }
 
     private static bool IsManualMuteActive()
@@ -1905,11 +1905,11 @@ public static partial class VoiceChatHudState
         bool pushToTalkMode = tab?.MicMode.Value == VoiceMicMode.PushToTalk;
         string status = TryGetLocalTransmitBlockReason(out string transmitBlockReason)
             ? transmitBlockReason
-            : _speakerMuted ? "Deafened"
-            : IsManualMuteActive() ? "Muted"
-            : IsInTeamRadioMode() ? $"Team Radio: {TeamRadioDisplayName(NormalizeTeamRadioState())} (held)"
-            : pushToTalkMode ? "Push To Talk"
-            : "Active";
+            : _speakerMuted ? "Ensordecido"
+            : IsManualMuteActive() ? "Silenciado"
+            : IsInTeamRadioMode() ? $"Radio de equipo: {TeamRadioDisplayName(NormalizeTeamRadioState())} (mantener)"
+            : pushToTalkMode ? "Pulsar para Hablar"
+            : "Activo";
         string channel = TeamRadioDisplayName(NormalizeTeamRadioState());
 
 #if ANDROID
@@ -1927,13 +1927,13 @@ public static partial class VoiceChatHudState
         string radioKey = VoiceChatKeybinds.TeamRadio.Label;
         string cycleKey = VoiceChatKeybinds.CycleTeamRadioChannel.Label;
         _micTooltipTmp.text =
-            "<b>Microphone</b>\n" +
-            $"Status: {status}\n" +
-            $"Team Radio Channel: {channel}\n" +
-            $"Volume: {(int)((tab?.MicVolume.Value ?? 1f) * 100f)}%\n" +
+            "<b>Micrófono</b>\n" +
+            $"Estado: {status}\n" +
+            $"Canal de radio de equipo: {channel}\n" +
+            $"Volumen: {(int)((tab?.MicVolume.Value ?? 1f) * 100f)}%\n" +
             (pushToTalkMode
-                ? $"Push To Talk active  |  Team Radio: {radioKey} (hold)  |  Cycle: {cycleKey}"
-                : $"Mute: {muteKey}  |  Team Radio: {radioKey} (hold)  |  Cycle: {cycleKey}");
+                ? $"Pulsar para hablar activo  |  Radio de equipo: {radioKey} (mantener)  |  Cambiar: {cycleKey}"
+                : $"Silenciar: {muteKey}  |  Radio de equipo: {radioKey} (mantener)  |  Cambiar: {cycleKey}");
 #endif
 
         PositionNear(_micTooltip, _micTooltipTmp, _micButtonObj);
@@ -1945,7 +1945,7 @@ public static partial class VoiceChatHudState
     {
         if (_spkTooltip == null || _spkTooltipTmp == null || _spkButtonObj == null) return;
 
-        string status = _speakerMuted ? "Deafened" : "Active";
+        string status = _speakerMuted ? "Ensordecido" : "Activo";
         var tab = VoiceSettings.Instance;
 #if ANDROID
         _spkTooltipTmp.text =
@@ -1956,11 +1956,11 @@ public static partial class VoiceChatHudState
 #else
         string hotkey = VoiceChatKeybinds.ToggleSpeaker.Label;
         _spkTooltipTmp.text =
-            "<b>Deafen</b>\n" +
-            $"Status: {status}\n" +
-            $"Volume: {(int)((tab?.MasterVolume.Value ?? 0f) * 100f)}%\n" +
-            $"Hotkey: {hotkey}\n" +
-            "Mutes playback and pauses microphone transmission.";
+            "<b>Ensordecer</b>\n" +
+            $"Estado: {status}\n" +
+            $"Volumen: {(int)((tab?.MasterVolume.Value ?? 0f) * 100f)}%\n" +
+            $"Atajo: {hotkey}\n" +
+            "Silencia las voces y pausa la transmisión del micrófono.";
 #endif
 
         PositionNear(_spkTooltip, _spkTooltipTmp, _spkButtonObj);
@@ -2097,7 +2097,7 @@ public static partial class VoiceChatHudState
             VoiceSceneState.IsTaskVoicePhase(phase) &&
             (settings.OnlyMeetingOrLobbyAffectsGhosts || !localDead))
         {
-            reason = "Meetings/Lobby Only";
+            reason = "Solo reuniones/lobby";
             return true;
         }
 
@@ -2105,7 +2105,7 @@ public static partial class VoiceChatHudState
             !localDead &&
             (VoiceSceneState.IsTaskVoicePhase(phase) || VoiceSceneState.IsMeetingVoicePhase(phase)))
         {
-            reason = "Only Ghosts can Talk/Hear";
+            reason = "Solo los fantasmas pueden hablar/escuchar";
             return true;
         }
 

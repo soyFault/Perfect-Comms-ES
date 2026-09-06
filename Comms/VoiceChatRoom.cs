@@ -855,7 +855,7 @@ public class VoiceChatRoom
         VoiceDiagnostics.Log("voice.refresh.local.applied",
             $"trigger={trigger} backend=native-engine {VoiceDiagnostics.DescribeRoom(_activeRoomCode)} {VoiceDiagnostics.DescribeRegion(_activeRegion)} peers={_voiceBackend?.PeerCount ?? 0}");
 
-        VoiceChatHudState.ShowCompactStatus("Voice connection refreshed");
+        VoiceChatHudState.ShowCompactStatus("Conexión de voz actualizada");
 
         // Rejoin() begins with ClearVoiceUiForLifecycleReset, so the UI teardown runs exactly once.
         StartTransitionTrace($"local voice refresh: {trigger}", snapshot);

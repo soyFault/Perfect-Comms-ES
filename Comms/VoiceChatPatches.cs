@@ -375,8 +375,8 @@ public static class VoiceChatPatches
         if (showToast)
         {
             VoiceChatHudState.ShowCompactStatus(focus == VoiceAliveDeadMixFocus.Neutral
-                ? "Voice mix: Normal"
-                : $"Voice mix: Alive {Mathf.RoundToInt(aliveVolume * 100f)}% / Dead {Mathf.RoundToInt(deadVolume * 100f)}%");
+                ? "Mezcla de voz: Normal"
+                : $"Mezcla de voz: Vivos {Mathf.RoundToInt(aliveVolume * 100f)}% / Muertos {Mathf.RoundToInt(deadVolume * 100f)}%");
         }
         VoiceDiagnostics.Log(
             "voice.mix.hold",

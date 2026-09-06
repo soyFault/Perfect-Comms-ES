@@ -30,7 +30,7 @@ public static class VoiceSettingsPanel
 #if ANDROID
         AndroidVoiceUiPolicy.SettingsCategories;
 #else
-        { "AUDIO", "DEVICES", "KEYBINDS", "HUD", "ADVANCED" };
+        { "AUDIO", "DISPOSITIVOS", "ATAJOS", "HUD", "AVANZADO" };
 #endif
 
     private static readonly VoiceSettingsCategory[] CategoryOrder =
@@ -353,7 +353,7 @@ public static class VoiceSettingsPanel
 
         if (visible.Count == 0)
         {
-            var empty = VoiceUiKit.Text("Empty", _shell.PaneRoot, "No options", 16f,
+            var empty = VoiceUiKit.Text("Empty", _shell.PaneRoot, "Sin opciones", 16f,
                 VoiceUiKit.TextMuted, TMPro.TextAlignmentOptions.Center);
             empty.rectTransform.Anchor(new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f));
             empty.rectTransform.sizeDelta = new Vector2(0f, 40f);
@@ -447,7 +447,7 @@ public static class VoiceSettingsPanel
 
     private static Func<float, string> Pct => v => $"<color=#22D3EE>{Mathf.RoundToInt(v * 100f)}%</color>";
     private static Func<float, string> VolumePct => v => v <= 0.005f
-        ? "<color=#8C9CB2>None</color>"
+        ? "<color=#8C9CB2>Ninguno</color>"
         : Pct(v);
     private static Func<float, string> Num2 => v => v.ToString("0.00", CultureInfo.InvariantCulture);
 
@@ -525,24 +525,24 @@ public static class VoiceSettingsPanel
 
     private static void BuildAudio(List<Entry> defs, VoiceChatLocalSettings s)
     {
-        Section(defs, "LEVELS");
-        Slider(defs, "Mic Volume", s.MicVolume, Pct);
-        Slider(defs, "Mic Sensitivity", s.MicSensitivity, Num2);
-        Slider(defs, "Speaker Volume", s.MasterVolume, Pct);
-        EnumStep(defs, "Meeting Spatial Audio", s.MeetingSpatial, new[] { "Off", "Low", "Full" });
-        Section(defs, "PROCESSING");
-        EnumStep(defs, "Mic Mode", s.MicMode, new[] { "Open Mic", "Push To Talk" });
-        Toggle(defs, "Noise Gate", s.NoiseGateEnabled);
-#if WINDOWS
-        Toggle(defs, "Noise Suppression", s.NoiseSuppressionEnabled);
-        Toggle(defs, "Stronger Noise Suppression", s.StrongerNoiseSuppressionEnabled);
-        Toggle(defs, "Echo Cancellation", s.EchoCancellationEnabled);
-#endif
-        Slider(defs, "Voice Falloff Softness", s.VoiceFalloffSoftness, Pct);
-        Section(defs, "STARTUP");
-        Toggle(defs, "Start Muted", s.StartMuted);
-        Toggle(defs, "Start Deafened", s.StartDeafened);
-    }
+        Section(defs, "NIVELES");
+        Slider(defs, "Volumen del micrófono", s.MicVolume, Pct);
+        Slider(defs, "Sensibilidad del micrófono", s.MicSensitivity, Num2);
+        Slider(defs, "Volumen del altavoz", s.MasterVolume, Pct);
+        EnumStep(defs, "Audio espacial en reuniones", s.MeetingSpatial, new[] { "Desactivado", "Bajo", "Completo" });
+        Section(defs, "PROCESAMIENTO");
+        EnumStep(defs, "Modo del micrófono", s.MicMode, new[] { "Micrófono abierto", "Pulsar para hablar" });
+        Toggle(defs, "Puerta de ruido", s.NoiseGateEnabled);
+    #if WINDOWS
+        Toggle(defs, "Supresión de ruido", s.NoiseSuppressionEnabled);
+        Toggle(defs, "Supresión de ruido intensa", s.StrongerNoiseSuppressionEnabled);
+        Toggle(defs, "Cancelación de eco", s.EchoCancellationEnabled);
+    #endif
+        Slider(defs, "Suavidad de atenuación de voz", s.VoiceFalloffSoftness, Pct);
+        Section(defs, "INICIO");
+        Toggle(defs, "Iniciar silenciado", s.StartMuted);
+        Toggle(defs, "Iniciar ensordecido", s.StartDeafened);
+}
 
     private static void BuildDevices(List<Entry> defs, VoiceChatLocalSettings s)
     {
@@ -559,7 +559,7 @@ public static class VoiceSettingsPanel
                 () => VoiceChatLocalSettings.MicDeviceNames.Length,
                 i => DeviceName(VoiceChatLocalSettings.MicDeviceNames, i),
                 fullWidthValue: true)
-                .Build(pane, "Microphone", paneW, y, DeviceRowH,
+                .Build(pane, "Micrófono", paneW, y, DeviceRowH,
                     SettingHelp(s.MicrophoneDeviceIndex))
         });
 
@@ -575,12 +575,12 @@ public static class VoiceSettingsPanel
                 () => VoiceChatLocalSettings.SpkDeviceNames.Length,
                 i => DeviceName(VoiceChatLocalSettings.SpkDeviceNames, i),
                 fullWidthValue: true)
-                .Build(pane, "Speaker", paneW, y, DeviceRowH,
+                .Build(pane, "Salida", paneW, y, DeviceRowH,
                     SettingHelp(s.SpeakerDeviceIndex))
         });
 #endif
 
-        Section(defs, "MICROPHONE TEST");
+        Section(defs, "PRUEBA DE MICRÓFONO");
         defs.Add(new Entry
         {
             Key = "Microphone Test",
@@ -588,21 +588,21 @@ public static class VoiceSettingsPanel
             Build = (pane, paneW, y) => new VoiceUiKit.ActionRow(ToggleMicrophoneTest)
                 .Build(
                     pane,
-                    "Hear Your Microphone",
+                    "Escucha tu micrófono",
                     _microphoneTest?.IsMicrophoneTestStarting == true
-                        ? "Cancel Start"
-                        : _microphoneTest?.IsMicrophoneTestActive == true ? "Stop Test" : "Start Test",
+                        ? "Cancelar inicio"
+                        : _microphoneTest?.IsMicrophoneTestActive == true ? "Detener prueba" : "Iniciar prueba",
                     paneW,
                     y,
                     RowH,
-                    "Plays the selected microphone through the selected speaker so you can check how it sounds. Headphones are recommended to prevent feedback.")
+                    "Reproduce el micrófono seleccionado por la salida elegida para que puedas comprobar cómo se escucha. Se recomienda usar audífonos para evitar acoples.")
         });
         Toggle(
             defs,
-            "Delayed Playback",
+            "Reproducción retrasada",
             () => _microphoneTestDelayed,
             SetMicrophoneTestDelayed,
-            "Adds a one-second delay, making it easier to speak first and then listen to the captured result.");
+            "Agrega un segundo de retraso para que puedas hablar primero y luego escuchar el resultado capturado.");
     }
 
     private static void SetMicrophoneDeviceIndex(VoiceChatLocalSettings settings, int index)
@@ -657,7 +657,7 @@ public static class VoiceSettingsPanel
 
     private static string DeviceName(string[] names, int i)
     {
-        if (names.Length == 0) return "<color=#607282>No devices found</color>";
+        if (names.Length == 0) return "<color=#607282>No se encontraron dispositivos</color>";
         return names[Mathf.Clamp(i, 0, names.Length - 1)];
     }
 
@@ -718,7 +718,7 @@ public static class VoiceSettingsPanel
             SpeakingBarNamePosition.Left,
             SpeakingBarNamePosition.Right,
         };
-        var labels = new[] { "Auto", "Bottom", "Top", "Left", "Right" };
+        var labels = new[] { "Auto", "Abajo", "Arriba", "Izquierda", "Derecha" };
 
         defs.Add(new Entry
         {
@@ -733,7 +733,7 @@ public static class VoiceSettingsPanel
                 i => settings.SpeakingBarNamePosition.Value = order[Mathf.Clamp(i, 0, order.Length - 1)],
                 () => order.Length,
                 i => labels[Mathf.Clamp(i, 0, labels.Length - 1)])
-                .Build(pane, "Speaking Bar Name Position", paneW, y, RowH,
+                .Build(pane, "Posición del nombre en la barra de voz", paneW, y, RowH,
                     SettingHelp(settings.SpeakingBarNamePosition))
         });
     }
@@ -760,7 +760,7 @@ public static class VoiceSettingsPanel
             _chatKeybindEditorExpanded = false;
         Toggle(
             defs,
-            "Allow Keybinds While Chat Is Open",
+            "Permitir atajos con el chat abierto",
             () => s.AllowKeybindsWhileChatOpen.Value,
             value =>
             {
@@ -771,10 +771,10 @@ public static class VoiceSettingsPanel
             SettingHelp(s.AllowKeybindsWhileChatOpen));
         Action(
             defs,
-            "Chat Keybinds",
-            _chatKeybindEditorExpanded ? "Done" : "Choose Chat Keybinds",
+            "Atajos de chat",
+            _chatKeybindEditorExpanded ? "Hecho" : "Elegir atajos de chat",
             ToggleChatKeybindEditor,
-            "Choose the individual bindings that may work while the Among Us chat is open. Tasks/minigames, the Friends List, and modals still block them.",
+            "Elige qué atajos pueden funcionar mientras el chat de Among Us está abierto. Las tareas/minijuegos, la lista de amigos y las ventanas emergentes seguirán bloqueándolos.",
             () => !s.AllowKeybindsWhileChatOpen.Value);
         Rebind(defs, VoiceChatKeybinds.OpenVoiceMenu);
         Rebind(defs, VoiceChatKeybinds.OpenHostVoiceSettings);
@@ -791,9 +791,9 @@ public static class VoiceSettingsPanel
             () => _expandedMixSettings == MixSettingsExpansion.AliveFocus);
         if (_expandedMixSettings == MixSettingsExpansion.AliveFocus)
         {
-            Slider(defs, "Alive Players", s.AliveFocusAliveVolume, VolumePct,
+            Slider(defs, "Jugadores vivos", s.AliveFocusAliveVolume, VolumePct,
                 key: "AliveFocus.AlivePlayers");
-            Slider(defs, "Dead Players", s.AliveFocusDeadVolume, VolumePct,
+            Slider(defs, "Jugadores muertos", s.AliveFocusDeadVolume, VolumePct,
                 key: "AliveFocus.DeadPlayers");
         }
         Rebind(defs, VoiceChatKeybinds.AliveQuieterDeadLouder,
@@ -801,9 +801,9 @@ public static class VoiceSettingsPanel
             () => _expandedMixSettings == MixSettingsExpansion.DeadFocus);
         if (_expandedMixSettings == MixSettingsExpansion.DeadFocus)
         {
-            Slider(defs, "Alive Players", s.DeadFocusAliveVolume, VolumePct,
+            Slider(defs, "Jugadores vivos", s.DeadFocusAliveVolume, VolumePct,
                 key: "DeadFocus.AlivePlayers");
-            Slider(defs, "Dead Players", s.DeadFocusDeadVolume, VolumePct,
+            Slider(defs, "Jugadores muertos", s.DeadFocusDeadVolume, VolumePct,
                 key: "DeadFocus.DeadPlayers");
         }
         Rebind(defs, VoiceChatKeybinds.LocalVoiceRefresh);
@@ -817,10 +817,10 @@ public static class VoiceSettingsPanel
         Func<bool> showVoiceControls = () => visibility().VoiceControlsHudVisible;
         Func<bool> showSpeakingBar = () => visibility().SpeakingBarVisible;
 
-        Section(defs, "VOICE CONTROLS");
+        Section(defs, "CONTROLES DE VOZ");
         Toggle(
             defs,
-            "Disable Voice Controls HUD",
+            "Deshabilitar HUD de controles de voz",
             () => s.DisableVoiceControlsHud.Value,
             value =>
             {
@@ -828,20 +828,20 @@ public static class VoiceSettingsPanel
                 _rebuildRequested = true;
             },
             SettingHelp(s.DisableVoiceControlsHud));
-        EnumStep(defs, "Controls Layout", s.VoiceControlsLayout,
+        EnumStep(defs, "Diseño de los controles", s.VoiceControlsLayout,
             new[] { "Vertical", "Horizontal" }, showVoiceControls);
-        Slider(defs, "Button Position X", s.ButtonPositionX, Pct, showVoiceControls);
-        Slider(defs, "Button Position Y", s.ButtonPositionY, Pct, showVoiceControls);
-        Slider(defs, "Button Scale", s.OverlayScale, Num2, showVoiceControls);
-        Toggle(defs, "Mute / Deafen Status Reminder", s.ShowMuteDeafenStatusAlerts,
+        Slider(defs, "Posición X de los botones", s.ButtonPositionX, Pct, showVoiceControls);
+        Slider(defs, "Posición Y de los botones", s.ButtonPositionY, Pct, showVoiceControls);
+        Slider(defs, "Escala de los botones", s.OverlayScale, Num2, showVoiceControls);
+        Toggle(defs, "Recordatorio de silencio / ensordecimiento", s.ShowMuteDeafenStatusAlerts,
             showVoiceControls);
-        Toggle(defs, "Voice Connection Status", s.ShowVoiceConnectionStatus,
+        Toggle(defs, "Estado de conexión de voz", s.ShowVoiceConnectionStatus,
             showVoiceControls);
 
-        Section(defs, "SPEAKING BAR");
+        Section(defs, "BARRA DE VOZ");
         Toggle(
             defs,
-            "Disable Speaking Bar",
+            "Desactivar barra de voz",
             () => s.DisableSpeakingBar.Value,
             value =>
             {
@@ -849,49 +849,49 @@ public static class VoiceSettingsPanel
                 _rebuildRequested = true;
             },
             SettingHelp(s.DisableSpeakingBar));
-        Toggle(defs, "Show All Players", s.SpeakingBarFixedAllPlayers, showSpeakingBar);
-        Toggle(defs, "Live Preview", s.SpeakingBarLivePreview, showSpeakingBar);
-        EnumStep(defs, "Speaking Bar Position", s.SpeakingBarPosition, new[]
+        Toggle(defs, "Mostrar a todos los jugadores", s.SpeakingBarFixedAllPlayers, showSpeakingBar);
+        Toggle(defs, "Vista previa en vivo", s.SpeakingBarLivePreview, showSpeakingBar);
+        EnumStep(defs, "Posición de la barra de voz", s.SpeakingBarPosition, new[]
         {
-            "Top Left", "Top Middle", "Top Right", "Bottom Left", "Bottom Middle", "Bottom Right",
-            "Middle Left", "Middle Right"
+            "Arriba a la izquierda", "Arriba en el centro", "Arriba a la derecha", "Abajo a la izquierda", "Abajo en el centro", "Abajo a la derecha",
+            "Centro a la izquierda", "Centro a la derecha"
         }, showSpeakingBar);
-        EnumStep(defs, "Side Layout", s.SpeakingBarSideLayout, new[] { "Single Lane", "Wrapped" },
+        EnumStep(defs, "Diseño lateral", s.SpeakingBarSideLayout, new[] { "Una fila", "Ajustado" },
             () => showSpeakingBar() &&
                   !s.SpeakingBarManualLayout.Value &&
                   SpeakingBarLayoutPolicy.IsSidePreset(s.SpeakingBarPosition.Value));
         SpeakingBarNamePositionStep(defs, s, showSpeakingBar);
-        Slider(defs, "Speaking Bar Scale", s.SpeakingBarScale, Pct, showSpeakingBar);
-        Toggle(defs, "Speaking Bar Backdrop", s.SpeakingBarBackdrop, showSpeakingBar);
-        Toggle(defs, "Speaking Bar Manual Layout", s.SpeakingBarManualLayout, showSpeakingBar);
-        EnumStep(defs, "Speaking Bar Layout", s.SpeakingBarLayout, new[] { "Vertical", "Horizontal" },
+        Slider(defs, "Escala de la barra de voz", s.SpeakingBarScale, Pct, showSpeakingBar);
+        Toggle(defs, "Fondo de la barra de voz", s.SpeakingBarBackdrop, showSpeakingBar);
+        Toggle(defs, "Diseño manual de la barra de voz", s.SpeakingBarManualLayout, showSpeakingBar);
+        EnumStep(defs, "Diseño de la barra de voz", s.SpeakingBarLayout, new[] { "Vertical", "Horizontal" },
             () => showSpeakingBar() && s.SpeakingBarManualLayout.Value);
-        EnumStep(defs, "Avatar Facing", s.SpeakingBarAvatarFacing, new[] { "Right", "Left" },
+        EnumStep(defs, "Orientación del avatar", s.SpeakingBarAvatarFacing, new[] { "Derecha", "Izquierda" },
             () => showSpeakingBar() && s.SpeakingBarManualLayout.Value);
-        Slider(defs, "Speaking Bar X", s.SpeakingBarX, Pct,
+        Slider(defs, "Barra de voz X", s.SpeakingBarX, Pct,
             () => showSpeakingBar() && s.SpeakingBarManualLayout.Value);
-        Slider(defs, "Speaking Bar Y", s.SpeakingBarY, Pct,
+        Slider(defs, "Barra de voz Y", s.SpeakingBarY, Pct,
             () => showSpeakingBar() && s.SpeakingBarManualLayout.Value);
 
-        Section(defs, "MEETING OVERLAY");
-        Toggle(defs, "Meeting Speaking Overlay", s.MeetingSpeakingOverlay);
+        Section(defs, "SUPERPOSICIÓN DE REUNIÓN");
+        Toggle(defs, "Indicador de voz en reuniones", s.MeetingSpeakingOverlay);
 
-        Section(defs, "OTHER");
+        Section(defs, "OTROS");
     }
 
     private static void BuildAdvanced(List<Entry> defs, VoiceChatLocalSettings s)
     {
-        Section(defs, "SETUP");
-        Action(defs, "First-Time Setup", "RUN SETUP AGAIN", ShowFirstRunSetup,
-            "Reopens the guided audio, controls, and HUD setup. Your current settings are kept unless you finish with changes.");
+        Section(defs, "CONFIGURACIÓN");
+        Action(defs, "Configuración inicial", "REPETIR CONFIGURACIÓN", ShowFirstRunSetup,
+            "Vuelve a abrir la configuración guiada de audio, controles y HUD. Tus ajustes actuales se conservarán a menos que finalices con cambios.");
 
-        Section(defs, "TROUBLESHOOTING");
-        Toggle(defs, "Show Fake 15 Players", s.ShowFake15Players,
+        Section(defs, "SOLUCIÓN DE PROBLEMAS");
+        Toggle(defs, "Mostrar 15 jugadores falsos", s.ShowFake15Players,
             () => !s.DisableSpeakingBar.Value);
-        Toggle(defs, "Diagnostics",
+        Toggle(defs, "Diagnósticos",
             () => s.DebugVoiceStats.Value || s.MicCalibrationDiagnostics.Value,
             v => s.ApplyDiagnosticsToggle(v),
-            "Writes detailed voice logs and microphone calibration data for troubleshooting. Leave this off unless you are diagnosing an issue.");
+            "Guarda registros detallados de voz y datos de calibración del micrófono para solucionar problemas. Déjalo desactivado salvo que estés diagnosticando un problema.");
     }
 
     private static void ShowFirstRunSetup()
@@ -938,7 +938,7 @@ public static class VoiceSettingsPanel
             if (!_microphoneTest.IsMicrophoneTestActive &&
                 !string.Equals(
                     _microphoneTest.MicrophoneStatus,
-                    "Mic check is off",
+                    "La prueba de micrófono está desactivada",
                     StringComparison.Ordinal))
                 VoiceChatHudState.ShowToastThreadSafe(_microphoneTest.MicrophoneStatus);
         }

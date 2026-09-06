@@ -158,15 +158,15 @@ internal static class VoiceConnectionStatusPolicy
         // Keep at least a full ellipsis. Cycling between three and five dots reads as activity
         // without the single-dot frame looking like the end of a sentence.
         string dots = new('.', normalizedFrame + 3);
-        string prefix = "Connecting voice" + dots;
+        string prefix = "Conectando voz" + dots;
 
         return progress.Stage switch
         {
-            VoiceConnectionStage.StartingAudio => prefix + " starting audio",
-            VoiceConnectionStage.RetryingAudio => "Voice unavailable - retrying audio" + dots,
-            VoiceConnectionStage.SyncingSession => prefix + " syncing session",
+            VoiceConnectionStage.StartingAudio => prefix + " iniciando audio",
+            VoiceConnectionStage.RetryingAudio => "Voz no disponible - reintentando audio" + dots,
+            VoiceConnectionStage.SyncingSession => prefix + " sincronizando sesión",
             VoiceConnectionStage.ConnectingPlayers when progress.ExpectedPlayers > 0 =>
-                $"{prefix} {progress.ConnectedPlayers}/{progress.ExpectedPlayers} players connected",
+                $"{prefix} {progress.ConnectedPlayers}/{progress.ExpectedPlayers} jugadores conectados",
             VoiceConnectionStage.ConnectingPlayers => prefix,
             _ => string.Empty,
         };

@@ -89,8 +89,8 @@ internal static class PerfectCommsUpdateNotifier
 
         CreateClickArea(info.ReleaseUrl);
 
-        CreateText("Title", new Vector3(0f, 0.17f, -0.2f), "Perfect Comms Update Available", 0.92f, Accent, TextAlignmentOptions.Center);
-        CreateText("Message", new Vector3(0f, -0.16f, -0.2f), "(Click here to download)", 0.64f, Color.white, TextAlignmentOptions.Center);
+        CreateText("Title", new Vector3(0f, 0.17f, -0.2f), "Actualización de Perfect Comms disponible", 0.92f, Accent, TextAlignmentOptions.Center);
+        CreateText("Message", new Vector3(0f, -0.16f, -0.2f), "(Haz clic aquí para descargar)", 0.64f, Color.white, TextAlignmentOptions.Center);
 
         VoiceDiagnostics.DebugInfo($"[VC] Showing update notification: {info.Title}");
     }

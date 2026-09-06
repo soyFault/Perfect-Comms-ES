@@ -201,7 +201,7 @@ internal static class VoiceJoinGuard
         var now = DateTime.UtcNow;
         if (!force && now < _nextPatchWarningUtc) return;
         _nextPatchWarningUtc = now.AddSeconds(30);
-        const string warning = "Perfect Comms voice disabled: critical game hooks are unavailable. Update the mod or game.";
+        const string warning = "Voz de Perfect Comms desactivada: los hooks críticos del juego no están disponibles. Actualiza el mod o el juego.";
         VoiceChatHudState.ShowToastThreadSafe(warning);
         VoiceDiagnostics.DebugError($"[VC] {warning} ({_patchHealthReason})");
     }
@@ -211,20 +211,20 @@ internal static class VoiceJoinGuard
         var now = DateTime.UtcNow;
         if (now < _nextGenerationWarningUtc) return;
         _nextGenerationWarningUtc = now.AddSeconds(30);
-        const string warning = "Perfect Comms voice is waiting for a confirmed lobby join. Leave and rejoin this lobby.";
+        const string warning = "La voz de Perfect Comms está esperando una conexión confirmada a la sala. Sal y vuelve a entrar.";
         VoiceChatHudState.ShowToastThreadSafe(warning);
         VoiceDiagnostics.DebugWarning($"[VC] {warning}");
     }
 
     private static string MismatchMessage(string clientVersion) =>
-        "Perfect Comms version mismatch.\n\n" +
-        $"This lobby is running Perfect Comms {VoiceChatPluginMain.Version}.\n" +
-        $"You have {clientVersion}.\n\n" +
-        "Update Perfect Comms to join this lobby.";
+        "La versión de Perfect Comms no coincide.\n\n" +
+        $"Esta sala usa Perfect Comms {VoiceChatPluginMain.Version}.\n" +
+        $"Tú tienes {clientVersion}.\n\n" +
+        "Actualiza Perfect Comms para entrar a esta sala.";
 
     private static string MissingMessage() =>
-        $"This lobby requires Perfect Comms {VoiceChatPluginMain.Version}.\n\n" +
-        "Install or enable Perfect Comms to join this lobby.";
+        $"Esta sala requiere Perfect Comms {VoiceChatPluginMain.Version}.\n\n" +
+        "Instala o habilita Perfect Comms para unirte a esta sala.";
 
     // Host -> target client: tag-255 GameDataTo carrying the kick reason. Same shape
     // Reactor uses in KickWithReason; the host emitting this does not disconnect it.

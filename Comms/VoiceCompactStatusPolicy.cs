@@ -30,9 +30,9 @@ internal static class VoiceCompactStatusPolicy
 
     internal static string StateText(bool microphoneMuted, bool speakerDeafened)
     {
-        if (microphoneMuted && speakerDeafened) return "Muted / Deafened";
-        if (speakerDeafened) return "Deafened";
-        return microphoneMuted ? "Muted" : string.Empty;
+        if (microphoneMuted && speakerDeafened) return "Silenciado / Sordo";
+        if (speakerDeafened) return "Sordo";
+        return microphoneMuted ? "Silenciado" : string.Empty;
     }
 
     private static string JoinCurrentStatus(string? transient, string? operationalWarning)

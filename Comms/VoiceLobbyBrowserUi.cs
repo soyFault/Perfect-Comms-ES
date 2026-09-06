@@ -134,7 +134,7 @@ internal static class VoiceLobbyBrowserUi
     {
         var settings = VoiceSettings.Instance;
         _editTitle = settings?.LobbyBrowserTitle.Value ?? "Perfect Comms";
-        _editLanguage = settings?.LobbyBrowserLanguage.Value ?? "English";
+        _editLanguage = settings?.LobbyBrowserLanguage.Value ?? "Español (Latinoamérica)";
         _editingLanguage = false;
         _editorOpen = true;
         ShowPanelForContent();
@@ -320,13 +320,13 @@ internal static class VoiceLobbyBrowserUi
         }
 
         var titleText = CreateText("Title", _panelRoot.transform, new Vector3(0f, 1.35f, -0.2f),
-            "Voice Lobbies", 1.70f, TextAlignmentOptions.Center, SortBase + 4);
+            "Salas de voz", 1.70f, TextAlignmentOptions.Center, SortBase + 4);
         titleText.fontStyle = FontStyles.Bold;
         titleText.characterSpacing = 1.4f;
         titleText.color = new Color32(188, 247, 255, 255);
 
         _statusText = CreateText("Status", _panelRoot.transform, new Vector3(0f, 0.98f, -0.2f),
-            "Loading...", 1.10f, TextAlignmentOptions.Center, SortBase + 4);
+            "Cargando...", 1.10f, TextAlignmentOptions.Center, SortBase + 4);
         _statusText.color = new Color32(184, 217, 232, 255);
 
         _rowsRoot = new GameObject("Rows");
@@ -336,7 +336,7 @@ internal static class VoiceLobbyBrowserUi
         CreateTextButton("CloseX", _panelRoot.transform, CloseButtonPosition,
             new Vector2(CloseButtonSize, CloseButtonSize), "X", ClosePanel, transparentBackground: true);
         CreateTextButton("Refresh", _panelRoot.transform, new Vector3(-2.05f, -1.35f, -0.2f),
-            new Vector2(1.08f, 0.44f), "Refresh", () => Refresh());
+            new Vector2(1.08f, 0.44f), "Actualizar", () => Refresh());
         CreateTextButton("Info", _panelRoot.transform, new Vector3(2.05f, -1.35f, -0.2f),
             new Vector2(1.14f, 0.44f), "Info", OpenInfoEditor);
         ApplyPanelTransform();
@@ -348,7 +348,7 @@ internal static class VoiceLobbyBrowserUi
         if (showLoading)
         {
             ClearRows();
-            SetStatus("Connecting to Perfect Comms live lobbies...");
+            SetStatus("Conectando a las salas públicas de Perfect Comms...");
         }
         EnsureLiveDirectory();
         VoiceLobbyLiveBrowserClient.RequestSnapshot();
@@ -370,7 +370,7 @@ internal static class VoiceLobbyBrowserUi
         {
             SetStatus("");
             var empty = CreateText("EmptyState", _rowsRoot.transform, new Vector3(0f, 0.05f, -0.2f),
-                "No public voice lobbies listed.\nHost a lobby and enable Public Voice Lobby in game settings.",
+                "No hay salas de voz públicas.\nCrea una sala y activa Sala de voz pública en los ajustes de la partida.",
                 1.20f, TextAlignmentOptions.Center, SortBase + 4);
             empty.enableWordWrapping = true;
             empty.rectTransform.sizeDelta = new Vector2(6.0f, 1.6f);
@@ -378,7 +378,7 @@ internal static class VoiceLobbyBrowserUi
             return;
         }
 
-        SetStatus($"{listings.Count} Perfect Comms live lobby/lobbies found");
+        SetStatus($"Salas de Perfect Comms encontradas: {listings.Count}");
         int row = 0;
         foreach (var listing in listings)
         {
@@ -395,7 +395,7 @@ internal static class VoiceLobbyBrowserUi
             title.fontStyle = FontStyles.Bold;
             title.color = new Color32(238, 252, 255, 255);
 
-            var host = string.IsNullOrWhiteSpace(listing.Host) ? "Unknown" : listing.Host;
+            var host = string.IsNullOrWhiteSpace(listing.Host) ? "Desconocido" : listing.Host;
             var detailsText = BuildDetailsText(listing, host);
             var details = CreateText("RowDetails" + row, _rowsRoot.transform, new Vector3(-0.18f, y - 0.14f, -0.2f),
                 detailsText, 0.68f, TextAlignmentOptions.Left, SortBase + 4);
@@ -415,7 +415,7 @@ internal static class VoiceLobbyBrowserUi
         var parts = new List<string>
         {
             StateWithDuration(listing),
-            "Host: " + Truncate(host, 14),
+            "Anfitrión: " + Truncate(host, 14),
         };
 
         if (!string.IsNullOrWhiteSpace(listing.Code))
@@ -466,16 +466,16 @@ internal static class VoiceLobbyBrowserUi
     private static string JoinStatus(VoiceLobbyListing listing)
     {
         var state = listing.State ?? "";
-        if (listing.ProtocolVersion != VoiceProtocol.ProtocolVersion) return "VERSION";
-        if (string.Equals(state, "InGame", StringComparison.OrdinalIgnoreCase)) return "IN GAME";
-        if (!string.Equals(state, "Lobby", StringComparison.OrdinalIgnoreCase)) return string.IsNullOrWhiteSpace(state) ? "UNKNOWN" : state.ToUpperInvariant();
-        if (listing.Players >= listing.MaxPlayers) return "FULL";
-        return "JOIN";
+        if (listing.ProtocolVersion != VoiceProtocol.ProtocolVersion) return "VERSIÓN";
+        if (string.Equals(state, "InGame", StringComparison.OrdinalIgnoreCase)) return "EN PARTIDA";
+        if (!string.Equals(state, "Lobby", StringComparison.OrdinalIgnoreCase)) return string.IsNullOrWhiteSpace(state) ? "DESCONOCIDO" : state.ToUpperInvariant();
+        if (listing.Players >= listing.MaxPlayers) return "LLENA";
+        return "ENTRAR";
     }
 
     private static string StateWithDuration(VoiceLobbyListing listing)
     {
-        var label = string.Equals(listing.State, "InGame", StringComparison.OrdinalIgnoreCase) ? "In game" : "Lobby";
+        var label = string.Equals(listing.State, "InGame", StringComparison.OrdinalIgnoreCase) ? "En partida" : "Sala";
         var since = listing.StateChangedAt > 0 ? listing.StateChangedAt : listing.UpdatedAt;
         if (since <= 0) return label;
 
@@ -530,7 +530,7 @@ internal static class VoiceLobbyBrowserUi
             var manager = DestroyableSingleton<ServerManager>.Instance;
             if (manager == null)
             {
-                error = "Among Us region manager is not available";
+                error = "El administrador de regiones de Among Us no está disponible";
                 return false;
             }
 
@@ -549,7 +549,7 @@ internal static class VoiceLobbyBrowserUi
 
             if (match == null)
             {
-                error = $"Required region is not installed: {regionName}. Install/enable that region, then retry.";
+                error = $"La región requerida no está instalada: {regionName}. Instálala o actívala y vuelve a intentarlo.";
                 return false;
             }
 
@@ -559,7 +559,7 @@ internal static class VoiceLobbyBrowserUi
         }
         catch (Exception ex)
         {
-            error = "Could not select region " + regionName + ": " + ex.Message;
+            error = "No se pudo seleccionar la región " + regionName + ": " + ex.Message;
             return false;
         }
     }
@@ -583,12 +583,12 @@ internal static class VoiceLobbyBrowserUi
         if (!IsJoinable(listing)) return;
         if (string.IsNullOrWhiteSpace(listing.Region))
         {
-            SetStatus("Join failed: listing does not include an Among Us region");
+            SetStatus("No se pudo entrar: la sala no incluye una región de Among Us");
             return;
         }
         if (!TrySelectRegion(listing.Region.Trim(), out var regionError))
         {
-            SetStatus("Join failed: " + regionError);
+            SetStatus("No se pudo entrar: " + regionError);
             return;
         }
 
@@ -600,7 +600,7 @@ internal static class VoiceLobbyBrowserUi
         }
         catch (Exception ex)
         {
-            SetStatus("Join failed: " + ex.Message);
+            SetStatus("No se pudo entrar: " + ex.Message);
         }
     }
 
@@ -608,7 +608,7 @@ internal static class VoiceLobbyBrowserUi
     {
         EnsurePanel();
         ClearRows();
-        SetStatus("Edit lobby info. Click field, type, Save.");
+        SetStatus("Edita la información de la sala. Haz clic en un campo, escribe y guarda.");
         if (_rowsRoot == null) return;
 
         _editorText = CreateText("EditorText", _rowsRoot.transform, new Vector3(0f, 0.45f, -0.2f),
@@ -617,13 +617,13 @@ internal static class VoiceLobbyBrowserUi
         _editorText.rectTransform.sizeDelta = new Vector2(5.6f, 1.0f);
         _editorText.color = new Color32(224, 242, 248, 255);
         CreateTextButton("EditTitle", _rowsRoot.transform, new Vector3(-0.70f, -0.25f, -0.2f),
-            new Vector2(1.25f, 0.34f), "Edit Title", () => { _editingLanguage = false; RenderEditor(); });
+            new Vector2(1.25f, 0.34f), "Editar Título", () => { _editingLanguage = false; RenderEditor(); });
         CreateTextButton("EditLanguage", _rowsRoot.transform, new Vector3(0.70f, -0.25f, -0.2f),
-            new Vector2(1.45f, 0.34f), "Edit Language", () => { _editingLanguage = true; RenderEditor(); });
+            new Vector2(1.45f, 0.34f), "Editar Idioma", () => { _editingLanguage = true; RenderEditor(); });
         CreateTextButton("SaveInfo", _rowsRoot.transform, new Vector3(-0.70f, -0.75f, -0.2f),
-            new Vector2(1.0f, 0.34f), "Save", SaveEditor);
+            new Vector2(1.0f, 0.34f), "Guardar", SaveEditor);
         CreateTextButton("CancelInfo", _rowsRoot.transform, new Vector3(0.70f, -0.75f, -0.2f),
-            new Vector2(1.0f, 0.34f), "Cancel", () => { _editorOpen = false; Refresh(); });
+            new Vector2(1.0f, 0.34f), "Cancelar", () => { _editorOpen = false; Refresh(); });
     }
 
     private static void UpdateEditorInput()
@@ -662,8 +662,8 @@ internal static class VoiceLobbyBrowserUi
     }
 
     private static string EditorText()
-        => $"{(_editingLanguage ? "Title" : "> Title")}: {_editTitle}\n" +
-           $"{(_editingLanguage ? "> Language" : "Language")}: {_editLanguage}";
+        => $"{(_editingLanguage ? "Título" : "> Título")}: {_editTitle}\n" +
+           $"{(_editingLanguage ? "Idioma" : "Idioma")}: {_editLanguage}";
 
     private static void SaveEditor()
     {
@@ -671,7 +671,7 @@ internal static class VoiceLobbyBrowserUi
         if (settings != null)
         {
             settings.LobbyBrowserTitle.Value = string.IsNullOrWhiteSpace(_editTitle) ? "Perfect Comms" : _editTitle.Trim();
-            settings.LobbyBrowserLanguage.Value = string.IsNullOrWhiteSpace(_editLanguage) ? "English" : _editLanguage.Trim();
+            settings.LobbyBrowserLanguage.Value = string.IsNullOrWhiteSpace(_editLanguage) ? "Español (Latam)" : _editLanguage.Trim();
         }
         _editorOpen = false;
         Refresh();

@@ -1698,9 +1698,9 @@ internal static class VoiceUiKit
         private const float SettingsW = 40f;
         private const float SettingsGap = 10f;
         private const float ChatCheckW = 40f;
-        private const string ChatCheckTooltipTitle = "Use While Chat Is Open";
+        private const string ChatCheckTooltipTitle = "Usar con el chat abierto";
         private const string ChatCheckTooltip =
-            "Works only while Among Us chat is open. It does not bypass tasks/minigames, the Friends List, or modals.";
+            "Funciona solo mientras el chat de Among Us está abierto. No ignora las tareas/minijuegos, la lista de amigos ni las ventanas emergentes.";
 
         public RebindRow(
             Func<KeyCode> get,
@@ -1774,7 +1774,7 @@ internal static class VoiceUiKit
             _normalLeft = (PaneW - EdgePad) - NormalBtnW;
             _capLeft = (PaneW - EdgePad) - (CapBtnW + ColGap + CapW);
             float auxiliaryRight = _normalLeft - SettingsGap;
-            _btnRt = Rect("Bind", Root);
+            _btnRt = Rect("Asignar", Root);
             _btnRt.Anchor(new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f));
             _btnRt.sizeDelta = new Vector2(NormalBtnW, 40f);
             _btnRt.anchoredPosition = new Vector2(_normalLeft, 0f);
@@ -1836,8 +1836,8 @@ internal static class VoiceUiKit
             _capRow.anchoredPosition = new Vector2((PaneW - EdgePad) - CapW * 0.5f, 0f);
             _capRow.pivot = new Vector2(0.5f, 0.5f);
 
-            _clearBtn = CapButton(_capRow, "Clear", new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0f), DangerDim);
-            _cancelBtn = CapButton(_capRow, "Cancel", new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(0f, 0f), ControlBg);
+            _clearBtn = CapButton(_capRow, "Borrar", new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0f), DangerDim);
+            _cancelBtn = CapButton(_capRow, "Cancelar", new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(0f, 0f), ControlBg);
             _capRow.gameObject.SetActive(false);
 
             RefreshLabel();
@@ -1958,16 +1958,16 @@ internal static class VoiceUiKit
             if (_capturing)
             {
                 _label.text = !_armed
-                    ? "<color=#8C9CB2>Release to bind...</color>"
+                    ? "<color=#8C9CB2>Suelta para asignar...</color>"
                     : _pendingModifier != KeyCode.None
-                        ? $"<color=#22D3EE>{VoiceKeybind.FormatKey(_pendingModifier)} + key, or release</color>"
-                        : "<color=#22D3EE>Press any key...</color>";
+                        ? $"<color=#22D3EE>{VoiceKeybind.FormatKey(_pendingModifier)} + tecla, o suelta</color>"
+                        : "<color=#22D3EE>Presiona cualquier tecla...</color>";
                 return;
             }
             var mod = _getMod?.Invoke() ?? KeyCode.None;
             var key = _get();
             if (key == KeyCode.None)
-                _label.text = "<color=#607282>None</color>";
+                _label.text = "<color=#607282>Ninguna</color>";
             else if (mod == KeyCode.None)
                 _label.text = VoiceKeybind.FormatKey(key);
             else
@@ -2467,7 +2467,7 @@ internal static class VoiceUiKit
             _value.rectTransform.offsetMin = new Vector2(4f, 0f);
             _value.rectTransform.offsetMax = new Vector2(-4f, 0f);
 
-            _resetRt = Rect("Reset", Root);
+            _resetRt = Rect("Restablecer", Root);
             _resetRt.Anchor(new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f));
             _resetRt.sizeDelta = new Vector2(resetD, resetD);
             _resetRt.anchoredPosition = new Vector2(resetLeft, 0f);

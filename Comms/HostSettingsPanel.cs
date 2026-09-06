@@ -14,12 +14,12 @@ public static class HostSettingsPanel
     private const float TopPad = 12f;
 
     private static readonly string[] BuiltInCategories =
-        { "PROXIMITY", "LOBBY", "MEETING & VOICE", "TEAM RADIO" };
+        { "PROXIMIDAD", "LOBBY", "REUNIÓN Y VOZ", "RADIO DE EQUIPO" };
 
     private const int BuiltInCategoryCount = 4;
 
     private static readonly (int index, string title)[] RailSections =
-        { (4, "MOD BEHAVIOUR") };
+    { (4, "COMPORTAMIENTO DE MODS") };
 
     // Built-in tabs plus one tab per third-party mod (PerfectComms.Api Primitive 5), appended in
     // registration order under the "MOD BEHAVIOUR" section that already precedes index 4.
@@ -69,7 +69,7 @@ public static class HostSettingsPanel
         if (!ShellAlive)
         {
             Destroy();
-            _shell = new VoiceUiKit.PanelShell("VC_HostPanel", "HOST VOICE SETTINGS", PanelW, PanelH,
+            _shell = new VoiceUiKit.PanelShell("VC_HostPanel", "AJUSTES DE VOZ DEL HOST", PanelW, PanelH,
                 () => { VoiceUiKit.SwallowClick(); Hide(); });
         }
 
@@ -104,8 +104,8 @@ public static class HostSettingsPanel
         if (AmongUsClient.Instance == null || !AmongUsClient.Instance.AmHost)
         {
             _hostNotice = true;
-            var notice = VoiceUiKit.Text("HostOnly", _shell.PaneRoot,
-                "<b>Host only</b>\n<size=80%><color=#8C9CB2>You must be the lobby host to change these options.</color></size>",
+           var notice = VoiceUiKit.Text("HostOnly", _shell.PaneRoot,
+                "<b>Solo el host</b>\n<size=80%><color=#8C9CB2>Debes ser el anfitrión del lobby para cambiar estas opciones.</color></size>",
                 26f, VoiceUiKit.TextPrimary, TMPro.TextAlignmentOptions.Center);
             notice.enableWordWrapping = true;
             notice.rectTransform.Anchor(new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f));
@@ -142,7 +142,7 @@ public static class HostSettingsPanel
     {
         if (!IsOpen || (newHostClientId >= 0 && newHostClientId == localClientId)) return;
         Hide();
-        VoiceChatHudState.ShowCompactStatus("Host voice settings closed: host changed");
+        VoiceChatHudState.ShowCompactStatus("Ajustes de voz del host cerrados: el host cambió");
         try
         {
             VoiceDiagnostics.Log(
