@@ -106,7 +106,7 @@ public sealed class FirstRunHudPresetTests
         Assert.Equal(-1, FirstRunHudPresets.Match(original));
 
         int presetIndex = Enumerable.Range(0, FirstRunHudPresets.All.Count)
-            .Single(i => FirstRunHudPresets.All[i].Name == "Bottom Center");
+            .Single(i => FirstRunHudPresets.All[i].Name == "Abajo al centro");
         var applied = FirstRunHudPresets.Apply(original, FirstRunHudPresets.All[presetIndex]);
         Assert.Equal(presetIndex, FirstRunHudPresets.Match(applied));
     }

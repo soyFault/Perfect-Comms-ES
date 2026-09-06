@@ -15,10 +15,10 @@ public sealed class VoiceCompactStatusPolicyTests
     public void ExistingTransientKeepsItsCurrentMessageAndShowsDeafenStateBelowIt()
     {
         string text = VoiceCompactStatusPolicy.Compose(
-            "Voice connection refreshed", null, false, true, true);
+            "Conexión de voz actualizada", null, false, true, true);
 
         Assert.Equal(
-            "<color=#FFCC66>Voice connection refreshed</color>\n<color=#FF7373>Ensordecido</color>",
+            "<color=#FFCC66>Conexión de voz actualizada</color>\n<color=#FF7373>Ensordecido</color>",
             text);
     }
 
