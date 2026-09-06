@@ -8,12 +8,7 @@ on:
   push:
     tags: ["v*"]
   workflow_dispatch:
-    inputs:
-      publish_api:
-        description: Publish only the reference-only PerfectComms.Api package to NuGet.org
-        required: false
-        default: false
-        type: boolean
+   
 
 permissions:
   contents: read
@@ -203,19 +198,7 @@ jobs:
           body_path: release-notes.md
           files: |
             artifacts/PerfectComms.dll
-      - name: Authenticate to NuGet.org
-        id: nuget-login
-        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
-        with:
-          user: ${{ vars.NUGET_USER }}
-      - name: Publish reference-only API package
-        run: >-
-          dotnet nuget push "$PERFECT_COMMS_API_PACKAGE"
-          --api-key "${{ steps.nuget-login.outputs.NUGET_API_KEY }}"
-          --source "https://api.nuget.org/v3/index.json"
-          --skip-duplicate
-
-  publish-api:
+        publish-api:
     if: github.event_name == 'workflow_dispatch' && inputs.publish_api
     needs: package
     permissions:
