@@ -113,8 +113,8 @@ public sealed class AndroidTouchInputDecisionTests
     }
 
     [Theory]
-    [InlineData((int)VoiceTeamRadioChannel.Impostors, "I", "Team Radio: Impostors")]
-    [InlineData((int)VoiceTeamRadioChannel.All, "A", "Team Radio: All Teams")]
+    [InlineData((int)VoiceTeamRadioChannel.Impostors, "I", "Team Radio: Impostores")]
+    [InlineData((int)VoiceTeamRadioChannel.All, "A", "Team Radio: Todos los equipos")]
     [InlineData((int)VoiceTeamRadioChannel.None, "R", "Team Radio unavailable")]
     [InlineData(42, "R", "Team Radio unavailable")]
     public void TeamRadioTouchFeedbackNamesTheSelectedChannel(
