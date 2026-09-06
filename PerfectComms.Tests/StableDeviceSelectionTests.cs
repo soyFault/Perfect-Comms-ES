@@ -436,9 +436,9 @@ public sealed class StableDeviceSelectionTests
         var devices = new[]
         {
             Default,
-            new VoiceDeviceInfo("unavailable", "Disconnected", true, false),
-            new VoiceDeviceInfo("active-default", "Headset", true),
-            new VoiceDeviceInfo("other", "Speakers", false),
+            new VoiceDeviceInfo("unavailable", "Desconectado", true, false),
+            new VoiceDeviceInfo("active-default", "Audífonos", true),
+            new VoiceDeviceInfo("other", "Altavoz", false),
         };
 
         Assert.Equal(
@@ -466,22 +466,22 @@ public sealed class StableDeviceSelectionTests
     public void LegacyDefaultLiteralCanonicalizesOnlyForSyntheticDefaultSelection()
     {
         var synthetic = VoiceChatLocalSettings.CanonicalizeLegacyPersistedSelection(
-            0, string.Empty, "Default");
+            0, string.Empty, "Predeterminado");
         var realByIndex = VoiceChatLocalSettings.CanonicalizeLegacyPersistedSelection(
-            1, string.Empty, "Default");
+            1, string.Empty, "Predeterminado");
         var realByStableId = VoiceChatLocalSettings.CanonicalizeLegacyPersistedSelection(
-            0, "real-default-id", "Default");
+            0, "real-default-id", "Predeterminado");
 
         Assert.Equal((string.Empty, string.Empty), synthetic);
-        Assert.Equal((string.Empty, "Default"), realByIndex);
-        Assert.Equal(("real-default-id", "Default"), realByStableId);
+        Assert.Equal((string.Empty, "Predeterminado"), realByIndex);
+        Assert.Equal(("real-default-id", "Predeterminado"), realByStableId);
     }
 
     [Fact]
     public void MigratedLegacyDefaultDoesNotCreateAnUnavailablePickerEntry()
     {
         var canonical = VoiceChatLocalSettings.CanonicalizeLegacyPersistedSelection(
-            0, string.Empty, "Default");
+            0, string.Empty, "Predeterminado");
         var published = VoiceChatLocalSettings.WithUnavailableSelection(
             new[] { Default }, canonical.Id, canonical.Name, "Saved microphone");
 
@@ -494,17 +494,17 @@ public sealed class StableDeviceSelectionTests
     {
         var synthetic = VoiceChatLocalSettings.PersistedSelectionForDevice(0, Default);
         var realNamedDefault = VoiceChatLocalSettings.PersistedSelectionForDevice(
-            1, new VoiceDeviceInfo("real-default-id", "Default", true));
+            1, new VoiceDeviceInfo("real-default-id", "Predeterminado", true));
 
         Assert.Equal((string.Empty, string.Empty), synthetic);
-        Assert.Equal(("real-default-id", "Default"), realNamedDefault);
+        Assert.Equal(("real-default-id", "Predeterminado"), realNamedDefault);
     }
 
     [Fact]
     public void DefaultTrackingWorksAfterLegacyMigrationAndDefaultReselection()
     {
         var migrated = VoiceChatLocalSettings.CanonicalizeLegacyPersistedSelection(
-            0, string.Empty, "Default");
+            0, string.Empty, "Predeterminado");
         bool migratedDefault = VoiceChatLocalSettings.IsPersistedDefaultSelection(
             0, migrated.Id, migrated.Name);
         var reselected = VoiceChatLocalSettings.PersistedSelectionForDevice(0, Default);
