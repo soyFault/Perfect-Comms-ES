@@ -78,7 +78,7 @@ public sealed class VoiceConnectionStatusPolicyTests
         var progress = Evaluate(backendAvailable: false, snapshotReady: false);
 
         Assert.Equal(VoiceConnectionStage.StartingAudio, progress.Stage);
-        Assert.Equal("Connecting voice... starting audio", Build(progress, 0));
+        Assert.Equal("Connectando voz... iniciando audio", Build(progress, 0));
     }
 
     [Fact]
@@ -101,7 +101,7 @@ public sealed class VoiceConnectionStatusPolicyTests
         var progress = Evaluate(snapshotReady: false, routingPolicyReady: true);
 
         Assert.Equal(VoiceConnectionStage.SyncingSession, progress.Stage);
-        Assert.Equal("Connecting voice.... syncing session", Build(progress, 1));
+        Assert.Equal("Connectando voz.... sincronizando sesión", Build(progress, 1));
     }
 
     [Fact]
@@ -125,7 +125,7 @@ public sealed class VoiceConnectionStatusPolicyTests
             retainReadyDuringSnapshotGap: false);
 
         Assert.Equal(VoiceConnectionStage.SyncingSession, progress.Stage);
-        Assert.Equal("Connecting voice... syncing session", Build(progress, 0));
+        Assert.Equal("Connectando voz... sincronizando sesión", Build(progress, 0));
     }
 
     [Fact]
@@ -138,7 +138,7 @@ public sealed class VoiceConnectionStatusPolicyTests
             expectedPlayers: 3);
 
         Assert.Equal(VoiceConnectionStage.SyncingSession, progress.Stage);
-        Assert.Equal("Connecting voice..... syncing session", Build(progress, 2));
+        Assert.Equal("Connectando voz..... sincronizando sesión", Build(progress, 2));
     }
 
     [Fact]
@@ -151,7 +151,7 @@ public sealed class VoiceConnectionStatusPolicyTests
             expectedPlayers: 3);
 
         Assert.Equal(VoiceConnectionStage.ConnectingPlayers, progress.Stage);
-        Assert.Equal("Connecting voice..... 1/3 players connected", Build(progress, 2));
+        Assert.Equal("Connectando voz..... 1/3 jugadores conectados", Build(progress, 2));
     }
 
     [Fact]
@@ -316,7 +316,7 @@ public sealed class VoiceConnectionStatusPolicyTests
             snapshotReady: false);
 
         Assert.Equal(VoiceConnectionStage.RetryingAudio, progress.Stage);
-        Assert.Equal("Voice unavailable - retrying audio...", Build(progress, 0));
+        Assert.Equal("Voz no disponible - reintentando audio...", Build(progress, 0));
     }
 
     [Theory]
