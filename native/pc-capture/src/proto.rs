@@ -120,7 +120,7 @@ pub fn read_frame<R: Read>(r: &mut R) -> Result<Frame, DecodeError> {
             let ts = u64::from_le_bytes(body[0..8].try_into().unwrap());
             let mut samples = Vec::with_capacity(FRAME_SAMPLES);
             for chunk in body[8..].as_chunks::<4>().0 {
-                samples.push(f32::from_le_bytes(chunk.try_into().unwrap()));
+                samples.push(f32::from_le_bytes(*chunk));
             }
             Ok(Frame::Audio(AudioFrame {
                 encoder_epoch: 0,

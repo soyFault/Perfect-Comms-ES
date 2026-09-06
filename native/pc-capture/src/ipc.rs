@@ -422,7 +422,7 @@ pub fn read_frame_checked<R: BufRead>(r: &mut R) -> Result<Frame, proto::DecodeE
             let ts = u64::from_le_bytes(body[0..8].try_into().unwrap());
             let mut samples = Vec::with_capacity(proto::FRAME_SAMPLES);
             for chunk in body[8..].as_chunks::<4>().0 {
-                samples.push(f32::from_le_bytes(chunk.try_into().unwrap()));
+                samples.push(f32::from_le_bytes(*chunk));
             }
             Ok(Frame::Audio(AudioFrame {
                 encoder_epoch: 0,
@@ -442,7 +442,7 @@ pub fn read_frame_checked<R: BufRead>(r: &mut R) -> Result<Frame, proto::DecodeE
             r.read_exact(&mut body)?;
             let mut samples = Vec::with_capacity(proto::AUDIO_OUT_SAMPLES);
             for chunk in body.as_chunks::<4>().0 {
-                samples.push(f32::from_le_bytes(chunk.try_into().unwrap()));
+                samples.push(f32::from_le_bytes(*chunk));
             }
             Ok(Frame::AudioOut(AudioOutFrame { samples }))
         }
