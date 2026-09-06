@@ -119,7 +119,7 @@ pub fn read_frame<R: Read>(r: &mut R) -> Result<Frame, DecodeError> {
             r.read_exact(&mut body)?;
             let ts = u64::from_le_bytes(body[0..8].try_into().unwrap());
             let mut samples = Vec::with_capacity(FRAME_SAMPLES);
-            for chunk in body[8..].chunks_exact(4) {
+            for chunk in body[8..].as_chunks::<4>().0 {
                 samples.push(f32::from_le_bytes(chunk.try_into().unwrap()));
             }
             Ok(Frame::Audio(AudioFrame {
