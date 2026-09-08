@@ -43,7 +43,7 @@ public static class VoiceHostMenuEntry
     private static void EnsureButton()
     {
         if (_chip.Built) return;
-        _chip.Build("PERFECT COMMS", "OPCIONES DE VOZ DEL ANFITRIÓN",
+        _chip.Build("PERFECT COMMS", "AJUSTES DEL ANFITRIÓN",
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
             new Vector2(0f, -48f),
             HostSettingsPanel.Show,
