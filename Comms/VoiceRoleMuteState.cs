@@ -24,6 +24,11 @@ internal static class VoiceRoleMuteState
                 _gracePeriodDeadline = Time.time + _gracePeriodSeconds;
                 _gracePeriodArmed = true;
             }
+
+            if (_gracePeriodArmed && Time.time >= _gracePeriodDeadline)
+                {
+                    ClearGracePeriod();
+                }
             return;
         }
 
@@ -67,7 +72,13 @@ internal static class VoiceRoleMuteState
         var local = PlayerControl.LocalPlayer;
         if (local == null)
             return false;
-
+        if (VoiceSceneState.IsMeetingVoicePhase(phase) &&
+            IsGracePeriodActive &&
+            local.PlayerId != GracePeriodCallerId)
+        {
+            reason = "Grace Period";
+            return true;
+        }
         var data = local.Data;
         bool baseDead = data != null && (data.IsDead || data.Role?.IsDead == true);
         VoicePlayerTraits traits = VoiceModRegistry.ResolvePlayerTraits(

@@ -93,6 +93,12 @@ internal static class VoiceProximityCalculator
         if (VoiceRoleMuteState.IsMeetingVoiceBlocked(target, phase))
             return VoiceProximityResult.Muted(VoiceRoleMuteState.GetMeetingBlockReason(target, phase));
 
+        if (VoiceRoleMuteState.IsGracePeriodActive &&
+            target.PlayerId != VoiceRoleMuteState.GracePeriodCallerId)
+        {
+            return VoiceProximityResult.Muted(VoiceProximityReason.GracePeriod);
+        }
+
         if (s.TeamRadio
             && s.TeamRadioInMeetings
             && TryGetManagedRadioRoute(localPlayer, target, targetRadioState, 1f, out var managedRadio))
