@@ -218,10 +218,9 @@ internal static class VoiceRoleMuteState
 
     internal static bool IsGracePeriodActive
         => _gracePeriodCallerId != byte.MaxValue &&
-           _gracePeriodArmed &&
-           VoiceRoomSettingsState.Current.GracePeriodEnabled &&
-           MeetingHud.Instance != null &&
-           Time.time < _gracePeriodDeadline;
+            _gracePeriodArmed &&
+            VoiceRoomSettingsState.Current.GracePeriodEnabled &&
+            Time.time < _gracePeriodDeadline;
 
     internal static byte GracePeriodCallerId => _gracePeriodCallerId;
 
