@@ -1,3 +1,11 @@
+### Perfect-Comms-ES
+Based on Perfect Comms by artriy
+Modified and translated by Fault
+
+Licensed under GNU LGPL v2.1.
+Original project:
+https://github.com/artriy/Perfect-Comms
+
 <h1 align="center">Perfect Comms</h1>
 
 <p align="center">
@@ -176,7 +184,7 @@ La guía completa, todas las funciones y ejemplos listos para copiar se encuentr
 * Repositorio original: https://github.com/FangkuaiYa/AmongUs-VoiceChat
 * BetterCrewLink: https://github.com/OhMyGuus/BetterCrewLink
 * Transporte entre pares: [Pion WebRTC](https://github.com/pion/webrtc)
-* Agradecimiento especial a [idkimneil](https://github.com/idkimneil), la razón por la que hice esto.
+* Agradecimiento especial a [idkimneil](https://github.com/idkimneil), la razón por la que artriy hizo el mod.
 
 <div align="center">
 
