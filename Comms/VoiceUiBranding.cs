@@ -4,8 +4,10 @@ using System.Reflection;
 using Il2CppInterop.Runtime.InteropTypes.Arrays;
 using TMPro;
 using UnityEngine;
+#if !STARLIGHT
 using UnityEngine.TextCore;
 using UnityEngine.TextCore.LowLevel;
+#endif
 using Object = UnityEngine.Object;
 
 namespace VoiceChatPlugin.VoiceChat;
@@ -29,11 +31,18 @@ internal static class VoiceUiBranding
 
     internal static TMP_FontAsset? Font(TMP_FontAsset? fallbackFont)
     {
+#if STARLIGHT
+        // Starlight 1.6.3 does not expose UnityEngine.TextCoreFontEngineModule to plugins (the
+        // DependencySanitizer rejects the reference), so the baked Space Grotesk atlas cannot be
+        // assembled there. The UI keeps using the game's own font on Starlight.
+        return fallbackFont;
+#else
         if (fallbackFont == null) return _font;
         if (_font == null) _font = CreateFont(fallbackFont);
         else if (fallbackFont != _font && !_font.fallbackFontAssetTable.Contains(fallbackFont))
             _font.fallbackFontAssetTable.Add(fallbackFont);
         return _font;
+#endif
     }
 
     private static Sprite LoadSprite(string resourceName)
@@ -44,6 +53,7 @@ internal static class VoiceUiBranding
         return sprite;
     }
 
+#if !STARLIGHT
     private static TMP_FontAsset CreateFont(TMP_FontAsset fallbackFont)
     {
         using var stream = OpenResource(ResourcePrefix + "SpaceGroteskSdf.bytes");
@@ -133,6 +143,8 @@ internal static class VoiceUiBranding
         font.ReadFontAssetDefinition();
         return font;
     }
+
+#endif
 
     private static Texture2D LoadAtlas(string resourceName)
     {

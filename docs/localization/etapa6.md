@@ -70,3 +70,13 @@ Búsqueda de literales visibles sin `Loc`: solo quedan los que son **inglés por
 - Con docs: `git merge claude-local` (fast-forward).
 - Por etapas: los commits de cada etapa están listados en `etapa1.md`…`etapa6.md` (cherry-pick en orden).
 Después: `python3 scripts/localization.py --check`, `dotnet build`, `dotnet test`.
+
+## 6. Corrección posterior: el job de CI de Starlight fallaba (ya antes de la localización)
+El workflow *CI* fallaba en los jobs **"Starlight managed build, tests, and single-DLL validation"** y **"Starlight and desktop Pion interoperability"** (Windows), también en la rama base `new-spanish` (run "redesign"), es decir, **antes de cualquier cambio de localización**. Las pruebas de Starlight pasaban; fallaba el paso de empaquetar/validar el DLL con `DependencySanitizer`. Reproducido y corregido en local con los mismos pasos de CI:
+
+1. `Required embedded notice content does not match its pinned source: Licenses.THIRD_PARTY_NOTICES.md` — el rediseño añadió el aviso de la fuente Space Grotesk a `Starlight/THIRD_PARTY_NOTICES.md` pero no actualizó el hash SHA-256 fijado en `Starlight/DependencySanitizer/Program.cs`. Se actualizó el hash (`98E571B2…` → `A61A5AF9…`; el archivo está fijado a LF en `.gitattributes`, así que es el mismo en Linux y Windows).
+2. `External assembly reference is outside the Starlight 1.6.3 contract: UnityEngine.TextCoreFontEngineModule` — `VoiceUiBranding.CreateFont` (la fuente Space Grotesk estática del rediseño) usa tipos de `UnityEngine.TextCore`, módulo que el contrato de Starlight 1.6.3 no permite. En la compilación `STARLIGHT` ahora `VoiceUiBranding.Font()` devuelve la fuente del juego (en escritorio no cambia nada). **Efecto visible:** en Starlight/Android la interfaz usa la fuente del juego en vez de Space Grotesk. Alternativa si prefieres conservar la fuente: añadir `"UnityEngine.TextCoreFontEngineModule|0.0.0.0|"` a la lista de referencias permitidas del sanitizer (Unity.TextMeshPro ya depende de ese módulo, así que existe en tiempo de ejecución), pero eso amplía un contrato que el autor original quiso cerrado.
+
+Resultado local: `package-starlight.sh Release` + `verify-release-assets.py --starlight-dll` + `DependencySanitizer validate` pasan y producen un único `PerfectCommsStarlight.dll`. El job de Windows ejecuta el mismo empaquetado y después una prueba de interoperabilidad con Pion que no pude correr aquí; confírmalo en CI.
+
+Además: `scripts/localization.py` **no se había subido** (el `.gitignore` ignora `scripts/*` salvo una lista); se añadió a la lista y se subió.
