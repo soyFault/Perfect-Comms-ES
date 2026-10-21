@@ -275,6 +275,131 @@ public sealed class LocalizationTests
         });
     }
 
+    // ---- Stage 4: options, keybinds, config help ----
+
+    [Fact]
+    public void KeybindNamesAndHelpAreTranslatedButTheIdsStayEnglish()
+    {
+        WithTemporaryConfig(config =>
+        {
+            VoiceChatKeybinds.Initialize(config);
+            WithLocale("en_US", () =>
+            {
+                Assert.Equal("Mute / Unmute Mic", VoiceChatKeybinds.ToggleMute.DisplayName);
+                Assert.Equal("Toggles whether your microphone sends voice.", VoiceChatKeybinds.ToggleMute.HelpText);
+            });
+            WithLocale("es_419", () =>
+            {
+                Assert.Equal("Silenciar / activar micrófono", VoiceChatKeybinds.ToggleMute.DisplayName);
+                Assert.Equal("Mute / Unmute Mic", VoiceChatKeybinds.ToggleMute.Id);
+                Assert.Equal("Alternar ensordecimiento", VoiceChatKeybinds.ToggleSpeaker.DisplayName);
+                Assert.Equal("Toggle Speaker", VoiceChatKeybinds.ToggleSpeaker.Id);
+                Assert.Equal("Pulsar para silenciar", VoiceChatKeybinds.PushToMute.DisplayName);
+                Assert.Equal("Hold To Mute", VoiceChatKeybinds.PushToMute.Id);
+            });
+        });
+    }
+
+    [Fact]
+    public void ToggleDeafenConstantsMatchTheirLocalizedEnglish()
+    {
+        WithTemporaryConfig(config =>
+        {
+            VoiceChatKeybinds.Initialize(config);
+            WithLocale("en_US", () =>
+            {
+                Assert.Equal(VoiceChatKeybinds.ToggleDeafenDisplayName, VoiceChatKeybinds.ToggleSpeaker.DisplayName);
+                Assert.Equal(VoiceChatKeybinds.ToggleDeafenHelpText, VoiceChatKeybinds.ToggleSpeaker.HelpText);
+            });
+        });
+    }
+
+    [Fact]
+    public void HostOptionHoldersResolveLabelsChoicesAndHelpPerLanguage()
+    {
+        WithTemporaryConfig(config =>
+        {
+            var toggle = new ToggleHolder(config, "Host.Loc", "Flag", Loc.L("host.public_voice_lobby", "Public Voice Lobby"), true,
+                Loc.L("host.public_voice_lobby_help", "Publishes this voice-enabled lobby to the Perfect Comms live directory so other Perfect Comms players can find it."));
+            var mode = new EnumHolder(config, "Host.Loc", "Mode", Loc.L("host.falloff_mode", "Voice Falloff"), 0,
+                typeof(VoiceFalloffMode),
+                new[] { Loc.L("host.falloff_mode_linear", "Linear"), Loc.L("host.falloff_mode_smooth", "Smooth") },
+                Loc.L("host.falloff_mode_help", "Chooses how voice volume fades as a player approaches the maximum hearing distance."));
+            WithLocale("en_US", () =>
+            {
+                Assert.Equal("Public Voice Lobby", toggle.Label);
+                Assert.Equal("Linear", mode.LabelAt(0));
+            });
+            WithLocale("es_ES", () =>
+            {
+                Assert.NotEqual("Public Voice Lobby", toggle.Label);
+                Assert.Equal("Host.Loc.Flag", toggle.Id);        // id never changes
+                Assert.Equal(2, mode.LabelCount);
+                Assert.NotEqual("Linear", mode.LabelAt(0));
+                Assert.NotEqual("Linear", mode.Labels[0]);
+            });
+        });
+    }
+
+    [Fact]
+    public void ThirdPartyOptionTextIsNeverTranslated()
+    {
+        var holder = new ModToggleHolder("my.mod.opt", "Lovers Radio", "A custom help");
+        WithLocale("es_419", () =>
+        {
+            Assert.Equal("Lovers Radio", holder.Label);
+            Assert.Equal("A custom help", holder.HelpText);
+        });
+    }
+
+    [Fact]
+    public void ConfigFileKeepsEnglishDescriptionsWhileThePanelHelpIsTranslated()
+    {
+        WithTemporaryConfig(config =>
+        {
+            var entry = config.Bind("Audio", "MicVolume", 1f,
+                ConfigHelp.D(Loc.L("help.mic_volume", "Adjusts how loudly your microphone is sent to other players. This does not change when the mic counts as speaking.")));
+            Assert.Equal("Adjusts how loudly your microphone is sent to other players. This does not change when the mic counts as speaking.",
+                entry.Description.Description);   // what is written to the .cfg
+            WithLocale("en_US", () => Assert.Equal(entry.Description.Description, ConfigHelp.Text(entry)));
+            WithLocale("es_419", () => Assert.StartsWith("Ajusta el volumen", ConfigHelp.Text(entry)));
+        });
+    }
+
+    [Fact]
+    public void DeviceNamesAreTranslatedForDisplayOnly()
+    {
+        var devices = new[]
+        {
+            new VoiceDeviceInfo(string.Empty, "Default", true),
+            new VoiceDeviceInfo("id-1", "USB Headset", false),
+            VoiceDeviceInfo.Unavailable("id-2", string.Empty, "Saved microphone"),
+            VoiceDeviceInfo.Unavailable("id-3", "Old Mic", "Saved microphone"),
+        };
+        WithLocale("en_US", () => Assert.Equal(
+            new[] { "Default", "USB Headset", "Saved microphone (unavailable)", "Old Mic (unavailable)" },
+            VoiceChatLocalSettings.DeviceNames(devices)));
+        WithLocale("es_419", () => Assert.Equal(
+            new[] { "Predeterminado", "USB Headset", "Micrófono guardado (no disponible)", "Old Mic (no disponible)" },
+            VoiceChatLocalSettings.DeviceNames(devices)));
+        Assert.Equal("Default", devices[0].Name);   // the stored name is data and never changes
+    }
+
+    private static void WithTemporaryConfig(Action<BepInEx.Configuration.ConfigFile> test)
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"PerfectComms-LocTests-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        try
+        {
+            test(new BepInEx.Configuration.ConfigFile(Path.Combine(directory, "loc.cfg"), saveOnInit: false,
+                new BepInEx.BepInPlugin("test.perfectcomms.localization2", "test", "1.0.0")));
+        }
+        finally
+        {
+            if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
+        }
+    }
+
     private static string Placeholders(string text)
         => string.Join(",", Placeholder.Matches(text).Select(m => m.Groups[1].Value).Distinct().OrderBy(v => v));
 

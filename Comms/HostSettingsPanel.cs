@@ -220,8 +220,8 @@ public static class HostSettingsPanel
                 return new VoiceUiKit.StepperRow(
                     () => e.Value,
                     i => e.Value = i,
-                    () => e.Labels.Length,
-                    i => e.Labels[Mathf.Clamp(i, 0, e.Labels.Length - 1)])
+                    () => e.LabelCount,
+                    i => e.LabelAt(i))
                     .Build(_shell.PaneRoot, e.Label, paneW, y, RowH, e.HelpText);
             case ModEnumHolder me:
                 return new VoiceUiKit.StepperRow(

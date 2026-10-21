@@ -100,6 +100,9 @@ internal static class Loc
         public string Text => T(Key, English);
         public string Format(params object[] args) => T(Key, English, args);
         public override string ToString() => Text;
+
+        /// <summary>Wraps text that is not translatable (third-party mod labels, user data).</summary>
+        public static LocText Plain(string text) => new(string.Empty, text);
     }
 
     internal static LocText L(string key, string english) => new(key, english);

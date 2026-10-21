@@ -977,7 +977,7 @@ public static class VoiceSettingsPanel
     }
 
     private static string SettingHelp(BepInEx.Configuration.ConfigEntryBase entry)
-        => entry.Description?.Description ?? string.Empty;
+        => ConfigHelp.Text(entry);
 
     public static void Tick()
     {

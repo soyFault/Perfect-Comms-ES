@@ -36,8 +36,14 @@ public sealed class VoiceKeybind
     /// not <see cref="DisplayName"/>.
     /// </summary>
     public string Id { get; }
-    public string DisplayName { get; }
-    public string HelpText { get; }
+    private readonly string _displayName;
+    private readonly string _helpText;
+    private readonly Loc.LocText? _displayLoc;
+    private readonly Loc.LocText? _helpLoc;
+
+    /// <summary>Name shown in the UI, in the current game language (the <see cref="Id"/> never changes).</summary>
+    public string DisplayName => _displayLoc?.Text ?? _displayName;
+    public string HelpText => _helpLoc?.Text ?? _helpText;
     public KeyCode Value => _entry.Value;
     public KeyCode CurrentKey => _entry.Value;
     public KeyCode Modifier => _modifier.Value;
@@ -129,10 +135,14 @@ public sealed class VoiceKeybind
         VoiceModifierMatch defaultModifierMatch,
         bool hasExplicitModifierMatch,
         string helpText,
-        string? configKey = null)
+        string? configKey = null,
+        Loc.LocText? displayLoc = null,
+        Loc.LocText? helpLoc = null)
     {
-        DisplayName = displayName;
-        HelpText = helpText;
+        _displayName = displayName;
+        _helpText = helpText;
+        _displayLoc = displayLoc;
+        _helpLoc = helpLoc;
         var persistedKey = string.IsNullOrWhiteSpace(configKey) ? displayName : configKey;
         Id = persistedKey;
         _entry = config.Bind(section, persistedKey, defaultKey);
@@ -148,6 +158,25 @@ public sealed class VoiceKeybind
             persistedKey + " Allow While Chat Open",
             IsRecommendedChatAllowedPrimary(_entry.Value));
     }
+
+    /// <summary>
+    /// Creates a binding whose UI name/help are translated. The English <paramref name="name"/> is the
+    /// persisted config key unless <paramref name="configKey"/> says otherwise, so existing saved
+    /// bindings keep working (see LocalizationIdentifierTests).
+    /// </summary>
+    internal static VoiceKeybind Localized(
+        ConfigFile config,
+        string section,
+        Loc.LocText name,
+        Loc.LocText help,
+        KeyCode defaultKey,
+        KeyCode defaultModifier = KeyCode.None,
+        VoiceModifierMatch? explicitMatch = null,
+        string? configKey = null)
+        => new(config, section, name.English, defaultKey, defaultModifier,
+            explicitMatch ?? LegacyModifierMatch(defaultModifier),
+            hasExplicitModifierMatch: explicitMatch.HasValue,
+            helpText: help.English, configKey: configKey, displayLoc: name, helpLoc: help);
 
     public void Set(KeyCode key)
     {
