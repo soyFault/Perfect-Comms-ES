@@ -51,7 +51,9 @@ Traducir `displayName` habría reseteado los atajos de todos los usuarios (esto 
 El commit de esta etapa solo toca los archivos de la tabla. Opciones: `git cherry-pick <commit>` desde `claude-local`, o
 `git diff origin/new-spanish..claude-local -- Comms PerfectComms.Tests` para recrearlo a mano. No depende de `Loc` (Etapa 1).
 
-## Pendiente de decisión: migrar los atajos de quien usó la versión hardcodeada de `main`
+## Decisión: NO migrar los atajos de quien usó la versión hardcodeada de `main`
+
+Resuelto por el dueño del repo: se pierden esos atajos y los ids se quedan en inglés (más simple para sincronizar el fork con upstream). La tabla se conserva solo como referencia.
 
 Quienes instalaron builds de `main`/`old-spanish` tienen estos atajos guardados en `[Keybinds]` bajo la clave **en español**. Con ids en inglés (lo correcto) esos atajos personalizados se verían reseteados al actualizar.
 Hay un patrón de migración en el repo (`RemoveRetiredHostRefreshBindings`). Propuesta (Etapa 1 o 4): en `VoiceChatKeybinds.Initialize`, antes de crear cada `VoiceKeybind`, si existe la clave legacy en el `.cfg` y la nueva no, copiar `<clave>`, `<clave> Modifier`, `<clave> Modifier Match` y `<clave> Allow While Chat Open`, y borrar las legacy. Tabla (id actual ← clave de `main`):

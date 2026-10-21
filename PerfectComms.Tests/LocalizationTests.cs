@@ -1,0 +1,207 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text.RegularExpressions;
+using VoiceChatPlugin.VoiceChat;
+using Xunit;
+
+public sealed class LocalizationTests
+{
+    private static readonly Regex Placeholder = new(@"\{\d+\}", RegexOptions.Compiled);
+
+    [Theory]
+    [InlineData(SupportedLangs.English, "en_US")]
+    [InlineData(SupportedLangs.Latam, "es_419")]
+    [InlineData(SupportedLangs.Spanish, "es_ES")]
+    [InlineData(SupportedLangs.French, "en_US")]
+    [InlineData(SupportedLangs.SChinese, "en_US")]
+    public void GameLanguageMapsToAShippedLocale(SupportedLangs language, string expected)
+    {
+        Assert.Equal(expected, Loc.LocaleFor(language));
+        Assert.Contains(Loc.LocaleFor(language), Loc.ShippedLocales);
+    }
+
+    [Fact]
+    public void WithoutAGameLanguageEnglishIsUsed()
+    {
+        // No DataManager in the test process: must not throw, must be English.
+        WithLocale(null, () => Assert.Equal("en_US", Loc.CurrentLocale));
+    }
+
+    [Fact]
+    public void EnglishAlwaysReturnsTheCodeLiteral()
+    {
+        WithLocale("en_US", () => Assert.Equal("Whatever", Loc.T("hud.muted", "Whatever")));
+    }
+
+    [Fact]
+    public void SpanishReturnsTheTranslationAndFallsBackWhenMissing()
+    {
+        foreach (var locale in new[] { "es_419", "es_ES" })
+            WithLocale(locale, () =>
+            {
+                Assert.Equal("Silenciado", Loc.T("hud.muted", "Muted"));
+                Assert.Equal("Not translated yet", Loc.T("no.such.key", "Not translated yet"));
+            });
+    }
+
+    [Fact]
+    public void UnknownLocaleFallsBackToEnglishText()
+    {
+        WithLocale("xx_XX", () => Assert.Equal("Muted", Loc.T("hud.muted", "Muted")));
+    }
+
+    [Fact]
+    public void PlaceholdersAreFormattedAndBrokenFormatsFallBack()
+    {
+        WithLocale("en_US", () => Assert.Equal("Step 2 of 5", Loc.T("k", "Step {0} of {1}", 2, 5)));
+        WithLocale("es_419", () =>
+            // Missing key -> English literal, still formatted.
+            Assert.Equal("Step 2 of 5", Loc.T("no.such.key", "Step {0} of {1}", 2, 5)));
+    }
+
+    [Fact]
+    public void ParseHandlesNewlinesAndEntities()
+    {
+        var table = Loc.Parse("<resources><string name=\"a\">One\\nTwo &amp; {0} C:\\\\x</string><string name=\"\">x</string></resources>");
+        Assert.Equal("One\nTwo & {0} C:\\x", table["a"]);
+        Assert.Single(table);
+    }
+
+    [Fact]
+    public void CompactStatusFollowsTheLanguage()
+    {
+        WithLocale("en_US", () => Assert.Equal("Muted / Deafened", VoiceCompactStatusPolicy.StateText(true, true)));
+        WithLocale("es_419", () =>
+        {
+            Assert.Equal("Silenciado / Ensordecido", VoiceCompactStatusPolicy.StateText(true, true));
+            Assert.Equal("Ensordecido", VoiceCompactStatusPolicy.StateText(false, true));
+            Assert.Equal("Silenciado", VoiceCompactStatusPolicy.StateText(true, false));
+        });
+    }
+
+    [Fact]
+    public void EveryShippedLocaleIsEmbeddedAndNotEmpty()
+    {
+        foreach (var locale in Loc.ShippedLocales)
+            Assert.NotEmpty(Loc.Table(locale));
+    }
+
+    [Fact]
+    public void AllLocalesHaveTheSameKeysAndPlaceholders()
+    {
+        var english = Loc.Table("en_US");
+        foreach (var locale in Loc.ShippedLocales.Where(l => l != "en_US"))
+        {
+            var table = Loc.Table(locale);
+            Assert.Empty(english.Keys.Except(table.Keys));   // untranslated keys
+            Assert.Empty(table.Keys.Except(english.Keys));   // orphan keys
+            foreach (var (key, text) in table)
+            {
+                Assert.False(string.IsNullOrWhiteSpace(text), $"{locale}:{key} is empty");
+                Assert.Equal(Placeholders(english[key]), Placeholders(text));
+            }
+        }
+    }
+
+    [Fact]
+    public void EnglishXmlMatchesTheLiteralsInTheSource()
+    {
+        var calls = LocScanner.Scan(LocScanner.FindRepoRoot());
+        var english = Loc.Table("en_US");
+
+        Assert.Empty(calls.Problems);
+        Assert.Empty(calls.Strings.Keys.Except(english.Keys));   // Loc.T key missing from en_US.xml: run scripts/localization.py
+        Assert.Empty(english.Keys.Except(calls.Strings.Keys));   // stale key in en_US.xml
+        foreach (var (key, text) in calls.Strings)
+            Assert.Equal(text, english[key]);
+    }
+
+    private static string Placeholders(string text)
+        => string.Join(",", Placeholder.Matches(text).Select(m => m.Value).Distinct().OrderBy(v => v));
+
+    private static void WithLocale(string? locale, Action body)
+    {
+        var previous = Loc.ForcedLocale;
+        Loc.ForcedLocale = locale;
+        try { body(); }
+        finally { Loc.ForcedLocale = previous; }
+    }
+}
+
+/// <summary>Finds <c>Loc.T("key", "English literal")</c> calls in the production sources.</summary>
+internal static class LocScanner
+{
+    internal sealed class Result
+    {
+        public Dictionary<string, string> Strings { get; } = new(StringComparer.Ordinal);
+        public List<string> Problems { get; } = new();
+    }
+
+    private static readonly Regex Call = new(
+        "Loc\\.T\\(\\s*\"(?<key>(?:[^\"\\\\]|\\\\.)*)\"\\s*,\\s*(?<english>\"(?:[^\"\\\\]|\\\\.)*\"|[^\\s\"][^,)]*)",
+        RegexOptions.Compiled);
+
+    internal static string FindRepoRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null && !File.Exists(Path.Combine(dir.FullName, "PerfectComms.csproj")))
+            dir = dir.Parent;
+        return dir?.FullName ?? throw new InvalidOperationException("PerfectComms.csproj not found above the test output.");
+    }
+
+    internal static Result Scan(string root)
+    {
+        var result = new Result();
+        var skipped = new[] { "PerfectComms.Tests", "PerfectComms.Starlight.Tests", "native", "Libs", "docs", "wiki", "cloudflare" };
+        foreach (var file in Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories))
+        {
+            var relative = Path.GetRelativePath(root, file).Replace('\\', '/');
+            var parts = relative.Split('/');
+            if (parts.Any(p => p is "bin" or "obj") || skipped.Contains(parts[0])) continue;
+            if (relative == "Comms/Loc.cs") continue;
+
+            foreach (Match m in Call.Matches(File.ReadAllText(file)))
+            {
+                var key = m.Groups["key"].Value;
+                var raw = m.Groups["english"].Value;
+                if (!raw.StartsWith('"'))
+                {
+                    result.Problems.Add($"{relative}: Loc.T(\"{key}\", ...) needs a plain string literal as English text (got `{raw}`)");
+                    continue;
+                }
+                var english = Unescape(raw[1..^1]);
+                if (english == null)
+                {
+                    result.Problems.Add($"{relative}: Loc.T(\"{key}\", ...) uses an unsupported escape sequence");
+                    continue;
+                }
+                if (result.Strings.TryGetValue(key, out var existing) && existing != english)
+                    result.Problems.Add($"{relative}: key \"{key}\" is used with different English texts");
+                result.Strings[key] = english;
+            }
+        }
+        return result;
+    }
+
+    private static string? Unescape(string literal)
+    {
+        var sb = new System.Text.StringBuilder();
+        for (int i = 0; i < literal.Length; i++)
+        {
+            if (literal[i] != '\\') { sb.Append(literal[i]); continue; }
+            if (++i >= literal.Length) return null;
+            switch (literal[i])
+            {
+                case 'n': sb.Append('\n'); break;
+                case 't': sb.Append('\t'); break;
+                case '"': sb.Append('"'); break;
+                case '\'': sb.Append('\''); break;
+                case '\\': sb.Append('\\'); break;
+                default: return null;
+            }
+        }
+        return sb.ToString();
+    }
+}

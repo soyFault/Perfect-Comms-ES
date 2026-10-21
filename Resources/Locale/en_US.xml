@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!--
+  Perfect Comms strings. One <string> per Loc.T("key", "English") call site.
+  Plain text only: {0} placeholders, \n for a newline. TextMeshPro markup stays in C#.
+  en_US.xml is generated from the code (scripts/localization.py) and checked by LocalizationTests.
+-->
+<resources>
+  <string name="hud.deafened">Deafened</string>
+  <string name="hud.muted">Muted</string>
+  <string name="hud.muted_deafened">Muted / Deafened</string>
+</resources>

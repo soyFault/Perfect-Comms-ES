@@ -94,7 +94,8 @@ Nota: los `ConfigDescription` se escriben al `.cfg` al crear el archivo → qued
 3. `.cfg` (ConfigDescription) siempre en inglés; la UI traduce la ayuda por id.
 4. Se trabaja por etapas; cada etapa documentada en `docs/localization/etapaN.md`.
 
-Progreso: [Etapa 0](localization/etapa0.md) ✔
+Progreso: [Etapa 0](localization/etapa0.md) ✔ · [Etapa 1](localization/etapa1.md) ✔
+5. Atajos del fork hardcodeado (`main`): no se migran; los ids siguen en inglés.
 
 ## 6. (histórico) Preguntas iniciales
 1. Confirmar el alcance de la Etapa 5 (¿Android, README/wiki, updater?).
