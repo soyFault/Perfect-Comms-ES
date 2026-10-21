@@ -1,0 +1,111 @@
+// REFERENCE IMPLEMENTATION - not compiled (.txt on purpose). Copy to Comms/Loc.cs.
+// Pattern adapted from MiraAPI's MiraLocaleManager (All-Of-Us-Mods/MiraAPI, LGPL-2.1, same license
+// as this repo): XML embedded resources named after the game's language, loaded lazily, with fallback.
+// Differences: no Reactor/MiraAPI dependency, no StringNames registration (we only need text), and
+// the English text lives in the call site as the fallback, so unit tests and a missing key keep working.
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Reflection;
+using System.Xml;
+
+namespace VoiceChatPlugin.VoiceChat;
+
+internal static class Loc
+{
+    // Embedded resource prefix: Resources/Locale/es_419.xml -> "VoiceChatPlugin.Resources.Locale.es_419.xml"
+    // (same pattern as VoiceChatHudState.LoadSprite("VoiceChatPlugin.Resources.X.png")).
+    private const string ResourcePrefix = "VoiceChatPlugin.Resources.Locale.";
+    private static readonly object Gate = new();
+    private static readonly Dictionary<string, Dictionary<string, string>> Cache = new();
+
+    // Test hook / manual override (config option "Language: Auto/English/Español").
+    internal static string? ForcedLocale;
+
+    /// <summary>Locale file name for the language currently selected in Among Us ("en_US" if unknown).</summary>
+    internal static string CurrentLocale
+    {
+        get
+        {
+            if (ForcedLocale != null) return ForcedLocale;
+            try
+            {
+                // Same source MiraLocaleManager.CurrentLanguage uses.
+                return AmongUs.Data.DataManager.Settings.Language.CurrentLanguage switch
+                {
+                    SupportedLangs.Latam => "es_419",
+                    SupportedLangs.Spanish => "es_419", // no es_ES translation: share the Latin American one
+                    _ => "en_US",
+                };
+            }
+            catch
+            {
+                // DataManager not ready (plugin Load, unit tests, headless harness).
+                return "en_US";
+            }
+        }
+    }
+
+    /// <summary>Translate <paramref name="key"/>; returns <paramref name="english"/> if the key/locale is missing.</summary>
+    internal static string T(string key, string english)
+    {
+        var locale = CurrentLocale;
+        if (locale == "en_US") return english; // English is always the code literal: zero risk for English users.
+        return Lookup(locale, key) ?? english;
+    }
+
+    /// <summary>Translate and string.Format. XML placeholders are {0}, {1}...</summary>
+    internal static string T(string key, string english, params object[] args)
+    {
+        var text = T(key, english);
+        try { return string.Format(text, args); }
+        catch (FormatException) { return string.Format(english, args); } // bad translation never crashes the UI
+    }
+
+    private static string? Lookup(string locale, string key)
+    {
+        Dictionary<string, string> table;
+        lock (Gate)
+        {
+            if (!Cache.TryGetValue(locale, out table!))
+            {
+                table = Load(locale);
+                Cache[locale] = table;
+            }
+        }
+        return table.TryGetValue(key, out var value) ? value : null;
+    }
+
+    private static Dictionary<string, string> Load(string locale)
+    {
+        var result = new Dictionary<string, string>(StringComparer.Ordinal);
+        try
+        {
+            using var stream = Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream(ResourcePrefix + locale + ".xml");
+            if (stream == null) return result;
+            using var reader = new StreamReader(stream);
+            var doc = new XmlDocument();
+            doc.LoadXml(reader.ReadToEnd());
+            var nodes = doc.SelectNodes("/resources/string");
+            if (nodes == null) return result;
+            foreach (XmlNode node in nodes)
+            {
+                var name = node.Attributes?["name"]?.Value;
+                if (string.IsNullOrEmpty(name)) continue;
+                // Same escapes as MiraAPI: <nl> = newline. Keep TMP markup (<color>, <size>) in C#, not in XML.
+                result[name] = node.InnerText.Replace("<nl>", "\n");
+            }
+        }
+        catch (Exception ex)
+        {
+            VoiceDiagnostics.Log("loc.error", $"locale={locale} error=\"{ex.Message}\"");
+        }
+        return result;
+    }
+}
+
+// Usage:
+//   AddText(root, Loc.T("firstrun.step", "Step {0} of {1}", _page + 1, PageCount), ...);
+//   Label = Loc.T("keybind.mute", "Mute / Unmute Mic");            // resolve when the UI is BUILT, not in a ctor/const
+//   $"<color=#22D3EE>{Loc.T("settings.none", "None")}</color>"      // markup stays in code
