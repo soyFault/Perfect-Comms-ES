@@ -16,6 +16,13 @@ internal static class VoiceSettingsCategoryText
     /// (<see cref="VoiceUiBranding.CategoryIcon"/>), so it must never be shown through
     /// <c>ToString()</c> once captions are localized.
     /// </summary>
-    internal static string Caption(VoiceSettingsCategory category)
-        => category == VoiceSettingsCategory.Hud ? "HUD" : category.ToString();
+    internal static string Caption(VoiceSettingsCategory category) => category switch
+    {
+        VoiceSettingsCategory.Audio => Loc.T("category.audio", "Audio"),
+        VoiceSettingsCategory.Devices => Loc.T("category.devices", "Devices"),
+        VoiceSettingsCategory.Keybinds => Loc.T("category.keybinds", "Keybinds"),
+        VoiceSettingsCategory.Hud => Loc.T("category.hud", "HUD"),
+        VoiceSettingsCategory.Advanced => Loc.T("category.advanced", "Advanced"),
+        _ => category.ToString(),
+    };
 }

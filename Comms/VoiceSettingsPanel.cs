@@ -378,7 +378,7 @@ public static class VoiceSettingsPanel
 
         if (visible.Count == 0)
         {
-            var empty = VoiceUiKit.Text("Empty", _shell.PaneRoot, "No options", 16f,
+            var empty = VoiceUiKit.Text("Empty", _shell.PaneRoot, Loc.T("settings.no_options", "No options"), 16f,
                 VoiceUiKit.TextMuted, TMPro.TextAlignmentOptions.Center);
             empty.rectTransform.Anchor(new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f));
             empty.rectTransform.sizeDelta = new Vector2(0f, 40f);
@@ -392,15 +392,15 @@ public static class VoiceSettingsPanel
     /// </summary>
     internal static string? RowHelp(string key) => key switch
     {
-        "Mic Volume" => "How loud other players hear you.",
-        "Mic Sensitivity" => "How easily your mic detects speech.",
-        "Speaker Volume" => "The voice audio you hear.",
-        "Meeting Spatial Audio" => "Directional voices during meetings.",
-        "Mic Mode" => "Choose when your microphone transmits.",
-        "Noise Gate" => "Gate residual room noise between phrases.",
-        "Noise Suppression" => "Reduce background noise while preserving speech.",
-        "Stronger Noise Suppression" => "More reduction, with a tradeoff for quieter speech.",
-        "Echo Cancellation" => "Reduce speaker audio picked up by your mic.",
+        "Mic Volume" => Loc.T("settings.rowhelp_mic_volume", "How loud other players hear you."),
+        "Mic Sensitivity" => Loc.T("settings.rowhelp_mic_sensitivity", "How easily your mic detects speech."),
+        "Speaker Volume" => Loc.T("settings.rowhelp_speaker_volume", "The voice audio you hear."),
+        "Meeting Spatial Audio" => Loc.T("settings.rowhelp_meeting_spatial_audio", "Directional voices during meetings."),
+        "Mic Mode" => Loc.T("settings.rowhelp_mic_mode", "Choose when your microphone transmits."),
+        "Noise Gate" => Loc.T("settings.rowhelp_noise_gate", "Gate residual room noise between phrases."),
+        "Noise Suppression" => Loc.T("settings.rowhelp_noise_suppression", "Reduce background noise while preserving speech."),
+        "Stronger Noise Suppression" => Loc.T("settings.rowhelp_stronger_noise_suppression", "More reduction, with a tradeoff for quieter speech."),
+        "Echo Cancellation" => Loc.T("settings.rowhelp_echo_cancellation", "Reduce speaker audio picked up by your mic."),
         _ => null,
     };
 
@@ -495,90 +495,90 @@ public static class VoiceSettingsPanel
 
     private static Func<float, string> Pct => v => $"{Mathf.RoundToInt(v * 100f)}%";
     private static Func<float, string> VolumePct => v => v <= 0.005f
-        ? "None"
+        ? Loc.T("settings.volume_none", "None")
         : Pct(v);
     private static Func<float, string> Num2 => v => v.ToString("0.00", CultureInfo.InvariantCulture);
 
-    private static void Section(List<Entry> defs, string title)
+    private static void Section(List<Entry> defs, Loc.LocText title)
     {
         defs.Add(new Entry
         {
-            Key = "##" + title,
+            Key = "##" + title.English,
             Height = HeaderH,
             IsHeader = true,
             Visible = Always,
             Build = (pane, paneW, y) =>
             {
-                VoiceUiKit.SectionHeader(title, pane, title, paneW, y, HeaderH);
+                VoiceUiKit.SectionHeader(title.English, pane, title.Text, paneW, y, HeaderH);
                 return null;
             }
         });
     }
 
-    private static void Slider(List<Entry> defs, string label,
+    private static void Slider(List<Entry> defs, Loc.LocText label,
         BepInEx.Configuration.ConfigEntry<float> entry, Func<float, string> fmt,
         Func<bool>? visible = null, string? key = null)
     {
         var range = GetRange(entry);
         defs.Add(new Entry
         {
-            Key = key ?? label,
+            Key = key ?? label.English,
             Visible = visible ?? Always,
             Build = (pane, paneW, y) => new VoiceUiKit.SliderRow(
                 () => entry.Value, v => entry.Value = v, range.x, range.y, fmt)
-                .Build(pane, label, paneW, y, RowH, SettingHelp(entry))
+                .Build(pane, label.Text, paneW, y, RowH, SettingHelp(entry))
         });
     }
 
-    private static void Toggle(List<Entry> defs, string label,
+    private static void Toggle(List<Entry> defs, Loc.LocText label,
         BepInEx.Configuration.ConfigEntry<bool> entry, Func<bool>? visible = null)
     {
         defs.Add(new Entry
         {
-            Key = label,
+            Key = label.English,
             Visible = visible ?? Always,
             Build = (pane, paneW, y) => new VoiceUiKit.ToggleRow(() => entry.Value, v => entry.Value = v)
-                .Build(pane, label, paneW, y, RowH, SettingHelp(entry))
+                .Build(pane, label.Text, paneW, y, RowH, SettingHelp(entry))
         });
     }
 
-    private static void Toggle(List<Entry> defs, string label,
+    private static void Toggle(List<Entry> defs, Loc.LocText label,
         Func<bool> get, Action<bool> set, string help, Func<bool>? visible = null)
     {
         defs.Add(new Entry
         {
-            Key = label,
+            Key = label.English,
             Visible = visible ?? Always,
             Build = (pane, paneW, y) => new VoiceUiKit.ToggleRow(get, set)
-                .Build(pane, label, paneW, y, RowH, help)
+                .Build(pane, label.Text, paneW, y, RowH, help)
         });
     }
 
-    private static void EnumStep<TEnum>(List<Entry> defs, string label,
-        BepInEx.Configuration.ConfigEntry<TEnum> entry, string[] labels, Func<bool>? visible = null)
+    private static void EnumStep<TEnum>(List<Entry> defs, Loc.LocText label,
+        BepInEx.Configuration.ConfigEntry<TEnum> entry, Loc.LocText[] labels, Func<bool>? visible = null)
         where TEnum : struct, Enum
     {
         defs.Add(new Entry
         {
-            Key = label,
+            Key = label.English,
             Visible = visible ?? Always,
             Build = (pane, paneW, y) => new VoiceUiKit.StepperRow(
                 () => Convert.ToInt32(entry.Value),
                 i => entry.Value = (TEnum)Enum.ToObject(typeof(TEnum), i),
                 () => labels.Length,
-                i => labels[Mathf.Clamp(i, 0, labels.Length - 1)])
-                .Build(pane, label, paneW, y, RowH, SettingHelp(entry))
+                i => labels[Mathf.Clamp(i, 0, labels.Length - 1)].Text)
+                .Build(pane, label.Text, paneW, y, RowH, SettingHelp(entry))
         });
     }
 
     private static void BuildAudio(List<Entry> defs, VoiceChatLocalSettings s)
     {
-        Section(defs, "LEVELS");
-        Slider(defs, "Mic Volume", s.MicVolume, Pct);
-        Slider(defs, "Mic Sensitivity", s.MicSensitivity, Num2);
-        Slider(defs, "Speaker Volume", s.MasterVolume, Pct);
-        EnumStep(defs, "Meeting Spatial Audio", s.MeetingSpatial, new[] { "Off", "Low", "Full" });
-        Section(defs, "PROCESSING");
+        Section(defs, Loc.L("settings.section.levels", "LEVELS"));
+        Slider(defs, Loc.L("settings.row.mic_volume", "Mic Volume"), s.MicVolume, Pct);
+        Slider(defs, Loc.L("settings.row.mic_sensitivity", "Mic Sensitivity"), s.MicSensitivity, Num2);
+        Slider(defs, Loc.L("settings.row.speaker_volume", "Speaker Volume"), s.MasterVolume, Pct);
+        EnumStep(defs, Loc.L("settings.row.meeting_spatial_audio", "Meeting Spatial Audio"), s.MeetingSpatial, new[] { Loc.L("settings.spatial_off", "Off"), Loc.L("settings.spatial_low", "Low"), Loc.L("settings.spatial_full", "Full") });
+        Section(defs, Loc.L("settings.section.processing", "PROCESSING"));
         defs.Add(new Entry
         {
             Key = "Mic Mode",
@@ -586,16 +586,16 @@ public static class VoiceSettingsPanel
                     () => s.MicMode.Value, value => s.MicMode.Value = value)
                 .Build(pane, paneW, y, RowH, SettingHelp(s.MicMode)),
         });
-        Toggle(defs, "Noise Gate", s.NoiseGateEnabled);
+        Toggle(defs, Loc.L("settings.row.noise_gate", "Noise Gate"), s.NoiseGateEnabled);
 #if WINDOWS
-        Toggle(defs, "Noise Suppression", s.NoiseSuppressionEnabled);
-        Toggle(defs, "Stronger Noise Suppression", s.StrongerNoiseSuppressionEnabled);
-        Toggle(defs, "Echo Cancellation", s.EchoCancellationEnabled);
+        Toggle(defs, Loc.L("settings.row.noise_suppression", "Noise Suppression"), s.NoiseSuppressionEnabled);
+        Toggle(defs, Loc.L("settings.row.stronger_noise_suppression", "Stronger Noise Suppression"), s.StrongerNoiseSuppressionEnabled);
+        Toggle(defs, Loc.L("settings.row.echo_cancellation", "Echo Cancellation"), s.EchoCancellationEnabled);
 #endif
-        Slider(defs, "Voice Falloff Softness", s.VoiceFalloffSoftness, Pct);
-        Section(defs, "STARTUP");
-        Toggle(defs, "Start Muted", s.StartMuted);
-        Toggle(defs, "Start Deafened", s.StartDeafened);
+        Slider(defs, Loc.L("settings.row.voice_falloff_softness", "Voice Falloff Softness"), s.VoiceFalloffSoftness, Pct);
+        Section(defs, Loc.L("settings.section.startup", "STARTUP"));
+        Toggle(defs, Loc.L("settings.row.start_muted", "Start Muted"), s.StartMuted);
+        Toggle(defs, Loc.L("settings.row.start_deafened", "Start Deafened"), s.StartDeafened);
     }
 
     private static void BuildDevices(List<Entry> defs, VoiceChatLocalSettings s)
@@ -613,7 +613,7 @@ public static class VoiceSettingsPanel
                 () => VoiceChatLocalSettings.MicDeviceNames.Length,
                 i => DeviceName(VoiceChatLocalSettings.MicDeviceNames, i),
                 fullWidthValue: true)
-                .Build(pane, "Microphone", paneW, y, DeviceRowH,
+                .Build(pane, Loc.L("settings.row.microphone", "Microphone").Text, paneW, y, DeviceRowH,
                     SettingHelp(s.MicrophoneDeviceIndex))
         });
 
@@ -629,12 +629,12 @@ public static class VoiceSettingsPanel
                 () => VoiceChatLocalSettings.SpkDeviceNames.Length,
                 i => DeviceName(VoiceChatLocalSettings.SpkDeviceNames, i),
                 fullWidthValue: true)
-                .Build(pane, "Speaker", paneW, y, DeviceRowH,
+                .Build(pane, Loc.L("settings.row.speaker", "Speaker").Text, paneW, y, DeviceRowH,
                     SettingHelp(s.SpeakerDeviceIndex))
         });
 #endif
 
-        Section(defs, "MICROPHONE TEST");
+        Section(defs, Loc.L("settings.section.microphone_test", "MICROPHONE TEST"));
         defs.Add(new Entry
         {
             Key = "Microphone Test",
@@ -642,21 +642,21 @@ public static class VoiceSettingsPanel
             Build = (pane, paneW, y) => new VoiceUiKit.ActionRow(ToggleMicrophoneTest)
                 .Build(
                     pane,
-                    "Hear Your Microphone",
+                    Loc.T("settings.hear_your_microphone", "Hear Your Microphone"),
                     _microphoneTest?.IsMicrophoneTestStarting == true
-                        ? "Cancel Start"
-                        : _microphoneTest?.IsMicrophoneTestActive == true ? "Stop Test" : "Start Test",
+                        ? Loc.T("settings.cancel_start", "Cancel Start")
+                        : _microphoneTest?.IsMicrophoneTestActive == true ? Loc.T("settings.stop_test", "Stop Test") : Loc.T("settings.start_test", "Start Test"),
                     paneW,
                     y,
                     RowH,
-                    "Plays the selected microphone through the selected speaker so you can check how it sounds. Headphones are recommended to prevent feedback.")
+                    Loc.T("settings.help_mic_test", "Plays the selected microphone through the selected speaker so you can check how it sounds. Headphones are recommended to prevent feedback."))
         });
         Toggle(
             defs,
-            "Delayed Playback",
+            Loc.L("settings.row.delayed_playback", "Delayed Playback"),
             () => _microphoneTestDelayed,
             SetMicrophoneTestDelayed,
-            "Adds a one-second delay, making it easier to speak first and then listen to the captured result.");
+            Loc.T("settings.help_delayed_playback", "Adds a one-second delay, making it easier to speak first and then listen to the captured result."));
     }
 
     private static void SetMicrophoneDeviceIndex(VoiceChatLocalSettings settings, int index)
@@ -711,7 +711,7 @@ public static class VoiceSettingsPanel
 
     private static string DeviceName(string[] names, int i)
     {
-        if (names.Length == 0) return "<color=#607282>No devices found</color>";
+        if (names.Length == 0) return "<color=#607282>" + Loc.T("settings.no_devices", "No devices found") + "</color>";
         return names[Mathf.Clamp(i, 0, names.Length - 1)];
     }
 
@@ -750,7 +750,7 @@ public static class VoiceSettingsPanel
 
     private static void Action(
         List<Entry> defs,
-        string label,
+        Loc.LocText label,
         string buttonText,
         System.Action onClick,
         string help,
@@ -758,10 +758,10 @@ public static class VoiceSettingsPanel
     {
         defs.Add(new Entry
         {
-            Key = label,
+            Key = label.English,
             Visible = visible ?? Always,
             Build = (pane, paneW, y) => new VoiceUiKit.ActionRow(onClick)
-                .Build(pane, label, buttonText, paneW, y, RowH, help)
+                .Build(pane, label.Text, buttonText, paneW, y, RowH, help)
         });
     }
 
@@ -780,7 +780,11 @@ public static class VoiceSettingsPanel
             SpeakingBarNamePosition.Left,
             SpeakingBarNamePosition.Right,
         };
-        var labels = new[] { "Auto", "Bottom", "Top", "Left", "Right" };
+        var labels = new[]
+        {
+            Loc.L("settings.name_auto", "Auto"), Loc.L("settings.name_bottom", "Bottom"), Loc.L("settings.name_top", "Top"),
+            Loc.L("settings.name_left", "Left"), Loc.L("settings.name_right", "Right"),
+        };
 
         defs.Add(new Entry
         {
@@ -794,8 +798,8 @@ public static class VoiceSettingsPanel
                 },
                 i => settings.SpeakingBarNamePosition.Value = order[Mathf.Clamp(i, 0, order.Length - 1)],
                 () => order.Length,
-                i => labels[Mathf.Clamp(i, 0, labels.Length - 1)])
-                .Build(pane, "Speaking Bar Name Position", paneW, y, RowH,
+                i => labels[Mathf.Clamp(i, 0, labels.Length - 1)].Text)
+                .Build(pane, Loc.L("settings.row.speaking_bar_name_position", "Speaking Bar Name Position").Text, paneW, y, RowH,
                     SettingHelp(settings.SpeakingBarNamePosition))
         });
     }
@@ -822,7 +826,7 @@ public static class VoiceSettingsPanel
             _chatKeybindEditorExpanded = false;
         Toggle(
             defs,
-            "Allow Keybinds While Chat Is Open",
+            Loc.L("settings.row.allow_keybinds_while_chat_is_open", "Allow Keybinds While Chat Is Open"),
             () => s.AllowKeybindsWhileChatOpen.Value,
             value =>
             {
@@ -833,10 +837,10 @@ public static class VoiceSettingsPanel
             SettingHelp(s.AllowKeybindsWhileChatOpen));
         Action(
             defs,
-            "Chat Keybinds",
-            _chatKeybindEditorExpanded ? "Done" : "Choose Chat Keybinds",
+            Loc.L("settings.row.chat_keybinds", "Chat Keybinds"),
+            _chatKeybindEditorExpanded ? Loc.T("settings.done", "Done") : Loc.T("settings.choose_chat_keybinds", "Choose Chat Keybinds"),
             ToggleChatKeybindEditor,
-            "Choose the individual bindings that may work while the Among Us chat is open. Tasks/minigames, the Friends List, and modals still block them.",
+            Loc.T("settings.help_chat_keybinds", "Choose the individual bindings that may work while the Among Us chat is open. Tasks/minigames, the Friends List, and modals still block them."),
             () => !s.AllowKeybindsWhileChatOpen.Value);
         Rebind(defs, VoiceChatKeybinds.OpenVoiceMenu);
         Rebind(defs, VoiceChatKeybinds.OpenHostVoiceSettings);
@@ -853,9 +857,9 @@ public static class VoiceSettingsPanel
             () => _expandedMixSettings == MixSettingsExpansion.AliveFocus);
         if (_expandedMixSettings == MixSettingsExpansion.AliveFocus)
         {
-            Slider(defs, "Alive Players", s.AliveFocusAliveVolume, VolumePct,
+            Slider(defs, Loc.L("settings.row.alive_players", "Alive Players"), s.AliveFocusAliveVolume, VolumePct,
                 key: "AliveFocus.AlivePlayers");
-            Slider(defs, "Dead Players", s.AliveFocusDeadVolume, VolumePct,
+            Slider(defs, Loc.L("settings.row.dead_players", "Dead Players"), s.AliveFocusDeadVolume, VolumePct,
                 key: "AliveFocus.DeadPlayers");
         }
         Rebind(defs, VoiceChatKeybinds.AliveQuieterDeadLouder,
@@ -863,9 +867,9 @@ public static class VoiceSettingsPanel
             () => _expandedMixSettings == MixSettingsExpansion.DeadFocus);
         if (_expandedMixSettings == MixSettingsExpansion.DeadFocus)
         {
-            Slider(defs, "Alive Players", s.DeadFocusAliveVolume, VolumePct,
+            Slider(defs, Loc.L("settings.row.alive_players", "Alive Players"), s.DeadFocusAliveVolume, VolumePct,
                 key: "DeadFocus.AlivePlayers");
-            Slider(defs, "Dead Players", s.DeadFocusDeadVolume, VolumePct,
+            Slider(defs, Loc.L("settings.row.dead_players", "Dead Players"), s.DeadFocusDeadVolume, VolumePct,
                 key: "DeadFocus.DeadPlayers");
         }
         Rebind(defs, VoiceChatKeybinds.LocalVoiceRefresh);
@@ -879,10 +883,10 @@ public static class VoiceSettingsPanel
         Func<bool> showVoiceControls = () => visibility().VoiceControlsHudVisible;
         Func<bool> showSpeakingBar = () => visibility().SpeakingBarVisible;
 
-        Section(defs, "VOICE CONTROLS");
+        Section(defs, Loc.L("settings.section.voice_controls", "VOICE CONTROLS"));
         Toggle(
             defs,
-            "Disable Voice Controls HUD",
+            Loc.L("settings.row.disable_voice_controls_hud", "Disable Voice Controls HUD"),
             () => s.DisableVoiceControlsHud.Value,
             value =>
             {
@@ -890,20 +894,20 @@ public static class VoiceSettingsPanel
                 _rebuildRequested = true;
             },
             SettingHelp(s.DisableVoiceControlsHud));
-        EnumStep(defs, "Controls Layout", s.VoiceControlsLayout,
-            new[] { "Vertical", "Horizontal" }, showVoiceControls);
-        Slider(defs, "Button Position X", s.ButtonPositionX, Pct, showVoiceControls);
-        Slider(defs, "Button Position Y", s.ButtonPositionY, Pct, showVoiceControls);
-        Slider(defs, "Button Scale", s.OverlayScale, Num2, showVoiceControls);
-        Toggle(defs, "Mute / Deafen Status Reminder", s.ShowMuteDeafenStatusAlerts,
+        EnumStep(defs, Loc.L("settings.row.controls_layout", "Controls Layout"), s.VoiceControlsLayout,
+            new[] { Loc.L("settings.layout_vertical", "Vertical"), Loc.L("settings.layout_horizontal", "Horizontal") }, showVoiceControls);
+        Slider(defs, Loc.L("settings.row.button_position_x", "Button Position X"), s.ButtonPositionX, Pct, showVoiceControls);
+        Slider(defs, Loc.L("settings.row.button_position_y", "Button Position Y"), s.ButtonPositionY, Pct, showVoiceControls);
+        Slider(defs, Loc.L("settings.row.button_scale", "Button Scale"), s.OverlayScale, Num2, showVoiceControls);
+        Toggle(defs, Loc.L("settings.row.mute_deafen_status_reminder", "Mute / Deafen Status Reminder"), s.ShowMuteDeafenStatusAlerts,
             showVoiceControls);
-        Toggle(defs, "Voice Connection Status", s.ShowVoiceConnectionStatus,
+        Toggle(defs, Loc.L("settings.row.voice_connection_status", "Voice Connection Status"), s.ShowVoiceConnectionStatus,
             showVoiceControls);
 
-        Section(defs, "SPEAKING BAR");
+        Section(defs, Loc.L("settings.section.speaking_bar", "SPEAKING BAR"));
         Toggle(
             defs,
-            "Disable Speaking Bar",
+            Loc.L("settings.row.disable_speaking_bar", "Disable Speaking Bar"),
             () => s.DisableSpeakingBar.Value,
             value =>
             {
@@ -911,49 +915,50 @@ public static class VoiceSettingsPanel
                 _rebuildRequested = true;
             },
             SettingHelp(s.DisableSpeakingBar));
-        Toggle(defs, "Show All Players", s.SpeakingBarFixedAllPlayers, showSpeakingBar);
-        Toggle(defs, "Live Preview", s.SpeakingBarLivePreview, showSpeakingBar);
-        EnumStep(defs, "Speaking Bar Position", s.SpeakingBarPosition, new[]
+        Toggle(defs, Loc.L("settings.row.show_all_players", "Show All Players"), s.SpeakingBarFixedAllPlayers, showSpeakingBar);
+        Toggle(defs, Loc.L("settings.row.live_preview", "Live Preview"), s.SpeakingBarLivePreview, showSpeakingBar);
+        EnumStep(defs, Loc.L("settings.row.speaking_bar_position", "Speaking Bar Position"), s.SpeakingBarPosition, new[]
         {
-            "Top Left", "Top Middle", "Top Right", "Bottom Left", "Bottom Middle", "Bottom Right",
-            "Middle Left", "Middle Right"
+            Loc.L("settings.position.top_left", "Top Left"), Loc.L("settings.position.top_middle", "Top Middle"), Loc.L("settings.position.top_right", "Top Right"),
+            Loc.L("settings.position.bottom_left", "Bottom Left"), Loc.L("settings.position.bottom_middle", "Bottom Middle"), Loc.L("settings.position.bottom_right", "Bottom Right"),
+            Loc.L("settings.position.middle_left", "Middle Left"), Loc.L("settings.position.middle_right", "Middle Right")
         }, showSpeakingBar);
-        EnumStep(defs, "Side Layout", s.SpeakingBarSideLayout, new[] { "Single Lane", "Wrapped" },
+        EnumStep(defs, Loc.L("settings.row.side_layout", "Side Layout"), s.SpeakingBarSideLayout, new[] { Loc.L("settings.side_single_lane", "Single Lane"), Loc.L("settings.side_wrapped", "Wrapped") },
             () => showSpeakingBar() &&
                   !s.SpeakingBarManualLayout.Value &&
                   SpeakingBarLayoutPolicy.IsSidePreset(s.SpeakingBarPosition.Value));
         SpeakingBarNamePositionStep(defs, s, showSpeakingBar);
-        Slider(defs, "Speaking Bar Scale", s.SpeakingBarScale, Pct, showSpeakingBar);
-        Toggle(defs, "Speaking Bar Backdrop", s.SpeakingBarBackdrop, showSpeakingBar);
-        Toggle(defs, "Speaking Bar Manual Layout", s.SpeakingBarManualLayout, showSpeakingBar);
-        EnumStep(defs, "Speaking Bar Layout", s.SpeakingBarLayout, new[] { "Vertical", "Horizontal" },
+        Slider(defs, Loc.L("settings.row.speaking_bar_scale", "Speaking Bar Scale"), s.SpeakingBarScale, Pct, showSpeakingBar);
+        Toggle(defs, Loc.L("settings.row.speaking_bar_backdrop", "Speaking Bar Backdrop"), s.SpeakingBarBackdrop, showSpeakingBar);
+        Toggle(defs, Loc.L("settings.row.speaking_bar_manual_layout", "Speaking Bar Manual Layout"), s.SpeakingBarManualLayout, showSpeakingBar);
+        EnumStep(defs, Loc.L("settings.row.speaking_bar_layout", "Speaking Bar Layout"), s.SpeakingBarLayout, new[] { Loc.L("settings.layout_vertical", "Vertical"), Loc.L("settings.layout_horizontal", "Horizontal") },
             () => showSpeakingBar() && s.SpeakingBarManualLayout.Value);
-        EnumStep(defs, "Avatar Facing", s.SpeakingBarAvatarFacing, new[] { "Right", "Left" },
+        EnumStep(defs, Loc.L("settings.row.avatar_facing", "Avatar Facing"), s.SpeakingBarAvatarFacing, new[] { Loc.L("settings.facing_right", "Right"), Loc.L("settings.facing_left", "Left") },
             () => showSpeakingBar() && s.SpeakingBarManualLayout.Value);
-        Slider(defs, "Speaking Bar X", s.SpeakingBarX, Pct,
+        Slider(defs, Loc.L("settings.row.speaking_bar_x", "Speaking Bar X"), s.SpeakingBarX, Pct,
             () => showSpeakingBar() && s.SpeakingBarManualLayout.Value);
-        Slider(defs, "Speaking Bar Y", s.SpeakingBarY, Pct,
+        Slider(defs, Loc.L("settings.row.speaking_bar_y", "Speaking Bar Y"), s.SpeakingBarY, Pct,
             () => showSpeakingBar() && s.SpeakingBarManualLayout.Value);
 
-        Section(defs, "MEETING OVERLAY");
-        Toggle(defs, "Meeting Speaking Overlay", s.MeetingSpeakingOverlay);
+        Section(defs, Loc.L("settings.section.meeting_overlay", "MEETING OVERLAY"));
+        Toggle(defs, Loc.L("settings.row.meeting_speaking_overlay", "Meeting Speaking Overlay"), s.MeetingSpeakingOverlay);
 
-        Section(defs, "OTHER");
+        Section(defs, Loc.L("settings.section.other", "OTHER"));
     }
 
     private static void BuildAdvanced(List<Entry> defs, VoiceChatLocalSettings s)
     {
-        Section(defs, "SETUP");
-        Action(defs, "First-Time Setup", "RUN SETUP AGAIN", ShowFirstRunSetup,
-            "Reopens the guided audio, controls, and HUD setup. Your current settings are kept unless you finish with changes.");
+        Section(defs, Loc.L("settings.section.setup", "SETUP"));
+        Action(defs, Loc.L("settings.row.first_time_setup", "First-Time Setup"), Loc.T("settings.run_setup_again", "RUN SETUP AGAIN"), ShowFirstRunSetup,
+            Loc.T("settings.help_run_setup", "Reopens the guided audio, controls, and HUD setup. Your current settings are kept unless you finish with changes."));
 
-        Section(defs, "TROUBLESHOOTING");
-        Toggle(defs, "Show Fake 15 Players", s.ShowFake15Players,
+        Section(defs, Loc.L("settings.section.troubleshooting", "TROUBLESHOOTING"));
+        Toggle(defs, Loc.L("settings.row.show_fake_15_players", "Show Fake 15 Players"), s.ShowFake15Players,
             () => !s.DisableSpeakingBar.Value);
-        Toggle(defs, "Diagnostics",
+        Toggle(defs, Loc.L("settings.row.diagnostics", "Diagnostics"),
             () => s.DebugVoiceStats.Value || s.MicCalibrationDiagnostics.Value,
             v => s.ApplyDiagnosticsToggle(v),
-            "Writes detailed voice logs and microphone calibration data for troubleshooting. Leave this off unless you are diagnosing an issue.");
+            Loc.T("settings.help_diagnostics", "Writes detailed voice logs and microphone calibration data for troubleshooting. Leave this off unless you are diagnosing an issue."));
     }
 
     private static void ShowFirstRunSetup()
@@ -1000,7 +1005,7 @@ public static class VoiceSettingsPanel
             if (!_microphoneTest.IsMicrophoneTestActive &&
                 !string.Equals(
                     _microphoneTest.MicrophoneStatus,
-                    "Mic check is off",
+                    FirstRunAudioPreview.MicrophoneOffStatus,
                     StringComparison.Ordinal))
                 VoiceChatHudState.ShowToastThreadSafe(_microphoneTest.MicrophoneStatus);
         }

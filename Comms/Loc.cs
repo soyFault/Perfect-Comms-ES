@@ -88,6 +88,22 @@ internal static class Loc
         _ => EnglishLocale,
     };
 
+    /// <summary>
+    /// A translatable text that is resolved when it is used, not when it is declared. Use it where a
+    /// label is declared long before the UI is built (row definitions, option holders): the
+    /// <see cref="English"/> text doubles as the stable id of that row/option, <see cref="Text"/>
+    /// gives the localized text at build time. <c>Loc.L("key", "English")</c> is scanned like
+    /// <c>Loc.T</c>.
+    /// </summary>
+    internal readonly record struct LocText(string Key, string English)
+    {
+        public string Text => T(Key, English);
+        public string Format(params object[] args) => T(Key, English, args);
+        public override string ToString() => Text;
+    }
+
+    internal static LocText L(string key, string english) => new(key, english);
+
     /// <summary>Translates <paramref name="key"/>; returns <paramref name="english"/> when there is no translation.</summary>
     internal static string T(string key, string english)
     {

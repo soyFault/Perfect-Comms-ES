@@ -278,7 +278,10 @@ internal sealed class FirstRunAudioPreview : IDisposable
     private int _microphoneTestActive;
     private int _listening;
     private int _playingTone;
-    private volatile string _microphoneStatus = "Mic check is off";
+    /// <summary>Status shown while the microphone test is idle. Panels compare against this, not a literal.</summary>
+    internal static string MicrophoneOffStatus => Loc.T("audiopreview.mic_off", "Mic check is off");
+
+    private volatile string _microphoneStatus = MicrophoneOffStatus;
     private volatile string _outputStatus = "Test sound has not been played";
     private long _lastLevelTick;
     private long _lastSignalTick;
@@ -794,7 +797,7 @@ internal sealed class FirstRunAudioPreview : IDisposable
             Volatile.Write(ref _listening, 0);
             _level = 0f;
             _speaking = false;
-            SetMicrophoneStatus("Mic check is off");
+            SetMicrophoneStatus(MicrophoneOffStatus);
         }
 #if WINDOWS
         StopDesktopLease();

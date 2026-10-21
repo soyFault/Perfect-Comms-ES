@@ -236,7 +236,7 @@ internal static class LocScanner
     }
 
     private static readonly Regex Call = new(
-        "Loc\\.T\\(\\s*\"(?<key>(?:[^\"\\\\]|\\\\.)*)\"\\s*,\\s*(?<english>\"(?:[^\"\\\\]|\\\\.)*\"|[^\\s\"][^,)]*)",
+        "Loc\\.[TL]\\(\\s*\"(?<key>(?:[^\"\\\\]|\\\\.)*)\"\\s*,\\s*(?<english>\"(?:[^\"\\\\]|\\\\.)*\"|[^\\s\"][^,)]*)",
         RegexOptions.Compiled);
 
     internal static string FindRepoRoot()
