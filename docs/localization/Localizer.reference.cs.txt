@@ -34,7 +34,7 @@ internal static class Loc
                 return AmongUs.Data.DataManager.Settings.Language.CurrentLanguage switch
                 {
                     SupportedLangs.Latam => "es_419",
-                    SupportedLangs.Spanish => "es_419", // no es_ES translation: share the Latin American one
+                    SupportedLangs.Spanish => "es_ES", // separate file, same initial content as es_419
                     _ => "en_US",
                 };
             }

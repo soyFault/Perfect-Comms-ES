@@ -5,6 +5,12 @@ namespace VoiceChatPlugin.VoiceChat;
 
 public abstract class OptionHolder
 {
+    /// <summary>
+    /// Stable identity of the option ("Section.Key" for config-backed options, the composed
+    /// "modId.optionKey" for third-party ones). Never localized; use it instead of <see cref="Label"/>
+    /// whenever the option has to be recognized or compared.
+    /// </summary>
+    public string Id { get; protected init; } = "";
     public string Label { get; protected init; } = "";
     public string HelpText { get; protected init; } = "";
     public Func<bool>? Visible { get; init; }
@@ -33,6 +39,7 @@ public sealed class ToggleHolder : OptionHolder
         bool def,
         string helpText)
     {
+        Id = section + "." + key;
         Label = label;
         HelpText = string.IsNullOrWhiteSpace(helpText)
             ? "Enables or disables this host voice rule for the lobby. The host's choice is synchronized to all players."
@@ -77,6 +84,7 @@ public sealed class EnumHolder : OptionHolder
         string[] labels,
         string helpText)
     {
+        Id = section + "." + key;
         Label = label;
         HelpText = string.IsNullOrWhiteSpace(helpText)
             ? "Chooses the value for this host voice rule. The host's choice is synchronized to all players."
@@ -129,6 +137,7 @@ public sealed class NumberHolder : OptionHolder
         string format,
         string helpText)
     {
+        Id = section + "." + key;
         Label = label;
         HelpText = string.IsNullOrWhiteSpace(helpText)
             ? "Adjusts this host voice rule for the lobby. The host's value is synchronized to all players."

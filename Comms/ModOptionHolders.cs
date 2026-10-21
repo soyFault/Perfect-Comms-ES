@@ -15,6 +15,7 @@ public sealed class ModToggleHolder : OptionHolder
     public ModToggleHolder(string composedKey, string label, string helpText)
     {
         _composedKey = composedKey;
+        Id = composedKey;
         Label = label;
         HelpText = string.IsNullOrWhiteSpace(helpText)
             ? "Enables or disables this host option provided by the connected mod. The host's choice is synchronized to the lobby."
@@ -42,6 +43,7 @@ public sealed class ModEnumHolder : OptionHolder
     public ModEnumHolder(string composedKey, string label, string[] labels, string helpText)
     {
         _composedKey = composedKey;
+        Id = composedKey;
         Label = label;
         Labels = labels;
         HelpText = string.IsNullOrWhiteSpace(helpText)
@@ -75,6 +77,7 @@ public sealed class ModNumberHolder : OptionHolder
         string helpText)
     {
         _composedKey = composedKey;
+        Id = composedKey;
         Label = label;
         Min = min;
         Max = max;

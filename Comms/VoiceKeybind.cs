@@ -30,6 +30,12 @@ public sealed class VoiceKeybind
     private KeyCode _suppressedModifierLeft = KeyCode.None;
     private KeyCode _suppressedModifierRight = KeyCode.None;
 
+    /// <summary>
+    /// Stable identity of this binding: the BepInEx config key it persists under. It is never
+    /// localized. Anything that needs to recognize a binding (lookups, change signatures) uses this,
+    /// not <see cref="DisplayName"/>.
+    /// </summary>
+    public string Id { get; }
     public string DisplayName { get; }
     public string HelpText { get; }
     public KeyCode Value => _entry.Value;
@@ -128,6 +134,7 @@ public sealed class VoiceKeybind
         DisplayName = displayName;
         HelpText = helpText;
         var persistedKey = string.IsNullOrWhiteSpace(configKey) ? displayName : configKey;
+        Id = persistedKey;
         _entry = config.Bind(section, persistedKey, defaultKey);
         _modifier = config.Bind(section, persistedKey + " Modifier", defaultModifier);
         // Existing config files have no match-mode entry. Preserve the old behavior for their

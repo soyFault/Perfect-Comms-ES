@@ -1024,7 +1024,7 @@ internal static class VoiceUiKit
                 if (categories != null)
                 {
                     var category = categories[i];
-                    caption = category == VoiceSettingsCategory.Hud ? "HUD" : category.ToString();
+                    caption = VoiceSettingsCategoryText.Caption(category);
                     icon = Rect("Icon", rt).gameObject.AddComponent<Image>();
                     icon.sprite = VoiceUiBranding.CategoryIcon(category);
                     icon.color = TextFaint;

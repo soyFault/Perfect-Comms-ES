@@ -22,7 +22,7 @@ Decisiones de diseño:
 | Decisión | Motivo |
 |---|---|
 | API `Loc.T("clave", "English fallback", args...)` | El inglés queda en el código como fallback: los usuarios en inglés ven exactamente lo de antes, los tests existentes (que comparan texto inglés) no cambian y una clave faltante nunca muestra el id crudo. |
-| Español de España (`Spanish`) usa `es_419` | Solo hay una traducción; si luego se quiere `es_ES.xml`, basta añadirlo al `switch`. |
+| `Spanish` → `es_ES.xml`, `Latam` → `es_419.xml` | Dos archivos con el mismo contenido inicial para que puedan divergir. |
 | `en_US.xml` generado y versionado | Fuente de verdad para traductores + test de consistencia (mismas claves en todos los XML, mismos `{n}`). |
 | Resolver al **construir la UI**, no en constructores/`const` | `OptionHolder.Label`, `ToggleDeafenDisplayName` (`const`), arrays estáticos de pestañas se evalúan en `Load`, antes de que `DataManager` esté listo, y no cambian si el jugador cambia de idioma. |
 | Markup TMP (`<color>`, `<size>`) se queda en C# | El XML solo lleva texto plano (+ `{0}`, `<nl>`): menos errores de escape y traductores no rompen estilos. |
@@ -88,7 +88,15 @@ Nota: los `ConfigDescription` se escriben al `.cfg` al crear el archivo → qued
 - Checklist manual con Among Us en English y en Español: primer arranque (wizard), ajustes, panel de host, HUD (silenciado/ensordecido/conectando), menú de volumen, lobby browser, notificador. Revisar desbordes de texto y los acentos/`ñ`/`¿¡`.
 - Prueba de regresión: cfg existente de un usuario previo se carga igual (las claves no cambiaron).
 
-## 5. Qué necesito de ti para seguir
+## 5. Decisiones confirmadas (por el dueño del repo)
+1. Se traduce todo lo que el jugador ve dentro del mod; README/wiki/docs se traducen **fuera del XML** (archivos `.md` aparte). Android y updater entran en el alcance (Etapa 5).
+2. `Resources/Locale/es_ES.xml` existe como archivo propio, con el mismo contenido que `es_419.xml` (para que puedan divergir). `Loc` mapea `SupportedLangs.Spanish → es_ES` y `Latam → es_419`.
+3. `.cfg` (ConfigDescription) siempre en inglés; la UI traduce la ayuda por id.
+4. Se trabaja por etapas; cada etapa documentada en `docs/localization/etapaN.md`.
+
+Progreso: [Etapa 0](localization/etapa0.md) ✔
+
+## 6. (histórico) Preguntas iniciales
 1. Confirmar el alcance de la Etapa 5 (¿Android, README/wiki, updater?).
 2. ¿`es_ES` comparte el XML de es_419 (propuesto) o quieres uno aparte?
 3. ¿Los `ConfigDescription` del `.cfg` se quedan en inglés (propuesto)?

@@ -349,19 +349,7 @@ public static class VoiceSettingsPanel
             var row = e.Build(_shell.PaneRoot, _shell.PaneWidth, y);
             if (row != null)
             {
-                row.ShowDescription(e.Key switch
-                {
-                    "Mic Volume" => "How loud other players hear you.",
-                    "Mic Sensitivity" => "How easily your mic detects speech.",
-                    "Speaker Volume" => "The voice audio you hear.",
-                    "Meeting Spatial Audio" => "Directional voices during meetings.",
-                    "Mic Mode" => "Choose when your microphone transmits.",
-                    "Noise Gate" => "Gate residual room noise between phrases.",
-                    "Noise Suppression" => "Reduce background noise while preserving speech.",
-                    "Stronger Noise Suppression" => "More reduction, with a tradeoff for quieter speech.",
-                    "Echo Cancellation" => "Reduce speaker audio picked up by your mic.",
-                    _ => null,
-                });
+                row.ShowDescription(RowHelp(e.Key));
                 _rows.Add(row);
             }
             bool nextIsRow = i < visible.Count - 1 && !visible[i + 1].IsHeader;
@@ -398,8 +386,31 @@ public static class VoiceSettingsPanel
         }
     }
 
+    /// <summary>
+    /// Short description shown under a row, looked up by the row's stable <c>Entry.Key</c>
+    /// (never by its visible label, which gets translated).
+    /// </summary>
+    internal static string? RowHelp(string key) => key switch
+    {
+        "Mic Volume" => "How loud other players hear you.",
+        "Mic Sensitivity" => "How easily your mic detects speech.",
+        "Speaker Volume" => "The voice audio you hear.",
+        "Meeting Spatial Audio" => "Directional voices during meetings.",
+        "Mic Mode" => "Choose when your microphone transmits.",
+        "Noise Gate" => "Gate residual room noise between phrases.",
+        "Noise Suppression" => "Reduce background noise while preserving speech.",
+        "Stronger Noise Suppression" => "More reduction, with a tradeoff for quieter speech.",
+        "Echo Cancellation" => "Reduce speaker audio picked up by your mic.",
+        _ => null,
+    };
+
     private sealed class Entry
     {
+        /// <summary>
+        /// Stable id of the row (an English literal or a config key). Used for help lookup, scroll
+        /// reveal and the change signature. It is NOT the displayed text: labels get localized at
+        /// build time, the key never does.
+        /// </summary>
         public string Key = "";
         public float Height = RowH;
         public bool IsHeader;
@@ -712,7 +723,7 @@ public static class VoiceSettingsPanel
     {
         defs.Add(new Entry
         {
-            Key = bind.DisplayName,
+            Key = bind.Id,
             Visible = Always,
             Build = (pane, paneW, y) => new VoiceUiKit.RebindRow(
                 () => bind.CurrentKey,

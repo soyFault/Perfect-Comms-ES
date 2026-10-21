@@ -281,7 +281,7 @@ public static class HostSettingsPanel
     private static int Signature(List<OptionHolder> holders)
     {
         int sig = holders.Count;
-        for (int i = 0; i < holders.Count; i++) sig = sig * 31 + holders[i].Label.GetHashCode();
+        for (int i = 0; i < holders.Count; i++) sig = sig * 31 + holders[i].Id.GetHashCode();
         return sig;
     }
 
