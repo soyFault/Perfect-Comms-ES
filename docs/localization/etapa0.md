@@ -1,7 +1,10 @@
 # Etapa 0 — Separar identificadores de textos visibles
 
 **Estado: hecha en `claude-local`. Sin cambios de comportamiento ni de texto.**
-Build `PerfectComms.csproj` OK (0 warnings, 0 errors) · `dotnet test PerfectComms.Tests`: 1262 → **1277 tests, 0 fallos** (15 nuevos).
+Verificado (como en `ci.yml`, .NET 10): `PerfectComms.csproj` Release **0 warnings / 0 errores** (re-medido después de los cambios) ·
+`PerfectComms.Tests` 1262 → **1277 tests, 0 fallos** (15 nuevos) · `PerfectComms.Starlight.Tests` (compila los mismos `Comms/*.cs` con `ANDROID;STARLIGHT`) restore `--locked-mode` + build 0 warnings + **107/107 tests**.
+No se ejecutaron los pasos de empaquetado de CI (`package-api.sh`, `package-starlight.sh`, verificadores de release) ni el job de Windows.
+Los tests no corren en paralelo (`AssemblyInfo.cs`: `DisableTestParallelization`), así que el nuevo test que llama a `VoiceChatKeybinds.Initialize` no compite con `VoiceKeybindTests`.
 (Para reproducir: .NET SDK 10, `dotnet build PerfectComms.csproj -c Release` y `dotnet test PerfectComms.Tests -c Release`.)
 
 ## Convención que fijan las siguientes etapas
@@ -47,3 +50,24 @@ Traducir `displayName` habría reseteado los atajos de todos los usuarios (esto 
 
 El commit de esta etapa solo toca los archivos de la tabla. Opciones: `git cherry-pick <commit>` desde `claude-local`, o
 `git diff origin/new-spanish..claude-local -- Comms PerfectComms.Tests` para recrearlo a mano. No depende de `Loc` (Etapa 1).
+
+## Pendiente de decisión: migrar los atajos de quien usó la versión hardcodeada de `main`
+
+Quienes instalaron builds de `main`/`old-spanish` tienen estos atajos guardados en `[Keybinds]` bajo la clave **en español**. Con ids en inglés (lo correcto) esos atajos personalizados se verían reseteados al actualizar.
+Hay un patrón de migración en el repo (`RemoveRetiredHostRefreshBindings`). Propuesta (Etapa 1 o 4): en `VoiceChatKeybinds.Initialize`, antes de crear cada `VoiceKeybind`, si existe la clave legacy en el `.cfg` y la nueva no, copiar `<clave>`, `<clave> Modifier`, `<clave> Modifier Match` y `<clave> Allow While Chat Open`, y borrar las legacy. Tabla (id actual ← clave de `main`):
+
+| Id (inglés, actual) | Clave persistida en `main` |
+|---|---|
+| Mute / Unmute Mic | Silenciar / activar micrófono |
+| Team Radio (Hold) | Radio de equipo (mantener) |
+| Cycle Team Radio Channel | Cambiar canal de radio de equipo |
+| Push To Talk (Hold) | Pulsar para hablar (mantener) |
+| Toggle Open Mic / Push To Talk | Alternar Micrófono abierto / Pulsar para hablar |
+| Player Volumes | Volumen de jugadores |
+| Alive Louder / Dead Quieter (Hold) | Vivos más alto / Muertos más bajo (mantener) |
+| Alive Quieter / Dead Louder (Hold) | Vivos más bajo / Muertos más alto (mantener) |
+| Refresh Voice Connection | Reconectar chat de voz |
+| Open Voice Menu | Abrir menú de voz |
+| Open Host Voice Settings | Abrir ajustes de voz del host |
+
+(`Hold To Mute` y `Toggle Speaker` ya eran claves en inglés en `main`.) Las opciones del host (`Section`/`Key` de `VoiceChatGameOptions`) y `VoiceChatLocalSettings` **no** tradujeron sus claves en `main`, solo las etiquetas: no necesitan migración.
