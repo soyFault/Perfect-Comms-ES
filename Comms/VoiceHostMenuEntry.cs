@@ -53,5 +53,10 @@ public static class VoiceHostMenuEntry
 
     public static bool CursorOverChip => _chip.CursorOver;
 
+    internal static void RefreshLanguage()
+    {
+        if (_chip.Built) _chip.SetLabel(Loc.T("chip.host_voice_settings", "HOST VOICE SETTINGS"));
+    }
+
     public static void TickHostButton() => _chip.Tick();
 }

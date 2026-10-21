@@ -140,6 +140,7 @@ internal static class VoiceUiKit
         if (frame == _tickFrame) return;
         _tickFrame = frame;
         UpdateSwallow();
+        try { Loc.PollLocaleChange(); } catch (Exception e) { VoiceChatPlugin.VoiceChatPluginMain.Logger.LogWarning("[PC-UI] language refresh threw: " + e.Message); }
         if (AnyPanelOpen)
         {
             // Modal input capture is authoritative for the whole frame. This also handles a panel
@@ -593,11 +594,18 @@ internal static class VoiceUiKit
         private readonly RectTransform _closeRt;
         private readonly Image _closeBar1;
         private readonly Image _closeBar2;
+        /// <summary>Updates the title of a titled shell (not the personal-settings one) after a language change.</summary>
+        public void SetTitle(string title)
+        {
+            if (_titleTmp != null && _titleTmp.text != title) _titleTmp.text = title;
+        }
+
         private float _closeScale = 1f;
         private readonly Action _onClose;
         private readonly bool _guided;
         private readonly Color32 _closeRestColor;
         private readonly TextMeshProUGUI? _pageTitle;
+        private readonly TextMeshProUGUI? _titleTmp;
         private readonly TextMeshProUGUI? _pageSubtitle;
 #if WINDOWS
         private readonly TextMeshProUGUI? _menuKey;
@@ -729,6 +737,7 @@ internal static class VoiceUiKit
                 var titleTmp = Text("Title", HeaderRect, title, titleSize, TextBright,
                     TextAlignmentOptions.Left, FontStyles.Bold);
                 titleTmp.overflowMode = TextOverflowModes.Ellipsis;
+                _titleTmp = titleTmp;
                 if (guided)
                 {
                     titleTmp.enableAutoSizing = true;

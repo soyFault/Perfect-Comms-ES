@@ -94,7 +94,7 @@ Nota: los `ConfigDescription` se escriben al `.cfg` al crear el archivo → qued
 3. `.cfg` (ConfigDescription) siempre en inglés; la UI traduce la ayuda por id.
 4. Se trabaja por etapas; cada etapa documentada en `docs/localization/etapaN.md`.
 
-Progreso: [Etapa 0](localization/etapa0.md) ✔ · [Etapa 1](localization/etapa1.md) ✔ · [Etapa 2](localization/etapa2.md) ✔ · [Etapa 3](localization/etapa3.md) ✔ · [Etapa 4](localization/etapa4.md) ✔ · [Etapa 5](localization/etapa5.md) ✔
+Progreso: [Etapa 0](localization/etapa0.md) ✔ · [Etapa 1](localization/etapa1.md) ✔ · [Etapa 2](localization/etapa2.md) ✔ · [Etapa 3](localization/etapa3.md) ✔ · [Etapa 4](localization/etapa4.md) ✔ · [Etapa 5](localization/etapa5.md) ✔ · [Etapa 6](localization/etapa6.md) ✔ — **plan completo; falta la prueba en el juego (lista en `etapa6.md`)**
 5. Atajos del fork hardcodeado (`main`): no se migran; los ids siguen en inglés.
 
 ## 6. (histórico) Preguntas iniciales

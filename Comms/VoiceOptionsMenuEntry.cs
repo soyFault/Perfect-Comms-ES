@@ -61,5 +61,10 @@ public static class VoiceOptionsMenuEntry
 
     public static bool CursorOverChip => _chip.CursorOver;
 
+    internal static void RefreshLanguage()
+    {
+        if (_chip.Built) _chip.SetLabel(Loc.T("chip.voice_settings", "VOICE SETTINGS"));
+    }
+
     public static void TickButton() => _chip.Tick();
 }

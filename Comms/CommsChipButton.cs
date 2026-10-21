@@ -22,6 +22,13 @@ internal sealed class CommsChipButton
     private Func<bool> _gate = static () => true;
 
     public bool Built => Root != null;
+
+    /// <summary>Changes the big label after a language change (the eyebrow is the brand name).</summary>
+    public void SetLabel(string labelText)
+    {
+        if (_label != null && _label.text != labelText) _label.text = labelText;
+    }
+
     public bool Visible => Root != null && Root.activeSelf;
     public bool CursorOver => Root != null && Root.activeSelf && _rootRt != null && VoiceUiKit.Contains(_rootRt);
 

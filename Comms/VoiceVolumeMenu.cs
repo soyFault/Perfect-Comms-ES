@@ -76,6 +76,15 @@ public static class VoiceVolumeMenu
         VoiceUiKit.RaiseAbove(_shell.RootRect);
     }
 
+    /// <summary>Rebuilds the cached shell in the new language.</summary>
+    internal static void RefreshLanguage()
+    {
+        if (_shell == null) return;
+        bool wasShown = _shown;
+        Destroy();
+        if (wasShown) Show();
+    }
+
     public static void Hide()
     {
         _shown = false;

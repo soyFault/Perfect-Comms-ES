@@ -107,6 +107,25 @@ internal static class VoiceLobbyBrowserUi
         SchedulePanelPrewarm();
     }
 
+    /// <summary>
+    /// The panel (title, buttons, rows) is cached with its texts, so it is dropped and rebuilt on next
+    /// open. The menu button is icon art and stays; an open panel or info editor is closed first so
+    /// no input handler keeps pointing at destroyed objects.
+    /// </summary>
+    internal static void RefreshLanguage()
+    {
+        if (_panelVisible || _panelClosing) ClosePanel();
+        _editorOpen = false;
+        if (_panelRoot != null) Object.Destroy(_panelRoot);
+        _panelRoot = null;
+        _rowsRoot = null;
+        _statusText = null;
+        _editorText = null;
+        _panelAnimation = 0f;
+        _panelClosing = false;
+        _lastLiveListings = Array.Empty<VoiceLobbyListing>();
+    }
+
     internal static void Clear()
     {
         if (_buttonObj != null) Object.Destroy(_buttonObj);

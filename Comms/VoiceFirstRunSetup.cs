@@ -192,6 +192,30 @@ internal static class VoiceFirstRunSetup
         }
     }
 
+    /// <summary>
+    /// Re-renders the current page in the new language, keeping the draft and the page the player is on.
+    /// </summary>
+    internal static void RefreshLanguage()
+    {
+        if (!_shown || _shell == null || _shell.Root == null || _draft == null) return;
+        bool prompt = _closePrompt != null;
+        _shell.SetTitle(Loc.T("setup.perfect_comms_setup", "Perfect Comms Setup"));
+        // The embedded HUD preview builds its title and "LIVE" badge once; recreate it too.
+        if (_hudPreview != null)
+        {
+            try { _hudPreview.Dispose(); } catch { }
+            _hudPreview = null;
+        }
+        if (_hudPreviewHost != null)
+        {
+            Object.Destroy(_hudPreviewHost.gameObject);
+            _hudPreviewHost = null;
+        }
+        EnsureHudPreview();
+        BuildPage();
+        if (prompt) { HideClosePrompt(); ShowClosePrompt(); }
+    }
+
     internal static void Tick()
     {
         if (!_shown || _shell == null) return;

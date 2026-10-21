@@ -52,11 +52,29 @@ internal static class Loc
         _ = CurrentLocale;
     }
 
+    /// <summary>Raised (on the main thread) when the game language changes. See <see cref="PollLocaleChange"/>.</summary>
+    internal static event Action? LocaleChanged;
+    private static string? _announcedLocale;
+
+    /// <summary>
+    /// Call every frame from the main thread. The first call only records the current language;
+    /// afterwards <see cref="LocaleChanged"/> fires once per change so cached UI can be rebuilt.
+    /// </summary>
+    internal static void PollLocaleChange()
+    {
+        string now = CurrentLocale;
+        if (_announcedLocale == null) { _announcedLocale = now; return; }
+        if (string.Equals(now, _announcedLocale, StringComparison.Ordinal)) return;
+        _announcedLocale = now;
+        LocaleChanged?.Invoke();
+    }
+
     /// <summary>Forgets the main thread and the cached locale (tests).</summary>
     internal static void ResetThreadState()
     {
         _mainThreadId = -1;
         _lastLocale = EnglishLocale;
+        _announcedLocale = null;
     }
 
     /// <summary>Locale used for lookups right now: forced, else the Among Us language, else English.</summary>

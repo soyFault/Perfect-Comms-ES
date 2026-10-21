@@ -385,6 +385,43 @@ public sealed class LocalizationTests
         Assert.Equal("Default", devices[0].Name);   // the stored name is data and never changes
     }
 
+    // ---- Stage 6: language change while the UI exists ----
+
+    [Fact]
+    public void LanguageChangeRaisesTheEventOncePerChange()
+    {
+        int raised = 0;
+        Action handler = () => raised++;
+        Loc.LocaleChanged += handler;
+        try
+        {
+            Loc.ResetThreadState();
+            WithLocale("en_US", Loc.PollLocaleChange);      // first poll only records the baseline
+            WithLocale("en_US", Loc.PollLocaleChange);
+            Assert.Equal(0, raised);
+            WithLocale("es_419", Loc.PollLocaleChange);
+            WithLocale("es_419", Loc.PollLocaleChange);     // same language again: nothing
+            Assert.Equal(1, raised);
+            WithLocale("es_ES", Loc.PollLocaleChange);
+            Assert.Equal(2, raised);
+            WithLocale("en_US", Loc.PollLocaleChange);
+            Assert.Equal(3, raised);
+        }
+        finally
+        {
+            Loc.LocaleChanged -= handler;
+            Loc.ResetThreadState();
+        }
+    }
+
+    [Fact]
+    public void RefreshingWithNothingBuiltIsHarmless()
+    {
+        // In the test process no panel, chip or wizard exists: every refresh must be a no-op.
+        LocalizationRefresh.Apply();
+        LocalizationRefresh.Apply();
+    }
+
     // ---- Stage 5: lobby browser, notifier, Android text ----
 
     [Fact]

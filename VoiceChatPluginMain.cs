@@ -92,6 +92,7 @@ public class VoiceChatPluginMain : BasePlugin
     {
         Logger = Log;
         Loc.Initialize();
+        LocalizationRefresh.Register();
         _configStore = PerfectCommsConfigStore.Open(
             Config,
             new BepInPlugin(Id, "Perfect Comms", Version),

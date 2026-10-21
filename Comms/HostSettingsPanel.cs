@@ -128,6 +128,18 @@ public static class HostSettingsPanel
         RebuildRows();
     }
 
+    /// <summary>Rebuilds the cached shell in the new language (see <see cref="VoiceSettingsPanel.RefreshLanguage"/>).</summary>
+    internal static void RefreshLanguage()
+    {
+        if (_shell == null) return;
+        bool wasShown = _shown;
+        int selected = _rail?.Selected ?? 0;
+        Destroy();
+        if (!wasShown) return;
+        Show();
+        _rail?.Select(selected);
+    }
+
     public static void Hide()
     {
         VoiceUiKit.RebindRow.CancelCapture();

@@ -215,6 +215,21 @@ public static class VoiceSettingsPanel
         UpdateScrollbarVisual();
     }
 
+    /// <summary>
+    /// The shell (header, footer, rail, page titles) is built once and cached, so after a language
+    /// change it is dropped and rebuilt: immediately if the panel is open, otherwise on next Show().
+    /// </summary>
+    internal static void RefreshLanguage()
+    {
+        if (_shell == null) return;
+        bool wasShown = _shown;
+        int selected = _rail?.Selected ?? 0;
+        Destroy();
+        if (!wasShown) return;
+        Show();
+        _rail?.Select(selected);
+    }
+
     public static void Hide()
     {
         VoiceUiKit.RebindRow.CancelCapture();
