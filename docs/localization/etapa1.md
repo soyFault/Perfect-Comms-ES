@@ -36,3 +36,5 @@ Archivos nuevos: `Comms/Loc.cs`, `Resources/Locale/*.xml`, `scripts/localization
 - Si los tests de otras etapas fijan texto en inglés, siguen pasando mientras `Loc.ForcedLocale` sea `null` y no haya `DataManager` (como en CI).
 
 8. (añadido en la Etapa 2) `Loc.T` es seguro desde cualquier hilo: los hilos que no son el principal reutilizan el idioma en caché. No leer `DataManager` por fuera de `Loc`.
+9. (añadido en la Etapa 3) `Loc.L("clave","English")` para etiquetas declaradas antes de construir la UI: se resuelve en `.Text`; su `.English` es el id estable.
+10. No usar `static readonly … = Loc.T(...)` ni `const`: un test lo prohíbe.

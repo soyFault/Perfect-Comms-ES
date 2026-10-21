@@ -214,6 +214,67 @@ public sealed class LocalizationTests
         });
     }
 
+    [Fact]
+    public void NoStaticFieldOrConstResolvesTextWhileThePluginLoads()
+    {
+        // `static readonly string X = Loc.T(...)` would freeze the language at class-init time.
+        // Use a property / Loc.L (resolved on use) instead.
+        var offenders = LocScanner.FindEagerStaticLocalization(LocScanner.FindRepoRoot());
+        Assert.Empty(offenders);
+    }
+
+    // ---- Stage 3: panels ----
+
+    [Fact]
+    public void HudPresetsKeepStableEnglishIdsAndLocalizeTheDisplayText()
+    {
+        var preset = FirstRunHudPresets.All[0];
+        WithLocale("en_US", () =>
+        {
+            Assert.Equal("Top Middle", preset.Name);
+            Assert.Equal("Top Middle", preset.DisplayName);
+        });
+        WithLocale("es_419", () =>
+        {
+            Assert.Equal("Top Middle", preset.Name);        // id never changes
+            Assert.Equal("Arriba al centro", preset.DisplayName);
+            Assert.NotEqual(preset.Description, preset.DisplayDescription);
+        });
+    }
+
+    [Fact]
+    public void EverySettingsRowKeyStillResolvesItsHelpInSpanish()
+    {
+        WithLocale("es_419", () =>
+        {
+            Assert.Equal("Qué tan fuerte te escuchan los demás jugadores.", VoiceSettingsPanel.RowHelp("Mic Volume"));
+            Assert.Null(VoiceSettingsPanel.RowHelp("Volumen del micrófono"));
+        });
+    }
+
+    [Fact]
+    public void CategoryCaptionsFollowTheLanguage()
+    {
+        WithLocale("en_US", () => Assert.Equal("Keybinds", VoiceSettingsCategoryText.Caption(VoiceSettingsCategory.Keybinds)));
+        WithLocale("es_ES", () =>
+        {
+            Assert.Equal("Atajos", VoiceSettingsCategoryText.Caption(VoiceSettingsCategory.Keybinds));
+            Assert.Equal("Dispositivos", VoiceSettingsCategoryText.Caption(VoiceSettingsCategory.Devices));
+        });
+    }
+
+    [Fact]
+    public void LocTextResolvesWhenUsedNotWhenDeclared()
+    {
+        var label = Loc.L("settings.row.mic_volume", "Mic Volume");
+        WithLocale("en_US", () => Assert.Equal("Mic Volume", label.Text));
+        WithLocale("es_419", () =>
+        {
+            Assert.Equal("Volumen del micrófono", label.Text);
+            Assert.Equal("Mic Volume", label.English);   // stable id
+        });
+    }
+
     private static string Placeholders(string text)
         => string.Join(",", Placeholder.Matches(text).Select(m => m.Groups[1].Value).Distinct().OrderBy(v => v));
 
@@ -279,6 +340,22 @@ internal static class LocScanner
             }
         }
         return result;
+    }
+
+    internal static List<string> FindEagerStaticLocalization(string root)
+    {
+        var offenders = new List<string>();
+        var skipped = new[] { "PerfectComms.Tests", "PerfectComms.Starlight.Tests", "native", "Libs", "docs", "wiki", "cloudflare" };
+        var eager = new Regex(@"\b(?:static\s+readonly|const)\s[^;{}]*?Loc\.T\(", RegexOptions.Singleline | RegexOptions.Compiled);
+        foreach (var file in Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories))
+        {
+            var relative = Path.GetRelativePath(root, file).Replace('\\', '/');
+            var parts = relative.Split('/');
+            if (parts.Any(p => p is "bin" or "obj") || skipped.Contains(parts[0]) || relative == "Comms/Loc.cs") continue;
+            foreach (Match m in eager.Matches(File.ReadAllText(file)))
+                offenders.Add($"{relative}: {m.Value.Trim().Split('\n')[0]}");
+        }
+        return offenders;
     }
 
     private static string? Unescape(string literal)
