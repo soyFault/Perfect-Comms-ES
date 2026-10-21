@@ -134,7 +134,9 @@ internal sealed class SpeakingBarLivePreview
         _viewportMaxHeight = embedded ? EmbeddedViewportMaxHeight : DefaultViewportMaxHeight;
         _revealSlide = embedded ? EmbeddedRevealSlide : DefaultRevealSlide;
         _presentationStartScale = embedded ? 1f : 0.96f;
-        _liveBadgeLabel = embedded ? "LIVE" : "\u25CF  LIVE";
+        _liveBadgeLabel = embedded
+            ? Loc.T("preview.live", "LIVE")
+            : "\u25CF  " + Loc.T("preview.live", "LIVE");
 
         float cardWidth = embedded
             ? EmbeddedCardWidth
@@ -213,7 +215,7 @@ internal sealed class SpeakingBarLivePreview
         var title = VoiceUiKit.Text(
             "PreviewTitle",
             header,
-            embedded ? "HUD PREVIEW" : "HUD LIVE PREVIEW",
+            embedded ? Loc.T("preview.title_embedded", "HUD PREVIEW") : Loc.T("preview.title", "HUD LIVE PREVIEW"),
             embedded ? 20f : 25f,
             VoiceUiKit.TextBright,
             TextAlignmentOptions.Left,
@@ -328,7 +330,7 @@ internal sealed class SpeakingBarLivePreview
         _detailText = VoiceUiKit.Text(
             "PreviewDetails",
             CardRoot,
-            "10 alive / 5 ghosts / synthetic voice activity",
+            Loc.T("preview.detail_default", "10 alive / 5 ghosts / synthetic voice activity"),
             14f,
             VoiceUiKit.TextMuted,
             TextAlignmentOptions.Center);
@@ -347,7 +349,7 @@ internal sealed class SpeakingBarLivePreview
             var note = VoiceUiKit.Text(
                 "PreviewNote",
                 CardRoot,
-                "Canvas-only preview / isolated from the real game HUD",
+                Loc.T("preview.note", "Canvas-only preview / isolated from the real game HUD"),
                 12f,
                 VoiceUiKit.TextFaint,
                 TextAlignmentOptions.Center);
@@ -429,10 +431,10 @@ internal sealed class SpeakingBarLivePreview
 
     private void SetWarmupStatus()
     {
-        _badgeText.text = "LOADING";
+        _badgeText.text = Loc.T("preview.loading", "LOADING");
         _badgeText.color = VoiceUiKit.TextMuted;
-        _statusText.text = "PREPARING PREVIEW";
-        _detailText.text = "Building the canvas HUD preview";
+        _statusText.text = Loc.T("preview.preparing", "PREPARING PREVIEW");
+        _detailText.text = Loc.T("preview.building", "Building the canvas HUD preview");
     }
 
     private void AdvanceSlotBuild()
@@ -934,26 +936,32 @@ internal sealed class SpeakingBarLivePreview
     private void UpdateStatus(SpeakingBarPreviewSettings settings, int lineCount)
     {
         string placement = settings.ManualLayout
-            ? $"MANUAL {settings.ManualOrientation.ToString().ToUpperInvariant()}"
+            ? Loc.T("preview.manual", "MANUAL {0}", OrientationLabel(settings.ManualOrientation))
             : PositionLabel(settings.Position);
-        string layout = lineCount == 1 ? "1 LANE" : $"{lineCount} LINES";
+        string layout = lineCount == 1
+            ? Loc.T("preview.lane", "1 LANE")
+            : Loc.T("preview.lines", "{0} LINES", lineCount);
         int percent = Mathf.RoundToInt(settings.Scale * 100f);
         _statusText.text = $"{placement} / {layout} / {percent}%";
         _detailText.text = settings.Backdrop
-            ? "10 alive / 5 ghosts / backdrop on"
-            : "10 alive / 5 ghosts / backdrop off";
+            ? Loc.T("preview.detail_backdrop_on", "10 alive / 5 ghosts / backdrop on")
+            : Loc.T("preview.detail_backdrop_off", "10 alive / 5 ghosts / backdrop off");
     }
 
     private static string PositionLabel(SpeakingBarPosition position) => position switch
     {
-        SpeakingBarPosition.TopLeft => "TOP LEFT",
-        SpeakingBarPosition.TopMiddle => "TOP MIDDLE",
-        SpeakingBarPosition.TopRight => "TOP RIGHT",
-        SpeakingBarPosition.MiddleLeft => "MIDDLE LEFT",
-        SpeakingBarPosition.MiddleRight => "MIDDLE RIGHT",
-        SpeakingBarPosition.BottomLeft => "BOTTOM LEFT",
-        SpeakingBarPosition.BottomMiddle => "BOTTOM MIDDLE",
-        SpeakingBarPosition.BottomRight => "BOTTOM RIGHT",
-        _ => "SPEAKING BAR",
+        SpeakingBarPosition.TopLeft => Loc.T("preview.position_top_left", "TOP LEFT"),
+        SpeakingBarPosition.TopMiddle => Loc.T("preview.position_top_middle", "TOP MIDDLE"),
+        SpeakingBarPosition.TopRight => Loc.T("preview.position_top_right", "TOP RIGHT"),
+        SpeakingBarPosition.MiddleLeft => Loc.T("preview.position_middle_left", "MIDDLE LEFT"),
+        SpeakingBarPosition.MiddleRight => Loc.T("preview.position_middle_right", "MIDDLE RIGHT"),
+        SpeakingBarPosition.BottomLeft => Loc.T("preview.position_bottom_left", "BOTTOM LEFT"),
+        SpeakingBarPosition.BottomMiddle => Loc.T("preview.position_bottom_middle", "BOTTOM MIDDLE"),
+        SpeakingBarPosition.BottomRight => Loc.T("preview.position_bottom_right", "BOTTOM RIGHT"),
+        _ => Loc.T("preview.position_default", "SPEAKING BAR"),
     };
+
+    private static string OrientationLabel(VoiceControlsLayout layout) => layout == VoiceControlsLayout.Vertical
+        ? Loc.T("preview.orientation_vertical", "VERTICAL")
+        : Loc.T("preview.orientation_horizontal", "HORIZONTAL");
 }

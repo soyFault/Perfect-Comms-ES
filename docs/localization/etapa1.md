@@ -34,3 +34,5 @@ Archivos nuevos: `Comms/Loc.cs`, `Resources/Locale/*.xml`, `scripts/localization
 - **Etapa 2** (clases puras y HUD) continúa con `VoiceConnectionStatusPolicy`, `VoiceHudWarnings`, `VoiceChatHudState`, `SpeakingBar*`, `VoiceJoinGuard`.
 - Cambio de idioma en caliente (Etapa 6): `Loc.T` ya reacciona en cada llamada; falta reconstruir los paneles abiertos.
 - Si los tests de otras etapas fijan texto en inglés, siguen pasando mientras `Loc.ForcedLocale` sea `null` y no haya `DataManager` (como en CI).
+
+8. (añadido en la Etapa 2) `Loc.T` es seguro desde cualquier hilo: los hilos que no son el principal reutilizan el idioma en caché. No leer `DataManager` por fuera de `Loc`.

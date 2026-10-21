@@ -201,8 +201,10 @@ internal static class VoiceJoinGuard
         var now = DateTime.UtcNow;
         if (!force && now < _nextPatchWarningUtc) return;
         _nextPatchWarningUtc = now.AddSeconds(30);
+        // The toast is localized for the player; the diagnostic line stays English.
         const string warning = "Perfect Comms voice disabled: critical game hooks are unavailable. Update the mod or game.";
-        VoiceChatHudState.ShowToastThreadSafe(warning);
+        VoiceChatHudState.ShowToastThreadSafe(Loc.T("joinguard.hooks_disabled",
+            "Perfect Comms voice disabled: critical game hooks are unavailable. Update the mod or game."));
         VoiceDiagnostics.DebugError($"[VC] {warning} ({_patchHealthReason})");
     }
 
@@ -212,19 +214,51 @@ internal static class VoiceJoinGuard
         if (now < _nextGenerationWarningUtc) return;
         _nextGenerationWarningUtc = now.AddSeconds(30);
         const string warning = "Perfect Comms voice is waiting for a confirmed lobby join. Leave and rejoin this lobby.";
-        VoiceChatHudState.ShowToastThreadSafe(warning);
+        VoiceChatHudState.ShowToastThreadSafe(Loc.T("joinguard.waiting_join",
+            "Perfect Comms voice is waiting for a confirmed lobby join. Leave and rejoin this lobby."));
         VoiceDiagnostics.DebugWarning($"[VC] {warning}");
     }
 
+    // The kick reason travels over the network as English text (the receiving client may run an
+    // older build and a different game language). The CLIENT localizes it for display, see
+    // LocalizeKickReason; these formats are also the patterns it recognizes.
+    internal const string MismatchFormat =
+        "Perfect Comms version mismatch.\n\nThis lobby is running Perfect Comms {0}.\nYou have {1}.\n\nUpdate Perfect Comms to join this lobby.";
+    internal const string MissingFormat =
+        "This lobby requires Perfect Comms {0}.\n\nInstall or enable Perfect Comms to join this lobby.";
+
+    private static readonly System.Text.RegularExpressions.Regex MismatchPattern = FormatPattern(MismatchFormat);
+    private static readonly System.Text.RegularExpressions.Regex MissingPattern = FormatPattern(MissingFormat);
+
+    private static System.Text.RegularExpressions.Regex FormatPattern(string format) => new(
+        "^" + System.Text.RegularExpressions.Regex.Escape(format)
+            .Replace("\\{0}", "(?<a>.+?)").Replace("\\{1}", "(?<b>.+?)") + "$",
+        System.Text.RegularExpressions.RegexOptions.Singleline);
+
     private static string MismatchMessage(string clientVersion) =>
-        "Perfect Comms version mismatch.\n\n" +
-        $"This lobby is running Perfect Comms {VoiceChatPluginMain.Version}.\n" +
-        $"You have {clientVersion}.\n\n" +
-        "Update Perfect Comms to join this lobby.";
+        string.Format(MismatchFormat, VoiceChatPluginMain.Version, clientVersion);
 
     private static string MissingMessage() =>
-        $"This lobby requires Perfect Comms {VoiceChatPluginMain.Version}.\n\n" +
-        "Install or enable Perfect Comms to join this lobby.";
+        string.Format(MissingFormat, VoiceChatPluginMain.Version);
+
+    /// <summary>
+    /// Translates the host's English kick reason into the local game language. Anything that is not
+    /// one of the two known messages (older/newer hosts, other reasons) is shown unchanged.
+    /// </summary>
+    internal static string LocalizeKickReason(string reason)
+    {
+        var mismatch = MismatchPattern.Match(reason);
+        if (mismatch.Success)
+            return Loc.T("joinguard.mismatch",
+                "Perfect Comms version mismatch.\n\nThis lobby is running Perfect Comms {0}.\nYou have {1}.\n\nUpdate Perfect Comms to join this lobby.",
+                mismatch.Groups["a"].Value, mismatch.Groups["b"].Value);
+        var missing = MissingPattern.Match(reason);
+        if (missing.Success)
+            return Loc.T("joinguard.missing",
+                "This lobby requires Perfect Comms {0}.\n\nInstall or enable Perfect Comms to join this lobby.",
+                missing.Groups["a"].Value);
+        return reason;
+    }
 
     // Host -> target client: tag-255 GameDataTo carrying the kick reason. Same shape
     // Reactor uses in KickWithReason; the host emitting this does not disconnect it.
@@ -417,7 +451,7 @@ internal static class VoiceJoinGuard
             if (ReactorHandlesIt()) return;
             if (reason != DisconnectReasons.Kicked || _pendingKickReason == null) return;
             reason = DisconnectReasons.Custom;
-            __instance.LastCustomDisconnect = _pendingKickReason;
+            __instance.LastCustomDisconnect = LocalizeKickReason(_pendingKickReason);
             _pendingKickReason = null;
             Dbg("disconnect swap -> perfect comms reason");
         }

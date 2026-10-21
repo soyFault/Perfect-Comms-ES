@@ -1237,7 +1237,9 @@ public static partial class VoiceChatHudState
         InvalidateAudioPolicyCache();
         ApplyMicState();
         RefreshButtonVisuals();
-        ShowCompactStatus(next == VoiceMicMode.PushToTalk ? "Push To Talk" : "Open Mic");
+        ShowCompactStatus(next == VoiceMicMode.PushToTalk
+            ? Loc.T("hud.mode_push_to_talk", "Push To Talk")
+            : Loc.T("hud.mode_open_mic", "Open Mic"));
     }
 
     private static bool IsManualMuteActive()
@@ -1940,20 +1942,20 @@ public static partial class VoiceChatHudState
         bool pushToTalkMode = tab?.MicMode.Value == VoiceMicMode.PushToTalk;
         string status = TryGetLocalTransmitBlockReason(out string transmitBlockReason)
             ? transmitBlockReason
-            : _speakerMuted ? "Deafened"
-            : IsManualMuteActive() ? "Muted"
-            : IsInTeamRadioMode() ? $"Team Radio: {TeamRadioDisplayName(NormalizeTeamRadioState())} (held)"
-            : pushToTalkMode ? "Push To Talk"
-            : "Active";
+            : _speakerMuted ? Loc.T("hud.deafened", "Deafened")
+            : IsManualMuteActive() ? Loc.T("hud.muted", "Muted")
+            : IsInTeamRadioMode() ? Loc.T("tooltip.radio_held", "Team Radio: {0} (held)", TeamRadioDisplayName(NormalizeTeamRadioState()))
+            : pushToTalkMode ? Loc.T("hud.mode_push_to_talk", "Push To Talk")
+            : Loc.T("hud.status_active", "Active");
         string channel = TeamRadioDisplayName(NormalizeTeamRadioState());
 
 #if ANDROID
         bool radioVisible = _radioTouchButtonObj?.activeInHierarchy == true;
         _micTooltipTmp.text =
-            "<b>Microphone</b>\n" +
-            $"Status: {status}\n" +
-            (radioVisible ? $"Team Radio Channel: {channel}\n" : string.Empty) +
-            $"Volume: {(int)((tab?.MicVolume.Value ?? 1f) * 100f)}%\n" +
+            "<b>" + Loc.T("tooltip.mic_title", "Microphone") + "</b>\n" +
+            Loc.T("tooltip.status", "Status: {0}", status) + "\n" +
+            (radioVisible ? Loc.T("tooltip.radio_channel", "Team Radio Channel: {0}", channel) + "\n" : string.Empty) +
+            Loc.T("tooltip.volume", "Volume: {0}%", (int)((tab?.MicVolume.Value ?? 1f) * 100f)) + "\n" +
             AndroidVoiceUiPolicy.MicrophoneTooltipAction(
                 pushToTalkMode,
                 radioVisible);
@@ -1962,13 +1964,13 @@ public static partial class VoiceChatHudState
         string radioKey = VoiceChatKeybinds.TeamRadio.Label;
         string cycleKey = VoiceChatKeybinds.CycleTeamRadioChannel.Label;
         _micTooltipTmp.text =
-            "<b>Microphone</b>\n" +
-            $"Status: {status}\n" +
-            $"Team Radio Channel: {channel}\n" +
-            $"Volume: {(int)((tab?.MicVolume.Value ?? 1f) * 100f)}%\n" +
+            "<b>" + Loc.T("tooltip.mic_title", "Microphone") + "</b>\n" +
+            Loc.T("tooltip.status", "Status: {0}", status) + "\n" +
+            Loc.T("tooltip.radio_channel", "Team Radio Channel: {0}", channel) + "\n" +
+            Loc.T("tooltip.volume", "Volume: {0}%", (int)((tab?.MicVolume.Value ?? 1f) * 100f)) + "\n" +
             (pushToTalkMode
-                ? $"Push To Talk active  |  Team Radio: {radioKey} (hold)  |  Cycle: {cycleKey}"
-                : $"Mute: {muteKey}  |  Team Radio: {radioKey} (hold)  |  Cycle: {cycleKey}");
+                ? Loc.T("tooltip.mic_ptt_hint", "Push To Talk active  |  Team Radio: {0} (hold)  |  Cycle: {1}", radioKey, cycleKey)
+                : Loc.T("tooltip.mic_mute_hint", "Mute: {0}  |  Team Radio: {1} (hold)  |  Cycle: {2}", muteKey, radioKey, cycleKey));
 #endif
 
         PositionNear(_micTooltip, _micTooltipTmp, _micButtonObj);
@@ -1980,22 +1982,22 @@ public static partial class VoiceChatHudState
     {
         if (_spkTooltip == null || _spkTooltipTmp == null || _spkButtonObj == null) return;
 
-        string status = _speakerMuted ? "Deafened" : "Active";
+        string status = _speakerMuted ? Loc.T("hud.deafened", "Deafened") : Loc.T("hud.status_active", "Active");
         var tab = VoiceSettings.Instance;
 #if ANDROID
         _spkTooltipTmp.text =
-            "<b>Deafen</b>\n" +
-            $"Status: {status}\n" +
-            $"Volume: {(int)((tab?.MasterVolume.Value ?? 0f) * 100f)}%\n" +
+            "<b>" + Loc.T("tooltip.speaker_title", "Deafen") + "</b>\n" +
+            Loc.T("tooltip.status", "Status: {0}", status) + "\n" +
+            Loc.T("tooltip.volume", "Volume: {0}%", (int)((tab?.MasterVolume.Value ?? 0f) * 100f)) + "\n" +
             AndroidVoiceUiPolicy.SpeakerTooltipAction;
 #else
         string hotkey = VoiceChatKeybinds.ToggleSpeaker.Label;
         _spkTooltipTmp.text =
-            "<b>Deafen</b>\n" +
-            $"Status: {status}\n" +
-            $"Volume: {(int)((tab?.MasterVolume.Value ?? 0f) * 100f)}%\n" +
-            $"Hotkey: {hotkey}\n" +
-            "Mutes playback and pauses microphone transmission.";
+            "<b>" + Loc.T("tooltip.speaker_title", "Deafen") + "</b>\n" +
+            Loc.T("tooltip.status", "Status: {0}", status) + "\n" +
+            Loc.T("tooltip.volume", "Volume: {0}%", (int)((tab?.MasterVolume.Value ?? 0f) * 100f)) + "\n" +
+            Loc.T("tooltip.hotkey", "Hotkey: {0}", hotkey) + "\n" +
+            Loc.T("tooltip.speaker_help", "Mutes playback and pauses microphone transmission.");
 #endif
 
         PositionNear(_spkTooltip, _spkTooltipTmp, _spkButtonObj);
@@ -2131,7 +2133,7 @@ public static partial class VoiceChatHudState
         {
             if (VoiceImpostorPolicy.CanTransmit(settings, localImpostorTeam, localDead, localSpectator))
                 return false;
-            reason = "Impostor Chat Only";
+            reason = Loc.T("hud.block_impostor_chat", "Impostor Chat Only");
             return true;
         }
 
@@ -2139,7 +2141,7 @@ public static partial class VoiceChatHudState
             VoiceSceneState.IsTaskVoicePhase(phase) &&
             (settings.OnlyMeetingOrLobbyAffectsGhosts || !localDead))
         {
-            reason = "Meetings/Lobby Only";
+            reason = Loc.T("hud.block_meetings_lobby", "Meetings/Lobby Only");
             return true;
         }
 
@@ -2147,7 +2149,7 @@ public static partial class VoiceChatHudState
             !localDead &&
             (VoiceSceneState.IsTaskVoicePhase(phase) || VoiceSceneState.IsMeetingVoicePhase(phase)))
         {
-            reason = "Only Ghosts can Talk/Hear";
+            reason = Loc.T("hud.block_only_ghosts", "Only Ghosts can Talk/Hear");
             return true;
         }
 

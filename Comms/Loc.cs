@@ -39,6 +39,26 @@ internal static class Loc
     /// <summary>Overrides the game language (tests, and a possible future "Language" option).</summary>
     internal static string? ForcedLocale;
 
+    // The game language lives in IL2CPP objects, which must only be touched from the Unity main
+    // thread. Some HUD toasts are raised from helper/native threads, so those threads reuse the
+    // locale last seen on the main thread instead of reading DataManager themselves.
+    private static int _mainThreadId = -1;
+    private static volatile string _lastLocale = EnglishLocale;
+
+    /// <summary>Call once from the plugin's Load (main thread) so off-thread callers are safe.</summary>
+    internal static void Initialize()
+    {
+        _mainThreadId = Environment.CurrentManagedThreadId;
+        _ = CurrentLocale;
+    }
+
+    /// <summary>Forgets the main thread and the cached locale (tests).</summary>
+    internal static void ResetThreadState()
+    {
+        _mainThreadId = -1;
+        _lastLocale = EnglishLocale;
+    }
+
     /// <summary>Locale used for lookups right now: forced, else the Among Us language, else English.</summary>
     internal static string CurrentLocale
     {
@@ -46,14 +66,16 @@ internal static class Loc
         {
             var forced = ForcedLocale;
             if (forced != null) return forced;
+            if (_mainThreadId != -1 && Environment.CurrentManagedThreadId != _mainThreadId)
+                return _lastLocale;
             try
             {
-                return LocaleFor(AmongUs.Data.DataManager.Settings.Language.CurrentLanguage);
+                return _lastLocale = LocaleFor(AmongUs.Data.DataManager.Settings.Language.CurrentLanguage);
             }
             catch
             {
                 // DataManager is not ready (plugin Load, unit tests, headless harness).
-                return EnglishLocale;
+                return _lastLocale;
             }
         }
     }

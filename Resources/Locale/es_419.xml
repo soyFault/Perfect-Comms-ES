@@ -2,10 +2,83 @@
 <!--
   Perfect Comms strings. One <string> per Loc.T("key", "English") call site.
   Plain text only: {0} placeholders, \n for a newline. TextMeshPro markup stays in C#.
-  en_US.xml is generated from the code (scripts/localization.py) and checked by LocalizationResourceTests.
+  en_US.xml is generated from the code (scripts/localization.py) and checked by LocalizationTests.
 -->
 <resources>
-  <string name="hud.muted">Silenciado</string>
+  <string name="connection.connecting">Conectando voz{0}</string>
+  <string name="connection.players_connected">{0} {1}/{2} jugadores conectados</string>
+  <string name="connection.retrying_audio">Voz no disponible - reintentando audio{0}</string>
+  <string name="connection.starting_audio">{0} iniciando audio</string>
+  <string name="connection.syncing_session">{0} sincronizando sesión</string>
+  <string name="hud.block_impostor_chat">Solo chat de impostores</string>
+  <string name="hud.block_meetings_lobby">Solo reuniones/lobby</string>
+  <string name="hud.block_only_ghosts">Solo los fantasmas pueden hablar/escuchar</string>
   <string name="hud.deafened">Ensordecido</string>
+  <string name="hud.mode_open_mic">Micrófono abierto</string>
+  <string name="hud.mode_push_to_talk">Pulsar para Hablar</string>
+  <string name="hud.muted">Silenciado</string>
   <string name="hud.muted_deafened">Silenciado / Ensordecido</string>
+  <string name="hud.status_active">Activo</string>
+  <string name="joinguard.hooks_disabled">Voz de Perfect Comms desactivada: los hooks críticos del juego no están disponibles. Actualiza el mod o el juego.</string>
+  <string name="joinguard.mismatch">La versión de Perfect Comms no coincide.\\n\\nEsta sala usa Perfect Comms {0}.\\nTú tienes {1}.\\n\\nActualiza Perfect Comms para entrar a esta sala.</string>
+  <string name="joinguard.missing">Esta sala requiere Perfect Comms {0}.\\n\\nInstala o habilita Perfect Comms para unirte a esta sala.</string>
+  <string name="joinguard.waiting_join">La voz de Perfect Comms está esperando una conexión confirmada a la sala. Sal y vuelve a entrar.</string>
+  <string name="preview.building">Creando la vista previa del HUD</string>
+  <string name="preview.detail_backdrop_off">10 vivos / 5 fantasmas / fondo desactivado</string>
+  <string name="preview.detail_backdrop_on">10 vivos / 5 fantasmas / fondo activado</string>
+  <string name="preview.detail_default">10 vivos / 5 fantasmas / actividad de voz simulada</string>
+  <string name="preview.ghost">Fantasma {0:00}</string>
+  <string name="preview.lane">1 FILA</string>
+  <string name="preview.lines">{0} FILAS</string>
+  <string name="preview.live">EN VIVO</string>
+  <string name="preview.loading">CARGANDO</string>
+  <string name="preview.manual">{0} MANUAL</string>
+  <string name="preview.note">Vista previa solo en Canvas / aislada del HUD real del juego</string>
+  <string name="preview.orientation_horizontal">HORIZONTAL</string>
+  <string name="preview.orientation_vertical">VERTICAL</string>
+  <string name="preview.player">Jugador {0:00}</string>
+  <string name="preview.position_bottom_left">ABAJO A LA IZQUIERDA</string>
+  <string name="preview.position_bottom_middle">ABAJO AL CENTRO</string>
+  <string name="preview.position_bottom_right">ABAJO A LA DERECHA</string>
+  <string name="preview.position_default">BARRA DE VOZ</string>
+  <string name="preview.position_middle_left">CENTRO A LA IZQUIERDA</string>
+  <string name="preview.position_middle_right">CENTRO A LA DERECHA</string>
+  <string name="preview.position_top_left">ARRIBA A LA IZQUIERDA</string>
+  <string name="preview.position_top_middle">ARRIBA AL CENTRO</string>
+  <string name="preview.position_top_right">ARRIBA A LA DERECHA</string>
+  <string name="preview.preparing">PREPARANDO VISTA PREVIA</string>
+  <string name="preview.title">VISTA PREVIA EN VIVO DEL HUD</string>
+  <string name="preview.title_embedded">VISTA PREVIA DEL HUD</string>
+  <string name="radio.all_teams">Todos los equipos</string>
+  <string name="radio.impostors">Impostores</string>
+  <string name="radio.managed">Gestionado</string>
+  <string name="radio.unavailable">No disponible</string>
+  <string name="toast.connection_refreshed">Conexión de voz actualizada</string>
+  <string name="toast.mic_retrying_device">Micrófono no disponible - reintentando con el dispositivo</string>
+  <string name="toast.mic_stalled">Micrófono bloqueado - reiniciando el asistente de audio</string>
+  <string name="toast.mix_focus">Mezcla de voz: Vivos {0}% / Muertos {1}%</string>
+  <string name="toast.mix_normal">Mezcla de voz: Normal</string>
+  <string name="toast.speaker_change_failed">No se pudo cambiar el altavoz ni solicitar el predeterminado del sistema; se conservó tu selección</string>
+  <string name="toast.speaker_command_failed">El comando del altavoz seleccionado falló - usando el predeterminado del sistema y reintentando una vez; se conservó tu selección</string>
+  <string name="toast.speaker_default_failed">No se pudo abrir el altavoz predeterminado del sistema ({0})</string>
+  <string name="toast.speaker_default_request_failed">No se pudo solicitar el altavoz predeterminado del sistema</string>
+  <string name="toast.speaker_fallback_kept">No se pudo abrir el altavoz seleccionado - usando el predeterminado del sistema; se conservó tu selección ({0})</string>
+  <string name="toast.speaker_fallback_retry">No se pudo abrir el altavoz seleccionado - usando el predeterminado del sistema y reintentando una vez ({0})</string>
+  <string name="toast.speaker_fallback_unsent">No se pudo abrir el altavoz seleccionado ni solicitar el predeterminado ({0})</string>
+  <string name="toast.speaker_retry_failed">El reintento del altavoz seleccionado falló - continuando con el predeterminado del sistema; se conservó tu selección</string>
+  <string name="toast.voice_retrying_helper">Voz no disponible - reintentando iniciar el asistente de audio</string>
+  <string name="tooltip.hotkey">Atajo: {0}</string>
+  <string name="tooltip.mic_mute_hint">Silenciar: {0}  |  Radio de equipo: {1} (mantener)  |  Cambiar: {2}</string>
+  <string name="tooltip.mic_ptt_hint">Pulsar para hablar activo  |  Radio de equipo: {0} (mantener)  |  Cambiar: {1}</string>
+  <string name="tooltip.mic_title">Micrófono</string>
+  <string name="tooltip.radio_channel">Canal de radio de equipo: {0}</string>
+  <string name="tooltip.radio_held">Radio de equipo: {0} (mantener)</string>
+  <string name="tooltip.speaker_help">Silencia las voces y pausa la transmisión del micrófono.</string>
+  <string name="tooltip.speaker_title">Ensordecer</string>
+  <string name="tooltip.status">Estado: {0}</string>
+  <string name="tooltip.volume">Volumen: {0}%</string>
+  <string name="warning.floor_caller">quien convocó tiene la palabra ({0}s)</string>
+  <string name="warning.floor_self">tienes la palabra ({0}s)</string>
+  <string name="warning.mic_unavailable">micrófono no disponible</string>
+  <string name="warning.speaker_unavailable">altavoz no disponible</string>
 </resources>

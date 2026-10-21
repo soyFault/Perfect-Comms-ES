@@ -8,7 +8,7 @@ using Xunit;
 
 public sealed class LocalizationTests
 {
-    private static readonly Regex Placeholder = new(@"\{\d+\}", RegexOptions.Compiled);
+    private static readonly Regex Placeholder = new(@"\{(\d+)[^}]*\}", RegexOptions.Compiled);
 
     [Theory]
     [InlineData(SupportedLangs.English, "en_US")]
@@ -118,8 +118,104 @@ public sealed class LocalizationTests
             Assert.Equal(text, english[key]);
     }
 
+    [Fact]
+    public void OffThreadCallersReuseTheCachedLocaleInsteadOfReadingTheGame()
+    {
+        try
+        {
+            Loc.Initialize();   // this thread is now "the main thread"
+            string? seen = null;
+            var worker = new System.Threading.Thread(() => seen = Loc.CurrentLocale);
+            worker.Start();
+            worker.Join();
+            Assert.Equal("en_US", seen);   // cached value; no DataManager access off the main thread
+            Assert.Equal("Muted", Loc.T("hud.muted", "Muted"));
+        }
+        finally { Loc.ResetThreadState(); }
+    }
+
+    // ---- Stage 2: pure policies and HUD text ----
+
+    [Fact]
+    public void ConnectionStatusKeepsEnglishAndTranslatesEveryStage()
+    {
+        var connecting = new VoiceConnectionProgress(VoiceConnectionStage.ConnectingPlayers, 2, 5);
+        var starting = VoiceConnectionProgress.Starting;
+        var retrying = new VoiceConnectionProgress(VoiceConnectionStage.RetryingAudio, 0, 0);
+        var syncing = new VoiceConnectionProgress(VoiceConnectionStage.SyncingSession, 0, 0);
+        var noCount = new VoiceConnectionProgress(VoiceConnectionStage.ConnectingPlayers, 0, 0);
+
+        WithLocale("en_US", () =>
+        {
+            Assert.Equal("Connecting voice... 2/5 players connected", VoiceConnectionStatusPolicy.BuildText(connecting, 0));
+            Assert.Equal("Connecting voice.... starting audio", VoiceConnectionStatusPolicy.BuildText(starting, 1));
+            Assert.Equal("Voice unavailable - retrying audio.....", VoiceConnectionStatusPolicy.BuildText(retrying, 2));
+        });
+        WithLocale("es_419", () =>
+        {
+            Assert.Equal("Conectando voz... 2/5 jugadores conectados", VoiceConnectionStatusPolicy.BuildText(connecting, 0));
+            Assert.Equal("Conectando voz.... iniciando audio", VoiceConnectionStatusPolicy.BuildText(starting, 1));
+            Assert.Equal("Voz no disponible - reintentando audio.....", VoiceConnectionStatusPolicy.BuildText(retrying, 2));
+            Assert.Equal("Conectando voz... sincronizando sesión", VoiceConnectionStatusPolicy.BuildText(syncing, 0));
+            Assert.Equal("Conectando voz...", VoiceConnectionStatusPolicy.BuildText(noCount, 0));
+        });
+    }
+
+    [Fact]
+    public void TeamRadioChannelNamesFollowTheLanguage()
+    {
+        WithLocale("en_US", () => Assert.Equal("All Teams", VoiceTeamRadioChannels.DisplayName(VoiceTeamRadioChannel.All)));
+        WithLocale("es_ES", () =>
+        {
+            Assert.Equal("Impostores", VoiceTeamRadioChannels.DisplayName(VoiceTeamRadioChannel.Impostors));
+            Assert.Equal("Todos los equipos", VoiceTeamRadioChannels.DisplayName(VoiceTeamRadioChannel.All));
+            Assert.Equal("No disponible", VoiceTeamRadioChannels.DisplayName(VoiceTeamRadioChannel.None));
+        });
+    }
+
+    [Fact]
+    public void PreviewRosterNamesAreNumberedInBothLanguages()
+    {
+        WithLocale("en_US", () =>
+        {
+            Assert.Equal("Player 01", SpeakingBarPreviewRoster.Name(0));
+            Assert.Equal("Player 10", SpeakingBarPreviewRoster.Name(9));
+            Assert.Equal("Ghost 11", SpeakingBarPreviewRoster.Name(10));
+            Assert.Equal("Ghost 15", SpeakingBarPreviewRoster.Name(14));
+        });
+        WithLocale("es_419", () =>
+        {
+            Assert.Equal("Jugador 01", SpeakingBarPreviewRoster.Name(0));
+            Assert.Equal("Fantasma 11", SpeakingBarPreviewRoster.Name(10));
+        });
+    }
+
+    [Fact]
+    public void KickReasonsAreSentInEnglishAndLocalizedByTheReceivingClient()
+    {
+        var mismatch = string.Format(VoiceJoinGuard.MismatchFormat, "4.1.11", "4.0.0");
+        var missing = string.Format(VoiceJoinGuard.MissingFormat, "4.1.11");
+
+        // English (or any language without a translation) shows exactly what the host sent.
+        WithLocale("en_US", () =>
+        {
+            Assert.Equal(mismatch, VoiceJoinGuard.LocalizeKickReason(mismatch));
+            Assert.Equal(missing, VoiceJoinGuard.LocalizeKickReason(missing));
+        });
+        WithLocale("es_419", () =>
+        {
+            var translated = VoiceJoinGuard.LocalizeKickReason(mismatch);
+            Assert.Contains("no coincide", translated);
+            Assert.Contains("4.1.11", translated);
+            Assert.Contains("4.0.0", translated);
+            Assert.Contains("Instala o habilita", VoiceJoinGuard.LocalizeKickReason(missing));
+            // Unknown reasons (other mods, newer hosts) pass through untouched.
+            Assert.Equal("Banned by host", VoiceJoinGuard.LocalizeKickReason("Banned by host"));
+        });
+    }
+
     private static string Placeholders(string text)
-        => string.Join(",", Placeholder.Matches(text).Select(m => m.Value).Distinct().OrderBy(v => v));
+        => string.Join(",", Placeholder.Matches(text).Select(m => m.Groups[1].Value).Distinct().OrderBy(v => v));
 
     private static void WithLocale(string? locale, Action body)
     {
