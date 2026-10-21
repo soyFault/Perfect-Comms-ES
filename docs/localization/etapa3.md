@@ -1,6 +1,6 @@
 # Etapa 3 — Paneles (ajustes, host, asistente de primer arranque, mezclador)
 
-**Estado: hecha en `claude-local`** (5 commits: 3a `432639c`, 3b–d `971192a`, 3e `2deae38`, 3f/final al cierre de esta etapa).
+**Estado: hecha en `claude-local`** (5 commits: 3a `432639c`, 3b–d `971192a`, 3e `2deae38`, 3f `92ae618`).
 Verificado (.NET 10): `PerfectComms.csproj` Release 0 warnings / 0 errores · `PerfectComms.Tests` **1302/1302** (eran 1297; +5) ·
 `PerfectComms.Starlight.Tests` 107/107 y build 0 warnings (compila los bloques `#if ANDROID` de estos archivos) ·
 `scripts/localization.py --check` al día · `verify-release-assets.py --self-test` y `package-release.sh --validate-source` OK.
@@ -33,7 +33,7 @@ XML: **460 claves** en total (`en_US`/`es_419`/`es_ES`), 0 sin traducir. Probado
 - Hay pares de `main` con el mismo inglés y traducciones distintas; se unificó: `Mic check is off` → "La prueba de micrófono está desactivada"; `Default speaker test completed…` → "Prueba de la salida predeterminada completada - ¿la escuchaste?"; `Waiting for the selected speaker...` → "Esperando la salida seleccionada...". En el selector de dispositivos "Speaker" se traduce "Salida" (como en `main`) pero "Speaker Volume" → "Volumen del altavoz".
 - El resumen de HUD del asistente se reescribió con frases completas por estado (`Controles visibles/ocultos`, `Estado de conexión visible/oculto`, `Brillo de reunión visible/oculto`, `Escala N% / Fondo activado/desactivado`) para evitar concordancias raras (antes: `{ShownHidden(...)}`).
 - El atajo corto "PTT" se tradujo "PPH" como en `main` (pulsar para hablar). Las etiquetas del riel `Push to talk` / `Mute mic` se acortaron a "Hablar" / "Silenciar" por el ancho (84 px).
-- Textos que el rediseño añadió y `main` no tenía son traducciones nuevas (por ejemplo las de los controles táctiles, "Cómo se llevan los cambios", errores de guardado, ayudas de las filas) — revísalas.
+- Textos que el rediseño añadió y `main` no tenía son traducciones nuevas (por ejemplo las de los controles táctiles, errores de guardado, ayudas de las filas) — revísalas.
 
 ## Guardas nuevas
 `NoStaticFieldOrConstResolvesTextWhileThePluginLoads` (en `LocalizationTests`): falla si alguien escribe `static readonly … = Loc.T(...)` o `const … Loc.T(...)`, que congelaría el idioma al cargar el plugin. (Se probó que detecta el caso.) Otros tests: presets, captions, ayuda en español, y `LocText` resuelto al usarse.
