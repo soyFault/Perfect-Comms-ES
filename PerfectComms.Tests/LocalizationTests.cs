@@ -385,6 +385,65 @@ public sealed class LocalizationTests
         Assert.Equal("Default", devices[0].Name);   // the stored name is data and never changes
     }
 
+    // ---- Stage 5: lobby browser, notifier, Android text ----
+
+    [Fact]
+    public void JoinButtonLogicDependsOnTheStateNotOnTheTranslatedLabel()
+    {
+        var listing = new VoiceLobbyListing
+        {
+            Code = "ABCDEF", State = "Lobby", Players = 3, MaxPlayers = 10,
+            ProtocolVersion = VoiceProtocol.ProtocolVersion,
+        };
+        WithLocale("en_US", () =>
+        {
+            var (state, text) = VoiceLobbyBrowserUi.JoinStatus(listing);
+            Assert.Equal(VoiceLobbyBrowserUi.JoinState.Join, state);
+            Assert.Equal("JOIN", text);
+        });
+        WithLocale("es_419", () =>
+        {
+            var (state, text) = VoiceLobbyBrowserUi.JoinStatus(listing);
+            Assert.Equal(VoiceLobbyBrowserUi.JoinState.Join, state);   // still joinable
+            Assert.Equal("ENTRAR", text);
+
+            listing.Players = 10;
+            Assert.Equal((VoiceLobbyBrowserUi.JoinState.Full, "LLENA"), VoiceLobbyBrowserUi.JoinStatus(listing));
+            listing.Players = 3;
+            listing.State = "InGame";
+            Assert.Equal((VoiceLobbyBrowserUi.JoinState.InGame, "EN PARTIDA"), VoiceLobbyBrowserUi.JoinStatus(listing));
+            listing.State = "SomethingElse";   // server text is shown as received
+            Assert.Equal((VoiceLobbyBrowserUi.JoinState.Other, "SOMETHINGELSE"), VoiceLobbyBrowserUi.JoinStatus(listing));
+            listing.ProtocolVersion = -1;
+            Assert.Equal(VoiceLobbyBrowserUi.JoinState.Version, VoiceLobbyBrowserUi.JoinStatus(listing).State);
+        });
+    }
+
+    [Fact]
+    public void LobbyModSummaryIsTranslatedButModNamesAreNot()
+    {
+        var empty = new VanillaLobbyMetadata();
+        var many = new VanillaLobbyMetadata
+        {
+            Mods = new[]
+            {
+                new VanillaLobbyModMetadata { Id = "mira.api", Version = "1.0" },
+                new VanillaLobbyModMetadata { Id = "gg.reactor.api", Version = "2.0" },
+                new VanillaLobbyModMetadata { Id = "other.mod", Version = "3.0" },
+            },
+        };
+        WithLocale("en_US", () =>
+        {
+            Assert.Equal("None reported", empty.GetModSummary(5));
+            Assert.Equal("MiraAPI 1.0, Reactor 2.0, +1 more", many.GetModSummary(2));
+        });
+        WithLocale("es_419", () =>
+        {
+            Assert.Equal("Ninguno reportado", empty.GetModSummary(5));
+            Assert.Equal("MiraAPI 1.0, Reactor 2.0, +1 más", many.GetModSummary(2));
+        });
+    }
+
     private static void WithTemporaryConfig(Action<BepInEx.Configuration.ConfigFile> test)
     {
         var directory = Path.Combine(Path.GetTempPath(), $"PerfectComms-LocTests-{Guid.NewGuid():N}");

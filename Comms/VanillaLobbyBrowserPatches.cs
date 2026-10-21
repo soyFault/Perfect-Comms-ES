@@ -91,13 +91,14 @@ internal readonly struct VanillaLobbyDisplayData
     internal bool FromApi { get; }
     internal TimeSpan StatusAge { get; }
     internal string Code => string.IsNullOrWhiteSpace(Metadata.Code) ? ResolveCode(Listing.GameId) : Metadata.Code;
-    internal string Host => string.IsNullOrWhiteSpace(Metadata.HostName) ? ResolveHostName(Listing) : Metadata.HostName;
+    internal string Host => LocalizeHost(string.IsNullOrWhiteSpace(Metadata.HostName) ? ResolveHostName(Listing) : Metadata.HostName);
+    // Canonical (English) status: used to detect status changes. StatusText is what the player sees.
     internal string Status => FormatStatusLabel(Metadata.StatusLabel);
     internal int Players => Metadata.PlayerCount > 0 ? Metadata.PlayerCount : Listing.PlayerCount;
     internal int MaxPlayers => Metadata.MaxPlayers > 0 ? Metadata.MaxPlayers : Listing.MaxPlayers;
     internal string PlayerText => $"{Players}/{MaxPlayers}";
-    internal string StatusText => $"{Status} {FormatStatusAge(StatusAge)}";
-    internal string HostTagText => $"Host: {Host}";
+    internal string StatusText => $"{LocalizeStatus(Status)} {FormatStatusAge(StatusAge)}";
+    internal string HostTagText => Loc.T("lobby.host_tag", "Host: {0}", Host);
     internal string StatusTagText => StatusText;
     internal string MapText => ResolveMapName(Metadata.MapId != 0 ? Metadata.MapId : Listing.MapId);
     internal string ModsText => Metadata.GetModSummary(5);
@@ -130,8 +131,22 @@ internal readonly struct VanillaLobbyDisplayData
         if (!string.IsNullOrWhiteSpace(listing.HostName)) return listing.HostName.Trim();
         if (!string.IsNullOrWhiteSpace(listing.TrueHostName)) return listing.TrueHostName.Trim();
         if (!string.IsNullOrWhiteSpace(listing.HostPlatformName)) return listing.HostPlatformName.Trim();
-        return "Unknown host";
+        return VanillaLobbyMetadata.UnknownHost;
     }
+
+    private static string LocalizeHost(string host)
+        => string.Equals(host, VanillaLobbyMetadata.UnknownHost, StringComparison.Ordinal)
+            ? Loc.T("lobby.unknown_host", "Unknown host")
+            : host;
+
+    // The public API reports a handful of known states; anything else is shown as received.
+    private static string LocalizeStatus(string canonicalStatus) => canonicalStatus switch
+    {
+        "Lobby" => Loc.T("lobby.status_lobby", "Lobby"),
+        "In Game" => Loc.T("lobby.status_in_game", "In Game"),
+        VanillaLobbyMetadata.UnknownStatus => Loc.T("lobby.status_unknown", "Unknown"),
+        _ => canonicalStatus,
+    };
 
     internal static string ResolveCode(int gameId)
     {
@@ -166,7 +181,7 @@ internal readonly struct VanillaLobbyDisplayData
         2 => "Polus",
         3 => "The Airship",
         4 => "The Fungle",
-        _ => $"Map {mapId}"
+        _ => Loc.T("lobby.map_unknown", "Map {0}", mapId)
     };
 }
 
@@ -213,20 +228,7 @@ internal static class VanillaLobbyBrowserRowUi
     private static readonly Dictionary<int, GameListing> Listings = new();
     private static readonly Dictionary<int, TextMeshPro> RowDetailsByContainer = new();
     private static readonly List<GameListing> LastResponseListings = new();
-    private static readonly FieldInfo? GameListingField = SafeField(typeof(GameContainer), "gameListing");
-    private static readonly FieldInfo? Tag1Field = SafeField(typeof(GameContainer), "tag1");
-    private static readonly FieldInfo? Tag2Field = SafeField(typeof(GameContainer), "tag2");
-    private static readonly FieldInfo? CapacityField = SafeField(typeof(GameContainer), "capacity");
-    private static readonly FieldInfo? GameContainersField = SafeField(typeof(FindAGameManager), "gameContainers");
     private static string? _lastWarning;
-
-    private static FieldInfo? SafeField(Type type, string name)
-    {
-        var field = type.GetField(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-        if (field == null)
-            WarnOnce($"{type.Name}.{name} not found (game update?); lobby-browser detail disabled");
-        return field;
-    }
 
     internal static void RefreshVisibleRows(FindAGameManager manager)
     {
@@ -249,8 +251,12 @@ internal static class VanillaLobbyBrowserRowUi
     private static List<GameContainer> ResolveContainers(FindAGameManager manager)
     {
         var result = new List<GameContainer>();
-        if (GameContainersField?.GetValue(manager) is GameContainer[] containers)
-            result.AddRange(containers);
+        var containers = manager.gameContainers;
+        if (containers != null)
+        {
+            for (var i = 0; i < containers.Length; i++)
+                result.Add(containers[i]);
+        }
         else
             result.AddRange(Object.FindObjectsOfType<GameContainer>());
 
@@ -292,7 +298,8 @@ internal static class VanillaLobbyBrowserRowUi
         gameListing = default!;
         try
         {
-            if (GameListingField?.GetValue(container) is GameListing listing)
+            var listing = container.gameListing;
+            if (listing != null)
             {
                 gameListing = listing;
                 return gameListing.GameId != 0;
@@ -318,9 +325,12 @@ internal static class VanillaLobbyBrowserRowUi
         try
         {
             var data = VanillaLobbyDisplayData.Build(gameListing);
-            SetBoxText(container, Tag1Field, IsHostBox, data.HostTagText, "host");
-            SetBoxText(container, Tag2Field, IsStatusBox, data.StatusTagText, "status");
-            SetBoxText(container, CapacityField, IsCapacityText, data.PlayerText, "capacity");
+            // The row's text boxes are the game's own serialized members (tag1 = host, tag2 = status,
+            // capacity = players). They are found by structure, never by reading the game's visible
+            // text, which is already in the player's language and used to defeat the old heuristics.
+            SetBoxText(container.tag1, data.HostTagText, "host");
+            SetBoxText(container.tag2, data.StatusTagText, "status");
+            SetBoxText(container.capacity, data.PlayerText, "capacity");
             if (ShowExtraDetails)
                 ApplyDetails(container, data);
             else
@@ -332,25 +342,16 @@ internal static class VanillaLobbyBrowserRowUi
         }
     }
 
-    private static TextMeshPro? SetBoxText(GameContainer container, FieldInfo? field, Func<string, bool> predicate, string text, string label)
+    private static void SetBoxText(TextMeshPro? target, string text, string label)
     {
-        if (field?.GetValue(container) is TextMeshPro fieldText)
+        if (target == null)
         {
-            fieldText.text = text;
-            return fieldText;
+            WarnOnce($"row {label} text target is missing (game update?)");
+            return;
         }
 
-        foreach (var tmp in container.gameObject.GetComponentsInChildren<TextMeshPro>(true))
-        {
-            if (tmp == null) continue;
-            var current = tmp.text ?? "";
-            if (!predicate(current)) continue;
-            if (!string.Equals(current, text, StringComparison.Ordinal)) tmp.text = text;
-            return tmp;
-        }
-
-        WarnOnce($"could not find row {label} text target");
-        return null;
+        if (!string.Equals(target.text, text, StringComparison.Ordinal))
+            target.text = text;
     }
 
     private static void ApplyDetails(GameContainer container, VanillaLobbyDisplayData data)
@@ -409,24 +410,10 @@ internal static class VanillaLobbyBrowserRowUi
     }
 
     private static string FormatRowDetails(VanillaLobbyDisplayData data)
-        => Shorten($"Code: {data.Code} • Map: {data.MapText} • Mods: {data.ModsText}", 92);
+        => Shorten(Loc.T("lobby.row_details", "Code: {0} • Map: {1} • Mods: {2}", data.Code, data.MapText, data.ModsText), 92);
 
     private static string Shorten(string value, int max)
         => value.Length <= max ? value : value[..Math.Max(0, max - 1)] + "…";
-
-    private static bool IsHostBox(string text)
-        => text.IndexOf("Player Speed", StringComparison.OrdinalIgnoreCase) >= 0
-           || text.StartsWith("Host:", StringComparison.OrdinalIgnoreCase);
-
-    private static bool IsStatusBox(string text)
-        => text.IndexOf("Roles", StringComparison.OrdinalIgnoreCase) >= 0
-           || text.StartsWith("Lobby", StringComparison.OrdinalIgnoreCase)
-           || text.StartsWith("InGame", StringComparison.OrdinalIgnoreCase)
-           || text.StartsWith("In Game", StringComparison.OrdinalIgnoreCase)
-           || text.StartsWith("Unknown", StringComparison.OrdinalIgnoreCase);
-
-    private static bool IsCapacityText(string text)
-        => text.Contains('/') && !text.Contains('•');
 
     private static void WarnOnce(string warning)
     {
@@ -440,16 +427,7 @@ internal static class VanillaLobbyMoreInfoUi
 {
     private static readonly bool ShowExtraDetails = false;
     private static readonly Dictionary<int, TextMeshPro> DetailsByPopup = new();
-    private static readonly FieldInfo? CapacityField = SafeField(typeof(FindGameMoreInfoPopup), "capacity");
     private static string? _lastWarning;
-
-    private static FieldInfo? SafeField(Type type, string name)
-    {
-        var field = type.GetField(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-        if (field == null)
-            WarnOnce($"{type.Name}.{name} not found (game update?); lobby-browser detail disabled");
-        return field;
-    }
 
     internal static void Apply(FindGameMoreInfoPopup popup, GameListing gameListing)
     {
@@ -462,7 +440,8 @@ internal static class VanillaLobbyMoreInfoUi
             }
 
             var data = VanillaLobbyDisplayData.Build(gameListing);
-            if (CapacityField?.GetValue(popup) is TextMeshPro capacity)
+            var capacity = popup.capacity;
+            if (capacity != null)
                 capacity.text = data.StatusText;
 
             var detailsText = BuildDetailsText(data);
@@ -592,10 +571,10 @@ internal static class VanillaLobbyMoreInfoUi
     {
         return string.Join("\n",
             "<mark=#0B1F24CC><b> PERFECT COMMS </b></mark>",
-            $"<mark=#104F58CC> HOST </mark> {data.Host}",
-            $"<mark=#104F58CC> STATUS </mark> {data.StatusText}",
-            $"<mark=#104F58CC> CODE </mark> {data.Code}   <mark=#104F58CC> MAP </mark> {data.MapText}",
-            $"<mark=#104F58CC> MODS </mark> {data.ModsText}");
+            "<mark=#104F58CC> " + Loc.T("lobby.label_host", "HOST") + " </mark> " + data.Host,
+            "<mark=#104F58CC> " + Loc.T("lobby.label_status", "STATUS") + " </mark> " + data.StatusText,
+            "<mark=#104F58CC> " + Loc.T("lobby.label_code", "CODE") + " </mark> " + data.Code + "   <mark=#104F58CC> " + Loc.T("lobby.label_map", "MAP") + " </mark> " + data.MapText,
+            "<mark=#104F58CC> " + Loc.T("lobby.label_mods", "MODS") + " </mark> " + data.ModsText);
     }
 
     private static int CountPopupTexts(GameObject root)

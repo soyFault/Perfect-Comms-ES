@@ -18,29 +18,32 @@ internal static class AndroidVoiceUiPolicy
         VoiceSettingsCategory.Advanced,
     };
 
-    internal const string MicrophoneControlHelp =
-        "Open Mic: tap to mute. Push To Talk: hold the mic to speak.";
+    // Properties (not const): the text is resolved when the UI is built, in the game language.
+    internal static string MicrophoneControlHelp =>
+        Loc.T("android.help_mic_control", "Open Mic: tap to mute. Push To Talk: hold the mic to speak.");
 
-    internal const string ControlsJourneyHelp =
-        "Talk mode, touch controls, and startup behavior.";
+    internal static string ControlsJourneyHelp =>
+        Loc.T("android.help_controls_journey", "Talk mode, touch controls, and startup behavior.");
 
-    internal const string TeamRadioControlHelp =
-        "When the radio button appears, tap to change channel or hold to transmit.";
+    internal static string TeamRadioControlHelp =>
+        Loc.T("android.help_team_radio_control", "When the radio button appears, tap to change channel or hold to transmit.");
 
     internal static string MicModeHelp(bool pushToTalk)
         => pushToTalk
-            ? "Hold the microphone button while you speak.\nRelease it to stop transmitting."
-            : "Open Mic sends speech automatically.\nTap the microphone button to mute.";
+            ? Loc.T("android.help_mic_mode_ptt", "Hold the microphone button while you speak.\nRelease it to stop transmitting.")
+            : Loc.T("android.help_mic_mode_open", "Open Mic sends speech automatically.\nTap the microphone button to mute.");
 
     internal static string MicrophoneTooltipAction(bool pushToTalk, bool radioVisible)
     {
-        string microphoneAction = pushToTalk ? "Hold mic: talk" : "Tap mic: mute";
+        string microphoneAction = pushToTalk
+            ? Loc.T("android.tip_hold_mic", "Hold mic: talk")
+            : Loc.T("android.tip_tap_mic", "Tap mic: mute");
         return radioVisible
-            ? microphoneAction + "  |  Radio: tap to change channel / hold to talk"
+            ? microphoneAction + "  |  " + Loc.T("android.tip_radio", "Radio: tap to change channel / hold to talk")
             : microphoneAction;
     }
 
-    internal const string SpeakerTooltipAction =
-        "Tap to deafen or undeafen. Deafening mutes playback and pauses microphone transmission.";
+    internal static string SpeakerTooltipAction =>
+        Loc.T("android.tip_speaker", "Tap to deafen or undeafen. Deafening mutes playback and pauses microphone transmission.");
 }
 #endif

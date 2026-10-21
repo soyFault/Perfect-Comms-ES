@@ -84,7 +84,7 @@ internal static class VoiceRoleMuteState
         GetVoiceLifeState(local, phase, out voiceDead, out voiceSpectator);
         if (Floor.Blocks(local.PlayerId, voiceDead, phase, Time.unscaledTime))
         {
-            reason = "Caller has the floor";
+            reason = Loc.T("hud.block_caller_floor", "Caller has the floor");
             return true;
         }
 
@@ -95,7 +95,7 @@ internal static class VoiceRoleMuteState
                 out var modReason))
             return false;
 
-        reason = string.IsNullOrEmpty(modReason) ? "Role Muted" : modReason;
+        reason = string.IsNullOrEmpty(modReason) ? Loc.T("hud.block_role_muted", "Role Muted") : modReason;
         return true;
     }
 

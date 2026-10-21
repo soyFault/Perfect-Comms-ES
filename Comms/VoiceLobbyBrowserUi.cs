@@ -320,13 +320,13 @@ internal static class VoiceLobbyBrowserUi
         }
 
         var titleText = CreateText("Title", _panelRoot.transform, new Vector3(0f, 1.35f, -0.2f),
-            "Voice Lobbies", 1.70f, TextAlignmentOptions.Center, SortBase + 4);
+            Loc.T("browser.title", "Voice Lobbies"), 1.70f, TextAlignmentOptions.Center, SortBase + 4);
         titleText.fontStyle = FontStyles.Bold;
         titleText.characterSpacing = 1.4f;
         titleText.color = new Color32(188, 247, 255, 255);
 
         _statusText = CreateText("Status", _panelRoot.transform, new Vector3(0f, 0.98f, -0.2f),
-            "Loading...", 1.10f, TextAlignmentOptions.Center, SortBase + 4);
+            Loc.T("browser.loading", "Loading..."), 1.10f, TextAlignmentOptions.Center, SortBase + 4);
         _statusText.color = new Color32(184, 217, 232, 255);
 
         _rowsRoot = new GameObject("Rows");
@@ -336,9 +336,9 @@ internal static class VoiceLobbyBrowserUi
         CreateTextButton("CloseX", _panelRoot.transform, CloseButtonPosition,
             new Vector2(CloseButtonSize, CloseButtonSize), "X", ClosePanel, transparentBackground: true);
         CreateTextButton("Refresh", _panelRoot.transform, new Vector3(-2.05f, -1.35f, -0.2f),
-            new Vector2(1.08f, 0.44f), "Refresh", () => Refresh());
+            new Vector2(1.08f, 0.44f), Loc.T("browser.refresh", "Refresh"), () => Refresh());
         CreateTextButton("Info", _panelRoot.transform, new Vector3(2.05f, -1.35f, -0.2f),
-            new Vector2(1.14f, 0.44f), "Info", OpenInfoEditor);
+            new Vector2(1.14f, 0.44f), Loc.T("browser.info", "Info"), OpenInfoEditor);
         ApplyPanelTransform();
     }
 
@@ -348,7 +348,7 @@ internal static class VoiceLobbyBrowserUi
         if (showLoading)
         {
             ClearRows();
-            SetStatus("Connecting to Perfect Comms live lobbies...");
+            SetStatus(Loc.T("browser.connecting", "Connecting to Perfect Comms live lobbies..."));
         }
         EnsureLiveDirectory();
         VoiceLobbyLiveBrowserClient.RequestSnapshot();
@@ -370,7 +370,7 @@ internal static class VoiceLobbyBrowserUi
         {
             SetStatus("");
             var empty = CreateText("EmptyState", _rowsRoot.transform, new Vector3(0f, 0.05f, -0.2f),
-                "No public voice lobbies listed.\nHost a lobby and enable Public Voice Lobby in game settings.",
+                Loc.T("browser.empty", "No public voice lobbies listed.\nHost a lobby and enable Public Voice Lobby in game settings."),
                 1.20f, TextAlignmentOptions.Center, SortBase + 4);
             empty.enableWordWrapping = true;
             empty.rectTransform.sizeDelta = new Vector2(6.0f, 1.6f);
@@ -378,13 +378,13 @@ internal static class VoiceLobbyBrowserUi
             return;
         }
 
-        SetStatus($"{listings.Count} Perfect Comms live lobby/lobbies found");
+        SetStatus(Loc.T("browser.found", "{0} Perfect Comms live lobby/lobbies found", listings.Count));
         int row = 0;
         foreach (var listing in listings)
         {
             if (row >= 3) break;
             float y = 0.54f - row * 0.64f;
-            string status = JoinStatus(listing);
+            var status = JoinStatus(listing);
             CreateRowBackground("RowBg" + row, _rowsRoot.transform, new Vector3(0.10f, y, -0.30f));
 
             var title = CreateText("RowTitle" + row, _rowsRoot.transform, new Vector3(-0.18f, y + 0.10f, -0.2f),
@@ -395,7 +395,7 @@ internal static class VoiceLobbyBrowserUi
             title.fontStyle = FontStyles.Bold;
             title.color = new Color32(238, 252, 255, 255);
 
-            var host = string.IsNullOrWhiteSpace(listing.Host) ? "Unknown" : listing.Host;
+            var host = string.IsNullOrWhiteSpace(listing.Host) ? Loc.T("browser.unknown_host", "Unknown") : listing.Host;
             var detailsText = BuildDetailsText(listing, host);
             var details = CreateText("RowDetails" + row, _rowsRoot.transform, new Vector3(-0.18f, y - 0.14f, -0.2f),
                 detailsText, 0.68f, TextAlignmentOptions.Left, SortBase + 4);
@@ -405,7 +405,7 @@ internal static class VoiceLobbyBrowserUi
             details.color = new Color32(171, 210, 224, 255);
 
             CreateTextButton("Join" + row, _rowsRoot.transform, new Vector3(2.85f, y, -0.2f),
-                new Vector2(0.92f, 0.36f), status, () => JoinListing(listing), status == "JOIN", true);
+                new Vector2(0.92f, 0.36f), status.Text, () => JoinListing(listing), status.State == JoinState.Join, true);
             row++;
         }
     }
@@ -415,7 +415,7 @@ internal static class VoiceLobbyBrowserUi
         var parts = new List<string>
         {
             StateWithDuration(listing),
-            "Host: " + Truncate(host, 14),
+            Loc.T("browser.host_prefix", "Host: {0}", Truncate(host, 14)),
         };
 
         if (!string.IsNullOrWhiteSpace(listing.Code))
@@ -463,19 +463,28 @@ internal static class VoiceLobbyBrowserUi
            && listing.ProtocolVersion == VoiceProtocol.ProtocolVersion
            && !string.IsNullOrWhiteSpace(listing.Code);
 
-    private static string JoinStatus(VoiceLobbyListing listing)
+    // The button logic depends on the state, not on the (translated) label.
+    internal enum JoinState { Join, Version, InGame, Unknown, Other, Full }
+
+    internal static (JoinState State, string Text) JoinStatus(VoiceLobbyListing listing)
     {
         var state = listing.State ?? "";
-        if (listing.ProtocolVersion != VoiceProtocol.ProtocolVersion) return "VERSION";
-        if (string.Equals(state, "InGame", StringComparison.OrdinalIgnoreCase)) return "IN GAME";
-        if (!string.Equals(state, "Lobby", StringComparison.OrdinalIgnoreCase)) return string.IsNullOrWhiteSpace(state) ? "UNKNOWN" : state.ToUpperInvariant();
-        if (listing.Players >= listing.MaxPlayers) return "FULL";
-        return "JOIN";
+        if (listing.ProtocolVersion != VoiceProtocol.ProtocolVersion)
+            return (JoinState.Version, Loc.T("browser.join_version", "VERSION"));
+        if (string.Equals(state, "InGame", StringComparison.OrdinalIgnoreCase))
+            return (JoinState.InGame, Loc.T("browser.join_in_game", "IN GAME"));
+        if (!string.Equals(state, "Lobby", StringComparison.OrdinalIgnoreCase))
+            return string.IsNullOrWhiteSpace(state)
+                ? (JoinState.Unknown, Loc.T("browser.join_unknown", "UNKNOWN"))
+                : (JoinState.Other, state.ToUpperInvariant());   // state text from the server, shown as received
+        if (listing.Players >= listing.MaxPlayers)
+            return (JoinState.Full, Loc.T("browser.join_full", "FULL"));
+        return (JoinState.Join, Loc.T("browser.join_join", "JOIN"));
     }
 
     private static string StateWithDuration(VoiceLobbyListing listing)
     {
-        var label = string.Equals(listing.State, "InGame", StringComparison.OrdinalIgnoreCase) ? "In game" : "Lobby";
+        var label = string.Equals(listing.State, "InGame", StringComparison.OrdinalIgnoreCase) ? Loc.T("browser.state_in_game", "In game") : Loc.T("browser.state_lobby", "Lobby");
         var since = listing.StateChangedAt > 0 ? listing.StateChangedAt : listing.UpdatedAt;
         if (since <= 0) return label;
 
@@ -530,7 +539,7 @@ internal static class VoiceLobbyBrowserUi
             var manager = DestroyableSingleton<ServerManager>.Instance;
             if (manager == null)
             {
-                error = "Among Us region manager is not available";
+                error = Loc.T("browser.err_no_region_manager", "Among Us region manager is not available");
                 return false;
             }
 
@@ -549,7 +558,7 @@ internal static class VoiceLobbyBrowserUi
 
             if (match == null)
             {
-                error = $"Required region is not installed: {regionName}. Install/enable that region, then retry.";
+                error = Loc.T("browser.err_region_missing", "Required region is not installed: {0}. Install/enable that region, then retry.", regionName);
                 return false;
             }
 
@@ -559,7 +568,7 @@ internal static class VoiceLobbyBrowserUi
         }
         catch (Exception ex)
         {
-            error = "Could not select region " + regionName + ": " + ex.Message;
+            error = Loc.T("browser.err_region_select", "Could not select region {0}: {1}", regionName, ex.Message);
             return false;
         }
     }
@@ -583,12 +592,12 @@ internal static class VoiceLobbyBrowserUi
         if (!IsJoinable(listing)) return;
         if (string.IsNullOrWhiteSpace(listing.Region))
         {
-            SetStatus("Join failed: listing does not include an Among Us region");
+            SetStatus(Loc.T("browser.err_no_region_in_listing", "Join failed: listing does not include an Among Us region"));
             return;
         }
         if (!TrySelectRegion(listing.Region.Trim(), out var regionError))
         {
-            SetStatus("Join failed: " + regionError);
+            SetStatus(Loc.T("browser.err_join_failed", "Join failed: {0}", regionError));
             return;
         }
 
@@ -600,7 +609,7 @@ internal static class VoiceLobbyBrowserUi
         }
         catch (Exception ex)
         {
-            SetStatus("Join failed: " + ex.Message);
+            SetStatus(Loc.T("browser.err_join_failed", "Join failed: {0}", ex.Message));
         }
     }
 
@@ -608,7 +617,7 @@ internal static class VoiceLobbyBrowserUi
     {
         EnsurePanel();
         ClearRows();
-        SetStatus("Edit lobby info. Click field, type, Save.");
+        SetStatus(Loc.T("browser.editor_hint", "Edit lobby info. Click field, type, Save."));
         if (_rowsRoot == null) return;
 
         _editorText = CreateText("EditorText", _rowsRoot.transform, new Vector3(0f, 0.45f, -0.2f),
@@ -617,13 +626,13 @@ internal static class VoiceLobbyBrowserUi
         _editorText.rectTransform.sizeDelta = new Vector2(5.6f, 1.0f);
         _editorText.color = new Color32(224, 242, 248, 255);
         CreateTextButton("EditTitle", _rowsRoot.transform, new Vector3(-0.70f, -0.25f, -0.2f),
-            new Vector2(1.25f, 0.34f), "Edit Title", () => { _editingLanguage = false; RenderEditor(); });
+            new Vector2(1.25f, 0.34f), Loc.T("browser.edit_title", "Edit Title"), () => { _editingLanguage = false; RenderEditor(); });
         CreateTextButton("EditLanguage", _rowsRoot.transform, new Vector3(0.70f, -0.25f, -0.2f),
-            new Vector2(1.45f, 0.34f), "Edit Language", () => { _editingLanguage = true; RenderEditor(); });
+            new Vector2(1.45f, 0.34f), Loc.T("browser.edit_language", "Edit Language"), () => { _editingLanguage = true; RenderEditor(); });
         CreateTextButton("SaveInfo", _rowsRoot.transform, new Vector3(-0.70f, -0.75f, -0.2f),
-            new Vector2(1.0f, 0.34f), "Save", SaveEditor);
+            new Vector2(1.0f, 0.34f), Loc.T("browser.save", "Save"), SaveEditor);
         CreateTextButton("CancelInfo", _rowsRoot.transform, new Vector3(0.70f, -0.75f, -0.2f),
-            new Vector2(1.0f, 0.34f), "Cancel", () => { _editorOpen = false; Refresh(); });
+            new Vector2(1.0f, 0.34f), Loc.T("browser.cancel", "Cancel"), () => { _editorOpen = false; Refresh(); });
     }
 
     private static void UpdateEditorInput()
@@ -662,8 +671,12 @@ internal static class VoiceLobbyBrowserUi
     }
 
     private static string EditorText()
-        => $"{(_editingLanguage ? "Title" : "> Title")}: {_editTitle}\n" +
-           $"{(_editingLanguage ? "> Language" : "Language")}: {_editLanguage}";
+    {
+        string title = Loc.T("browser.field_title", "Title");
+        string language = Loc.T("browser.field_language", "Language");
+        return $"{(_editingLanguage ? title : "> " + title)}: {_editTitle}\n" +
+               $"{(_editingLanguage ? "> " + language : language)}: {_editLanguage}";
+    }
 
     private static void SaveEditor()
     {

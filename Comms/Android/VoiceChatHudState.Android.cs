@@ -217,14 +217,14 @@ public static partial class VoiceChatHudState
     {
         channel = VoiceTeamRadioChannels.Normalize(channel);
         return VoiceTeamRadioChannels.IsActive(channel)
-            ? $"Team Radio: {VoiceTeamRadioChannels.DisplayName(channel)}"
-            : "Team Radio unavailable";
+            ? Loc.T("hud.team_radio_status", "Team Radio: {0}", VoiceTeamRadioChannels.DisplayName(channel))
+            : Loc.T("hud.team_radio_unavailable", "Team Radio unavailable");
     }
 
     internal static string AndroidTeamRadioChannelStatus(VoiceRadioState state)
         => state.IsActive
-            ? $"Team Radio: {TeamRadioDisplayName(state)}"
-            : "Team Radio unavailable";
+            ? Loc.T("hud.team_radio_status", "Team Radio: {0}", TeamRadioDisplayName(state))
+            : Loc.T("hud.team_radio_unavailable", "Team Radio unavailable");
 
     internal static bool AndroidTeamRadioPhaseSupportsPrivateRouting(VoiceGamePhase phase)
         => VoiceSceneState.IsTaskVoicePhase(phase) || VoiceSceneState.IsMeetingVoicePhase(phase);
@@ -401,17 +401,17 @@ public static partial class VoiceChatHudState
         string channel = TeamRadioDisplayName(NormalizeTeamRadioState());
         string status = TryGetLocalTransmitBlockReason(out string transmitBlockReason)
             ? transmitBlockReason
-            : _speakerMuted ? "Deafened"
-            : IsManualMuteActive() ? "Microphone muted"
-            : TeamRadioBlockedByMeetingPolicy() ? "Unavailable in this phase"
-            : IsInTeamRadioMode() ? "Transmitting"
-            : CanUseTeamRadioInput() ? "Ready"
-            : "Unavailable";
+            : _speakerMuted ? Loc.T("hud.deafened", "Deafened")
+            : IsManualMuteActive() ? Loc.T("android.status_mic_muted", "Microphone muted")
+            : TeamRadioBlockedByMeetingPolicy() ? Loc.T("android.status_unavailable_phase", "Unavailable in this phase")
+            : IsInTeamRadioMode() ? Loc.T("android.status_transmitting", "Transmitting")
+            : CanUseTeamRadioInput() ? Loc.T("android.status_ready", "Ready")
+            : Loc.T("radio.unavailable", "Unavailable");
         _micTooltipTmp.text =
-            "<b>Team Radio</b>\n" +
-            $"Status: {status}\n" +
-            $"Channel: {channel}\n" +
-            "Tap: change channel  |  Hold: transmit";
+            "<b>" + Loc.T("tooltip.radio_title", "Team Radio") + "</b>\n" +
+            Loc.T("tooltip.status", "Status: {0}", status) + "\n" +
+            Loc.T("tooltip.channel", "Channel: {0}", channel) + "\n" +
+            Loc.T("tooltip.radio_hint", "Tap: change channel  |  Hold: transmit");
 
         PositionNear(_micTooltip, _micTooltipTmp, _radioTouchButtonObj);
         KeepTooltipOnTop(_micTooltip, ref _micTooltipRenderers, ref _micTooltipTmps);
