@@ -706,7 +706,7 @@ internal static class VoiceUiKit
                 brand.rectTransform.Anchor(new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f));
                 brand.rectTransform.sizeDelta = new Vector2(320f, 38f);
                 brand.rectTransform.anchoredPosition = new Vector2(94f, 11f);
-                var subtitle = Text("Subtitle", HeaderRect, "VOICE SETTINGS", 11f, TextMuted, TextAlignmentOptions.Left);
+                var subtitle = Text("Subtitle", HeaderRect, Loc.T("ui.voice_settings", "VOICE SETTINGS"), 11f, TextMuted, TextAlignmentOptions.Left);
                 subtitle.characterSpacing = 4f;
                 subtitle.rectTransform.Anchor(new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f));
                 subtitle.rectTransform.sizeDelta = new Vector2(320f, 22f);
@@ -802,15 +802,15 @@ internal static class VoiceUiKit
                 _pageSubtitle.rectTransform.sizeDelta = new Vector2(PaneWidth, 26f);
                 _pageSubtitle.rectTransform.anchoredPosition = new Vector2(RailWidth + pad, -headerH - 66f);
 
-                var railHeading = Text("RailHeading", RailRoot, "YOUR SETTINGS", 11f,
+                var railHeading = Text("RailHeading", RailRoot, Loc.T("ui.your_settings", "YOUR SETTINGS"), 11f,
                     TextFaint, TextAlignmentOptions.Left);
                 railHeading.characterSpacing = 3f;
                 railHeading.rectTransform.Anchor(new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0f, 1f));
                 railHeading.rectTransform.sizeDelta = new Vector2(-40f, 24f);
                 railHeading.rectTransform.anchoredPosition = new Vector2(30f, -24f);
 #if WINDOWS
-                _pushToTalkKey = Shortcut(RailRoot, "Push to talk", 76f);
-                _muteKey = Shortcut(RailRoot, "Mute mic", 42f);
+                _pushToTalkKey = Shortcut(RailRoot, Loc.T("ui.shortcut_push_to_talk", "Push to talk"), 76f);
+                _muteKey = Shortcut(RailRoot, Loc.T("ui.shortcut_mute_mic", "Mute mic"), 42f);
 #endif
                 var footer = Panel("Footer", RootRect, RailSurface, false);
                 footer.rectTransform.Anchor(Vector2.zero, new Vector2(1f, 0f), new Vector2(0.5f, 0f));
@@ -828,7 +828,7 @@ internal static class VoiceUiKit
                 footerMark.rectTransform.Anchor(new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f));
                 footerMark.rectTransform.sizeDelta = new Vector2(22f, 3f);
                 footerMark.rectTransform.anchoredPosition = new Vector2(28f, 0f);
-                var footerNote = Text("Note", footer.transform, "Changes apply immediately", 12f,
+                var footerNote = Text("Note", footer.transform, Loc.T("ui.changes_apply", "Changes apply immediately"), 12f,
                     TextMuted, TextAlignmentOptions.Right);
                 footerNote.rectTransform.Anchor(Vector2.zero, Vector2.one, new Vector2(1f, 0.5f));
                 footerNote.rectTransform.offsetMin = new Vector2(300f, 0f);
@@ -871,15 +871,15 @@ internal static class VoiceUiKit
             if (_pageTitle == null || _pageSubtitle == null) return;
             (_pageTitle.text, _pageSubtitle.text) = category switch
             {
-                VoiceSettingsCategory.Audio => ("Audio", "Tune your microphone and what you hear."),
-                VoiceSettingsCategory.Devices => ("Devices", "Choose your microphone and speakers."),
-                VoiceSettingsCategory.Keybinds => ("Keybinds", "Keep your voice controls within reach."),
-                VoiceSettingsCategory.Hud => ("HUD", "Make your voice indicators feel at home."),
-                VoiceSettingsCategory.Advanced => ("Advanced", "Fine-tune your voice connection and processing."),
+                VoiceSettingsCategory.Audio => (Loc.T("category.audio", "Audio"), Loc.T("page.audio_subtitle", "Tune your microphone and what you hear.")),
+                VoiceSettingsCategory.Devices => (Loc.T("category.devices", "Devices"), Loc.T("page.devices_subtitle", "Choose your microphone and speakers.")),
+                VoiceSettingsCategory.Keybinds => (Loc.T("category.keybinds", "Keybinds"), Loc.T("page.keybinds_subtitle", "Keep your voice controls within reach.")),
+                VoiceSettingsCategory.Hud => (Loc.T("category.hud", "HUD"), Loc.T("page.hud_subtitle", "Make your voice indicators feel at home.")),
+                VoiceSettingsCategory.Advanced => (Loc.T("category.advanced", "Advanced"), Loc.T("page.advanced_subtitle", "Fine-tune your voice connection and processing.")),
                 _ => throw new ArgumentOutOfRangeException(nameof(category)),
             };
 #if WINDOWS
-            if (_menuKey != null) _menuKey.text = VoiceChatKeybinds.OpenVoiceMenu.Label + "   Voice settings";
+            if (_menuKey != null) _menuKey.text = VoiceChatKeybinds.OpenVoiceMenu.Label + "   " + Loc.T("ui.menu_shortcut_label", "Voice settings");
             if (_pushToTalkKey != null) _pushToTalkKey.text = VoiceChatKeybinds.PushToTalk.Label;
             if (_muteKey != null) _muteKey.text = VoiceChatKeybinds.ToggleMute.Label;
 #endif
@@ -1506,7 +1506,7 @@ internal static class VoiceUiKit
 
         public MicModeRow Build(RectTransform pane, float width, float y, float height, string helpText)
         {
-            BuildBase(pane, "Mic Mode", width, y, height, helpText);
+            BuildBase(pane, Loc.T("settings.row.mic_mode", "Mic Mode"), width, y, height, helpText);
             var frame = Panel("MicMode", Root, PanelOuter);
             frame.rectTransform.Anchor(new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f));
             frame.rectTransform.sizeDelta = new Vector2(Mathf.Min(300f, PaneW - EdgePad - ControlLeft), 44f);
@@ -1518,7 +1518,10 @@ internal static class VoiceUiKit
                 button.rectTransform.offsetMin = new Vector2(4f, 4f);
                 button.rectTransform.offsetMax = new Vector2(-4f, -4f);
                 button.color = _get() == (VoiceMicMode)i ? new Color32(255, 255, 255, 38) : Clear;
-                var label = Text("Label", button.transform, i == 0 ? "Open Mic" : "Push To Talk",
+                var label = Text("Label", button.transform, i == 0
+                        ? Loc.T("settings.mic_mode_open", "Open Mic")
+                        : Loc.T("settings.mic_mode_ptt", "Push To Talk"),
+                    
                     16f, TextPrimary, TextAlignmentOptions.Center);
                 label.rectTransform.Anchor(Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f));
                 label.rectTransform.offsetMin = Vector2.zero;
@@ -1969,9 +1972,9 @@ internal static class VoiceUiKit
         private const float SettingsW = 40f;
         private const float SettingsGap = 10f;
         private const float ChatCheckW = 40f;
-        private const string ChatCheckTooltipTitle = "Use While Chat Is Open";
-        private const string ChatCheckTooltip =
-            "Works only while Among Us chat is open. It does not bypass tasks/minigames, the Friends List, or modals.";
+        private static string ChatCheckTooltipTitle => Loc.T("ui.chat_check_title", "Use While Chat Is Open");
+        private static string ChatCheckTooltip =>
+            Loc.T("ui.chat_check_body", "Works only while Among Us chat is open. It does not bypass tasks/minigames, the Friends List, or modals.");
 
         public RebindRow(
             Func<KeyCode> get,
@@ -2107,8 +2110,8 @@ internal static class VoiceUiKit
             _capRow.anchoredPosition = new Vector2((PaneW - EdgePad) - CapW * 0.5f, 0f);
             _capRow.pivot = new Vector2(0.5f, 0.5f);
 
-            _clearBtn = CapButton(_capRow, "Clear", new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0f), DangerDim);
-            _cancelBtn = CapButton(_capRow, "Cancel", new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(0f, 0f), ControlBg);
+            _clearBtn = CapButton(_capRow, Loc.T("ui.clear", "Clear"), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0f), DangerDim);
+            _cancelBtn = CapButton(_capRow, Loc.T("ui.cancel", "Cancel"), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(0f, 0f), ControlBg);
             _capRow.gameObject.SetActive(false);
 
             RefreshLabel();
@@ -2229,16 +2232,16 @@ internal static class VoiceUiKit
             if (_capturing)
             {
                 _label.text = !_armed
-                    ? "<color=#8C9CB2>Release to bind...</color>"
+                    ? "<color=#8C9CB2>" + Loc.T("ui.bind_release", "Release to bind...") + "</color>"
                     : _pendingModifier != KeyCode.None
-                        ? $"<color=#22D3EE>{VoiceKeybind.FormatKey(_pendingModifier)} + key, or release</color>"
-                        : "<color=#22D3EE>Press any key...</color>";
+                        ? "<color=#22D3EE>" + Loc.T("ui.bind_modifier_held", "{0} + key, or release", VoiceKeybind.FormatKey(_pendingModifier)) + "</color>"
+                        : "<color=#22D3EE>" + Loc.T("ui.bind_press_any", "Press any key...") + "</color>";
                 return;
             }
             var mod = _getMod?.Invoke() ?? KeyCode.None;
             var key = _get();
             if (key == KeyCode.None)
-                _label.text = "<color=#607282>None</color>";
+                _label.text = "<color=#607282>" + Loc.T("ui.bind_none", "None") + "</color>";
             else if (mod == KeyCode.None)
                 _label.text = VoiceKeybind.FormatKey(key);
             else

@@ -642,7 +642,7 @@ internal static class VoiceFirstRunSetup
         {
             var preset = FirstRunHudPresets.All[i];
             var previewSettings = FirstRunHudPresets.Apply(_draft.Hud, preset);
-            var card = new HudPresetCard(i, preset.Name, preset.Description,
+            var card = new HudPresetCard(i, preset.DisplayName, preset.DisplayDescription,
                 previewSettings, original: false);
             card.Build(_pageRoot,
                 i * (commonCardW + commonGap), commonY,
@@ -667,7 +667,7 @@ internal static class VoiceFirstRunSetup
             int row = visualIndex / 2;
             var preset = FirstRunHudPresets.All[i];
             var previewSettings = FirstRunHudPresets.Apply(_draft.Hud, preset);
-            var card = new HudPresetCard(i, preset.Name, preset.Description,
+            var card = new HudPresetCard(i, preset.DisplayName, preset.DisplayDescription,
                 previewSettings, original: false);
             card.Build(_pageRoot,
                 col * (moreCardW + moreGapX),

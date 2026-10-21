@@ -13,13 +13,19 @@ public static class HostSettingsPanel
     private const float RowH = 70f;
     private const float TopPad = 12f;
 
-    private static readonly string[] BuiltInCategories =
-        { "PROXIMITY", "LOBBY", "MEETING & VOICE", "TEAM RADIO" };
+    // Properties, not static readonly fields: the text must follow the language at the time the panel is built.
+    private static string[] BuiltInCategories => new[]
+    {
+        Loc.T("host.category_proximity", "PROXIMITY"),
+        Loc.T("host.category_lobby", "LOBBY"),
+        Loc.T("host.category_meeting_voice", "MEETING & VOICE"),
+        Loc.T("host.category_team_radio", "TEAM RADIO"),
+    };
 
     private const int BuiltInCategoryCount = 4;
 
-    private static readonly (int index, string title)[] RailSections =
-        { (4, "MOD BEHAVIOUR") };
+    private static (int index, string title)[] RailSections =>
+        new[] { (4, Loc.T("host.section_mod_behaviour", "MOD BEHAVIOUR")) };
 
     // Built-in tabs plus one tab per third-party mod (PerfectComms.Api Primitive 5), appended in
     // registration order under the "MOD BEHAVIOUR" section that already precedes index 4.
@@ -69,7 +75,7 @@ public static class HostSettingsPanel
         if (!ShellAlive)
         {
             Destroy();
-            _shell = new VoiceUiKit.PanelShell("VC_HostPanel", "HOST VOICE SETTINGS", PanelW, PanelH,
+            _shell = new VoiceUiKit.PanelShell("VC_HostPanel", Loc.T("host.title", "HOST VOICE SETTINGS"), PanelW, PanelH,
                 () => { VoiceUiKit.SwallowClick(); Hide(); });
         }
 
@@ -105,7 +111,8 @@ public static class HostSettingsPanel
         {
             _hostNotice = true;
             var notice = VoiceUiKit.Text("HostOnly", _shell.PaneRoot,
-                "<b>Host only</b>\n<size=80%><color=#8C9CB2>You must be the lobby host to change these options.</color></size>",
+                "<b>" + Loc.T("host.only_title", "Host only") + "</b>\n<size=80%><color=#8C9CB2>" +
+                Loc.T("host.only_body", "You must be the lobby host to change these options.") + "</color></size>",
                 26f, VoiceUiKit.TextPrimary, TMPro.TextAlignmentOptions.Center);
             notice.enableWordWrapping = true;
             notice.rectTransform.Anchor(new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f));
@@ -142,7 +149,7 @@ public static class HostSettingsPanel
     {
         if (!IsOpen || (newHostClientId >= 0 && newHostClientId == localClientId)) return;
         Hide();
-        VoiceChatHudState.ShowCompactStatus("Host voice settings closed: host changed");
+        VoiceChatHudState.ShowCompactStatus(Loc.T("host.closed_host_changed", "Host voice settings closed: host changed"));
         try
         {
             VoiceDiagnostics.Log(
