@@ -89,44 +89,44 @@ internal static class FirstRunOutputPreviewPolicy
         string detail = SanitizeNativeReason(reason);
         string code = (errorCode ?? string.Empty).Trim().ToLowerInvariant();
         if (code == "device-unavailable")
-            return "That speaker is no longer available. Reconnect it, select it again, or use Default.";
+            return Loc.T("audiopreview.that_speaker_is_no_longer_available_reconnect_it_sel", "That speaker is no longer available. Reconnect it, select it again, or use Default.");
         if (code == "device-busy")
-            return "That speaker is busy in another app. Close the other audio session or use Default.";
+            return Loc.T("audiopreview.that_speaker_is_busy_in_another_app_close_the_other", "That speaker is busy in another app. Close the other audio session or use Default.");
         if (code == "permission-denied")
-            return "The system denied access to that speaker. Check audio permissions or use Default.";
+            return Loc.T("audiopreview.the_system_denied_access_to_that_speaker_check_audio", "The system denied access to that speaker. Check audio permissions or use Default.");
         if (code == "unsupported-config")
             return detail.Length == 0
-                ? "That speaker rejected every compatible playback format."
-                : "That speaker rejected the playback format: " + detail;
+                ? Loc.T("audiopreview.that_speaker_rejected_every_compatible_playback_form", "That speaker rejected every compatible playback format.")
+                : Loc.T("audiopreview.playback_format_rejected", "That speaker rejected the playback format: {0}", detail);
         if (code == "timeout")
-            return "The speaker did not respond in time. Reconnect it or use Default.";
+            return Loc.T("audiopreview.the_speaker_did_not_respond_in_time_reconnect_it_or", "The speaker did not respond in time. Reconnect it or use Default.");
         if (code == "stream-error")
             return duringPlayback
-                ? "The selected speaker stopped responding during the test. Reconnect it or use Default."
-                : "The selected speaker stopped responding. Reconnect it or use Default.";
+                ? Loc.T("audiopreview.the_selected_speaker_stopped_responding_during_the_t", "The selected speaker stopped responding during the test. Reconnect it or use Default.")
+                : Loc.T("audiopreview.the_selected_speaker_stopped_responding_reconnect_it", "The selected speaker stopped responding. Reconnect it or use Default.");
         if (detail.Length == 0)
             return duringPlayback
-                ? "The selected speaker stopped during the test"
-                : "Could not open the selected speaker";
+                ? Loc.T("audiopreview.the_selected_speaker_stopped_during_the_test", "The selected speaker stopped during the test")
+                : Loc.T("audiopreview.could_not_open_the_selected_speaker", "Could not open the selected speaker");
 
         string lower = detail.ToLowerInvariant();
         if (lower.Contains("device unavailable", StringComparison.Ordinal) ||
             lower.Contains("device is unavailable", StringComparison.Ordinal) ||
             lower.Contains("selected output device is unavailable", StringComparison.Ordinal) ||
             lower.Contains("no output device", StringComparison.Ordinal))
-            return "That speaker is no longer available. Reconnect it, select it again, or use Default.";
+            return Loc.T("audiopreview.that_speaker_is_no_longer_available_reconnect_it_sel", "That speaker is no longer available. Reconnect it, select it again, or use Default.");
         if (lower.Contains("unsupported default output sample format", StringComparison.Ordinal) ||
             lower.Contains("default output config", StringComparison.Ordinal))
-            return "That speaker does not expose a compatible playback format: " + detail;
+            return Loc.T("audiopreview.no_compatible_playback_format", "That speaker does not expose a compatible playback format: {0}", detail);
         if (lower.Contains("build output stream", StringComparison.Ordinal))
-            return "The system could not open that speaker: " + TrimKnownPrefix(detail, "build output stream:");
+            return Loc.T("audiopreview.system_could_not_open_speaker", "The system could not open that speaker: {0}", TrimKnownPrefix(detail, "build output stream:"));
         if (lower.Contains("output stream play", StringComparison.Ordinal))
-            return "The speaker opened, but playback could not start: " + TrimKnownPrefix(detail, "output stream play:");
+            return Loc.T("audiopreview.speaker_opened_playback_failed", "The speaker opened, but playback could not start: {0}", TrimKnownPrefix(detail, "output stream play:"));
         if (lower.Contains("output device callback failed", StringComparison.Ordinal))
-            return "The speaker stopped responding after playback began. Reconnect it or use Default.";
+            return Loc.T("audiopreview.the_speaker_stopped_responding_after_playback_began", "The speaker stopped responding after playback began. Reconnect it or use Default.");
         return duringPlayback
-            ? "The selected speaker stopped during the test: " + detail
-            : "Could not open the selected speaker: " + detail;
+            ? Loc.T("audiopreview.selected_speaker_stopped_detail", "The selected speaker stopped during the test: {0}", detail)
+            : Loc.T("audiopreview.could_not_open_selected_speaker_detail", "Could not open the selected speaker: {0}", detail);
     }
 
     private static string TrimKnownPrefix(string value, string prefix)
@@ -282,7 +282,7 @@ internal sealed class FirstRunAudioPreview : IDisposable
     internal static string MicrophoneOffStatus => Loc.T("audiopreview.mic_off", "Mic check is off");
 
     private volatile string _microphoneStatus = MicrophoneOffStatus;
-    private volatile string _outputStatus = "Test sound has not been played";
+    private volatile string _outputStatus = Loc.T("audiopreview.test_sound_has_not_been_played", "Test sound has not been played");
     private long _lastLevelTick;
     private long _lastSignalTick;
     private CancellationTokenSource? _toneCancellation;
@@ -528,11 +528,11 @@ internal sealed class FirstRunAudioPreview : IDisposable
             long signalSilentFor = now - Volatile.Read(ref _lastSignalTick);
             long callbackSilentFor = now - Volatile.Read(ref _lastLevelTick);
             if (signalSilentFor > 2500 || callbackSilentFor > 2500)
-                return "No microphone signal detected";
+                return Loc.T("audiopreview.no_microphone_signal_detected", "No microphone signal detected");
             float level = Level;
-            if (level >= 0.90f) return "Very loud - lower Mic Volume";
-            if (level >= 0.035f || _speaking) return "Great - your microphone is working";
-            return "Listening - speak normally";
+            if (level >= 0.90f) return Loc.T("audiopreview.very_loud_lower_mic_volume", "Very loud - lower Mic Volume");
+            if (level >= 0.035f || _speaking) return Loc.T("audiopreview.great_your_microphone_is_working", "Great - your microphone is working");
+            return Loc.T("audiopreview.listening_speak_normally", "Listening - speak normally");
         }
     }
 
@@ -553,15 +553,15 @@ internal sealed class FirstRunAudioPreview : IDisposable
             _level = 0f;
             _speaking = false;
             SetMicrophoneStatus(IsMicrophoneTestActive
-                ? "Restarting mic check for the selected input..."
-                : "Mic check needed for the selected input");
+                ? Loc.T("audiopreview.restarting_mic_check_for_the_selected_input", "Restarting mic check for the selected input...")
+                : Loc.T("audiopreview.mic_check_needed_for_the_selected_input", "Mic check needed for the selected input"));
         }
     }
 
     internal void InvalidateOutputVerification()
     {
         Interlocked.Exchange(ref _outputTestCompleted, 0);
-        SetOutputStatus("Test the selected output to verify it");
+        SetOutputStatus(Loc.T("audiopreview.test_the_selected_output_to_verify_it", "Test the selected output to verify it"));
     }
 
     internal void Tick()
@@ -573,14 +573,14 @@ internal sealed class FirstRunAudioPreview : IDisposable
             {
                 try { room.SetLoopBack(false); } catch { }
                 _monitorRoom = null;
-                FailMicrophone("Voice room changed - restart the microphone test");
+                FailMicrophone(Loc.T("audiopreview.voice_room_changed_restart_the_microphone_test", "Voice room changed - restart the microphone test"));
             }
             else
             {
                 if (!room.SetLoopBack(true, _monitorDelayed, _monitorGain))
                 {
                     _monitorRoom = null;
-                    FailMicrophone("Voice room audio stopped - restart the microphone test");
+                    FailMicrophone(Loc.T("audiopreview.voice_room_audio_stopped_restart_the_microphone_test", "Voice room audio stopped - restart the microphone test"));
                 }
                 else
                 {
@@ -605,7 +605,7 @@ internal sealed class FirstRunAudioPreview : IDisposable
             {
                 FailMicrophone(failure.Message);
                 if (affectedOutput)
-                    FailOutput("The audio helper stopped during the speaker test");
+                    FailOutput(Loc.T("audiopreview.the_audio_helper_stopped_during_the_speaker_test", "The audio helper stopped during the speaker test"));
             }
             StopDesktopLease();
             Interlocked.Exchange(ref _uiRefreshPending, 1);
@@ -632,8 +632,8 @@ internal sealed class FirstRunAudioPreview : IDisposable
         _monitorRoom = room;
         MarkListening();
         SetMicrophoneStatus(_monitorDelayed
-            ? "Microphone test is on with a one-second delay"
-            : "Microphone test is on - use headphones to avoid feedback");
+            ? Loc.T("audiopreview.microphone_test_is_on_with_a_one_second_delay", "Microphone test is on with a one-second delay")
+            : Loc.T("audiopreview.microphone_test_is_on_use_headphones_to_avoid_feedba", "Microphone test is on - use headphones to avoid feedback"));
         return true;
     }
 
@@ -662,7 +662,7 @@ internal sealed class FirstRunAudioPreview : IDisposable
                     Volatile.Write(ref _microphoneTestActive, 1);
                     Volatile.Write(ref _listening, 0);
                     _micPausedForTone = false;
-                    SetMicrophoneStatus("Waiting for microphone permission...");
+                    SetMicrophoneStatus(Loc.T("audiopreview.waiting_for_microphone_permission", "Waiting for microphone permission..."));
                 }
                 int roomPermissionGeneration = ++_permissionGeneration;
                 FirstRunSetupPermissionRequester.Request(granted =>
@@ -670,17 +670,17 @@ internal sealed class FirstRunAudioPreview : IDisposable
                     if (_disposed || roomPermissionGeneration != _permissionGeneration) return;
                     if (!granted)
                     {
-                        FailMicrophone("Microphone permission denied - receive-only still works");
+                        FailMicrophone(Loc.T("audiopreview.microphone_permission_denied_receive_only_still_work", "Microphone permission denied - receive-only still works"));
                         return;
                     }
                     if (!TryStartRoomMonitor())
-                        FailMicrophone("Voice room changed - restart the microphone test");
+                        FailMicrophone(Loc.T("audiopreview.voice_room_changed_restart_the_microphone_test", "Voice room changed - restart the microphone test"));
                 });
                 return;
             }
 #endif
             if (TryStartRoomMonitor()) return;
-            FailMicrophone("Could not start microphone playback in the current voice room");
+            FailMicrophone(Loc.T("audiopreview.could_not_start_microphone_playback_in_the_current_v", "Could not start microphone playback in the current voice room"));
             return;
         }
 #if WINDOWS
@@ -688,7 +688,7 @@ internal sealed class FirstRunAudioPreview : IDisposable
         if (microphoneRoute == MicrophoneRouteResolution.WaitingForDeviceList)
         {
             SetMicrophonePriorityStatus(
-                "Still checking the saved microphone - try Mic Check again in a moment", 3500);
+                Loc.T("audiopreview.still_checking_the_saved_microphone_try_mic_check_ag", "Still checking the saved microphone - try Mic Check again in a moment"), 3500);
             return;
         }
 #endif
@@ -697,7 +697,7 @@ internal sealed class FirstRunAudioPreview : IDisposable
             Volatile.Write(ref _microphoneTestActive, 1);
             Interlocked.Exchange(ref _microphoneSignalDetected, 0);
             _micPausedForTone = false;
-            SetMicrophoneStatus("Starting microphone check...");
+            SetMicrophoneStatus(Loc.T("audiopreview.starting_microphone_check", "Starting microphone check..."));
         }
 
 #if WINDOWS
@@ -722,7 +722,7 @@ internal sealed class FirstRunAudioPreview : IDisposable
             _desktopOperationCancellation!.Token));
         if (microphoneRoute == MicrophoneRouteResolution.FellBackToDefault)
             SetMicrophonePriorityStatus(
-                "Starting Mic Check with Default because the saved microphone is unavailable...", 6500);
+                Loc.T("audiopreview.starting_mic_check_with_default_because_the_saved_mi", "Starting Mic Check with Default because the saved microphone is unavailable..."), 6500);
 #elif ANDROID
         if (Application.HasUserAuthorization(UserAuthorization.Microphone))
         {
@@ -736,13 +736,13 @@ internal sealed class FirstRunAudioPreview : IDisposable
             if (_disposed || generation != _permissionGeneration) return;
             if (!granted)
             {
-                FailMicrophone("Microphone permission denied - receive-only still works");
+                FailMicrophone(Loc.T("audiopreview.microphone_permission_denied_receive_only_still_work", "Microphone permission denied - receive-only still works"));
                 return;
             }
             StartAndroidCaptureAfterPermission(draft);
         });
 #else
-        FailMicrophone("Microphone check is unavailable on this platform build");
+        FailMicrophone(Loc.T("audiopreview.microphone_check_unavailable_platform", "Microphone check is unavailable on this platform build"));
 #endif
     }
 
@@ -757,7 +757,7 @@ internal sealed class FirstRunAudioPreview : IDisposable
             if (!_monitorRoom.SetLoopBack(true, _monitorDelayed, _monitorGain))
             {
                 _monitorRoom = null;
-                FailMicrophone("Voice room audio stopped - restart the microphone test");
+                FailMicrophone(Loc.T("audiopreview.voice_room_audio_stopped_restart_the_microphone_test", "Voice room audio stopped - restart the microphone test"));
             }
             return;
         }
@@ -823,7 +823,7 @@ internal sealed class FirstRunAudioPreview : IDisposable
         if (_disposed || IsSpeakerTestBusy || IsMicrophoneTestStarting) return;
         if (draft.MasterVolume < 0.099f)
         {
-            FailOutput("Speaker Volume is below the supported 10% minimum", 4000);
+            FailOutput(Loc.T("audiopreview.speaker_volume_is_below_the_supported_10_minimum", "Speaker Volume is below the supported 10% minimum"), 4000);
             return;
         }
 
@@ -834,7 +834,7 @@ internal sealed class FirstRunAudioPreview : IDisposable
         PauseMicrophoneForTone();
         StartAndroidTone(draft.MasterVolume);
 #else
-        FailOutput("Speaker test is unavailable on this platform build");
+        FailOutput(Loc.T("audiopreview.speaker_test_is_unavailable_on_this_platform_build", "Speaker test is unavailable on this platform build"));
 #endif
     }
 
@@ -864,7 +864,7 @@ internal sealed class FirstRunAudioPreview : IDisposable
             Volatile.Write(ref _lastSignalTick, now);
             Volatile.Write(ref _microphoneTestActive, 1);
             Volatile.Write(ref _listening, 1);
-            SetMicrophoneStatus("Listening - speak normally");
+            SetMicrophoneStatus(Loc.T("audiopreview.listening_speak_normally", "Listening - speak normally"));
         }
     }
 
@@ -913,8 +913,8 @@ internal sealed class FirstRunAudioPreview : IDisposable
     {
         Interlocked.Exchange(ref _outputTestCompleted, 1);
         SetOutputStatus(usedDefaultFallback
-            ? "Default speaker test completed - did you hear it?"
-            : "Test sound completed - did you hear it?", 6000);
+            ? Loc.T("audiopreview.default_speaker_test_completed", "Default speaker test completed - did you hear it?")
+            : Loc.T("audiopreview.test_sound_completed_did_you_hear_it", "Test sound completed - did you hear it?"), 6000);
     }
 
     private void PauseMicrophoneForTone()
@@ -941,7 +941,7 @@ internal sealed class FirstRunAudioPreview : IDisposable
             Volatile.Write(ref _listening, 0);
             _level = 0f;
             _speaking = false;
-            SetMicrophoneStatus("Mic check paused during the speaker test - restart it when ready");
+            SetMicrophoneStatus(Loc.T("audiopreview.mic_check_paused_during_the_speaker_test_restart_it", "Mic check paused during the speaker test - restart it when ready"));
         }
     }
 
@@ -956,7 +956,7 @@ internal sealed class FirstRunAudioPreview : IDisposable
 #endif
         StopMicrophone();
         if (outputWasBusy)
-            FailOutput("Output test paused", 2500);
+            FailOutput(Loc.T("audiopreview.output_test_paused", "Output test paused"), 2500);
     }
 
     private static float EffectiveVadThreshold(FirstRunSetupDraft draft)
@@ -1003,7 +1003,7 @@ internal sealed class FirstRunAudioPreview : IDisposable
         }
         Volatile.Write(ref _waitingForOutput, 1);
         Interlocked.Exchange(ref _outputTestCompleted, 0);
-        SetOutputStatus("Opening the selected speaker...");
+        SetOutputStatus(Loc.T("audiopreview.opening_the_selected_speaker", "Opening the selected speaker..."));
 
         var existingLease = _lease;
         int leaseGeneration = existingLease == null
@@ -1121,7 +1121,7 @@ internal sealed class FirstRunAudioPreview : IDisposable
                 }
                 else
                 {
-                    SetOutputStatus("Waiting for the selected speaker...");
+                    SetOutputStatus(Loc.T("audiopreview.waiting_for_the_selected_speaker", "Waiting for the selected speaker..."));
                 }
                 continue;
             }
@@ -1143,11 +1143,11 @@ internal sealed class FirstRunAudioPreview : IDisposable
                     Interlocked.Exchange(ref _uiRefreshPending, 1);
                     _pendingOutputDevice = string.Empty;
                     _outputFallbackAttempted = true;
-                    SetOutputStatus("That speaker was unavailable - testing Default instead...");
+                    SetOutputStatus(Loc.T("audiopreview.that_speaker_was_unavailable_testing_default_instead", "That speaker was unavailable - testing Default instead..."));
                 }
                 _pendingPlaybackGeneration = state.StreamGeneration;
                 if (!_outputFallbackAttempted)
-                    SetOutputStatus("Speaker is ready - starting the chime...");
+                    SetOutputStatus(Loc.T("audiopreview.speaker_is_ready_starting_the_chime", "Speaker is ready - starting the chime..."));
                 continue;
             }
             if (state.State == "first-callback" &&
@@ -1164,7 +1164,7 @@ internal sealed class FirstRunAudioPreview : IDisposable
             Environment.TickCount64 >= Volatile.Read(ref _outputReadyDeadlineTick))
         {
             CancelDesktopOutputWait();
-            FailOutput("The selected speaker did not become ready - try again or choose Default");
+            FailOutput(Loc.T("audiopreview.the_selected_speaker_did_not_become_ready_try_again", "The selected speaker did not become ready - try again or choose Default"));
         }
     }
 
@@ -1199,12 +1199,12 @@ internal sealed class FirstRunAudioPreview : IDisposable
         _outputReadyDeadlineTick = 0;
         string reason = FirstRunOutputPreviewPolicy.DescribeNativeOutputFailure(
             state.Error, state.ErrorCode);
-        SetOutputStatus(reason + " Trying Default...");
+        SetOutputStatus(Loc.T("audiopreview.trying_default", "{0} Trying Default...", reason));
         var lease = _lease;
         if (lease == null)
         {
             CancelDesktopOutputWait();
-            FailOutput("Could not switch the speaker test to Default", 6500);
+            FailOutput(Loc.T("audiopreview.could_not_switch_the_speaker_test_to_default", "Could not switch the speaker test to Default"), 6500);
             return true;
         }
         _desktopOutputDevice = string.Empty;
@@ -1270,7 +1270,7 @@ internal sealed class FirstRunAudioPreview : IDisposable
         _toneCancellation = cancellation;
         Volatile.Write(ref _playingTone, 1);
         Interlocked.Exchange(ref _outputTestCompleted, 0);
-        SetOutputStatus("Playing test sound...");
+        SetOutputStatus(Loc.T("audiopreview.playing_test_sound", "Playing test sound..."));
         var completions = _toneCompletions;
         _ = Task.Run(async () =>
         {
@@ -1345,8 +1345,8 @@ internal sealed class FirstRunAudioPreview : IDisposable
                     Interlocked.Exchange(ref _outputTestCompleted, 1);
                 }
                 SetOutputStatus(completion.UsedDefaultFallback
-                    ? "Default speaker test completed - did you hear it?"
-                    : "Test sound completed - did you hear it?", 6000);
+                    ? Loc.T("audiopreview.default_speaker_test_completed", "Default speaker test completed - did you hear it?")
+                    : Loc.T("audiopreview.test_sound_completed_did_you_hear_it", "Test sound completed - did you hear it?"), 6000);
             }
             else
             {
@@ -1354,7 +1354,7 @@ internal sealed class FirstRunAudioPreview : IDisposable
                 Volatile.Write(ref _playingTone, 0);
                 lock (_desktopToneStateGate)
                     _activeTonePlaybackGeneration = 0;
-                FailOutput("Could not play the test sound");
+                FailOutput(Loc.T("audiopreview.could_not_play_the_test_sound", "Could not play the test sound"));
             }
             Interlocked.Exchange(ref _uiRefreshPending, 1);
         }
@@ -1411,14 +1411,14 @@ internal sealed class FirstRunAudioPreview : IDisposable
             (_, _) => { },
             reason => FailDesktop(
                 channel == DesktopFailureChannel.Output
-                    ? "Audio helper stopped: " + reason
-                    : "Microphone helper stopped: " + reason,
+                    ? Loc.T("audiopreview.audio_helper_stopped", "Audio helper stopped: {0}", reason)
+                    : Loc.T("audiopreview.microphone_helper_stopped", "Microphone helper stopped: {0}", reason),
                 leaseGeneration,
                 channel),
             (_, message) => FailDesktop(
                 channel == DesktopFailureChannel.Output
-                    ? "Speaker unavailable: " + message
-                    : "Microphone unavailable: " + message,
+                    ? Loc.T("audiopreview.speaker_unavailable_detail", "Speaker unavailable: {0}", message)
+                    : Loc.T("audiopreview.microphone_unavailable_detail", "Microphone unavailable: {0}", message),
                 leaseGeneration,
                 channel),
             (_, _, _, _) => { },
@@ -1662,19 +1662,19 @@ internal sealed class FirstRunAudioPreview : IDisposable
                 if (completion.Kind == DesktopOperationKind.Microphone)
                 {
                     FailMicrophone(completion.Failure.StartsWith("lease-active", StringComparison.Ordinal)
-                        ? "Mic check is available from the main menu"
+                        ? Loc.T("audiopreview.mic_check_is_available_from_the_main_menu", "Mic check is available from the main menu")
                         : completion.Failure == "route"
-                            ? "Could not configure the microphone route"
-                            : "Could not start the Perfect Comms audio helper");
+                            ? Loc.T("audiopreview.could_not_configure_the_microphone_route", "Could not configure the microphone route")
+                            : Loc.T("audiopreview.could_not_start_the_perfect_comms_audio_helper", "Could not start the Perfect Comms audio helper"));
                 }
                 else
                 {
                     CancelDesktopOutputWait();
                     FailOutput(completion.Failure.StartsWith("lease-active", StringComparison.Ordinal)
-                        ? "Speaker test is available from the main menu"
+                        ? Loc.T("audiopreview.speaker_test_is_available_from_the_main_menu", "Speaker test is available from the main menu")
                         : completion.Failure == "route"
-                            ? "Could not send the selected speaker to the audio helper"
-                            : "Could not start speaker test");
+                            ? Loc.T("audiopreview.could_not_send_the_selected_speaker_to_the_audio_hel", "Could not send the selected speaker to the audio helper")
+                            : Loc.T("audiopreview.could_not_start_speaker_test", "Could not start speaker test"));
                 }
                 if (lease != null && ReferenceEquals(_lease, lease))
                     StopDesktopLease();
@@ -1693,13 +1693,13 @@ internal sealed class FirstRunAudioPreview : IDisposable
                 MarkListening();
                 if (completion.Configuration.InputFellBackToDefault)
                     SetMicrophonePriorityStatus(
-                        "The saved microphone is unavailable - Mic Check is using Default", 6500);
+                        Loc.T("audiopreview.the_saved_microphone_is_unavailable_mic_check_is_usi", "The saved microphone is unavailable - Mic Check is using Default"), 6500);
             }
             else
             {
                 _desktopRouteAdmitted = true;
                 _outputReadyDeadlineTick = Environment.TickCount64 + 5000;
-                SetOutputStatus("Waiting for the selected speaker...");
+                SetOutputStatus(Loc.T("audiopreview.waiting_for_the_selected_speaker", "Waiting for the selected speaker..."));
             }
             Interlocked.Exchange(ref _uiRefreshPending, 1);
         }
@@ -1837,7 +1837,7 @@ internal sealed class FirstRunAudioPreview : IDisposable
         if (_disposed || activeDraft == null) return;
         if (VoiceChatRoom.Current != null)
         {
-            FailMicrophone("Mic Check is available from the main menu, outside a voice room");
+            FailMicrophone(Loc.T("audiopreview.mic_check_outside_voice_room", "Mic Check is available from the main menu, outside a voice room"));
             StopAndroidCaptureOnly();
             return;
         }
@@ -1850,8 +1850,8 @@ internal sealed class FirstRunAudioPreview : IDisposable
         if (!_androidMicrophone.Start(activeDraft.MicrophoneDevice))
         {
             FailMicrophone(_androidMicrophone.LeaseUnavailable
-                ? "Mic Check is unavailable while voice chat is using the microphone"
-                : "Could not open the Android microphone");
+                ? Loc.T("audiopreview.mic_check_unavailable_in_use", "Mic Check is unavailable while voice chat is using the microphone")
+                : Loc.T("audiopreview.could_not_open_android_microphone", "Could not open the Android microphone"));
             StopAndroidCaptureOnly();
             return;
         }
@@ -1867,7 +1867,7 @@ internal sealed class FirstRunAudioPreview : IDisposable
         MarkListening();
         if (microphoneRoute == MicrophoneRouteResolution.FellBackToDefault)
             SetMicrophonePriorityStatus(
-                "The saved microphone is unavailable - Mic Check is using Default", 6500);
+                Loc.T("audiopreview.the_saved_microphone_is_unavailable_mic_check_is_usi", "The saved microphone is unavailable - Mic Check is using Default"), 6500);
     }
 
     private void OnAndroidSamples(float[] samples, int count)
@@ -1908,7 +1908,7 @@ internal sealed class FirstRunAudioPreview : IDisposable
         _toneSource.clip = _toneClip;
         Volatile.Write(ref _playingTone, 1);
         Interlocked.Exchange(ref _outputTestCompleted, 0);
-        SetOutputStatus("Playing test sound...");
+        SetOutputStatus(Loc.T("audiopreview.playing_test_sound", "Playing test sound..."));
         _toneSource.Play();
     }
 
