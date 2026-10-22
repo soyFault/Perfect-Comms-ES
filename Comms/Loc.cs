@@ -45,12 +45,19 @@ internal static class Loc
     private static int _mainThreadId = -1;
     private static volatile string _lastLocale = EnglishLocale;
 
-    /// <summary>Call once from the plugin's Load (main thread) so off-thread callers are safe.</summary>
+    // DataManager must not be touched while the plugin loads: reading DataManager.Settings that early
+    // initialises the game's save/settings data before the game does and crashes the splash screen
+    // with Town of Us Mira loaded. Until the first UI tick (MarkGameReady) every lookup is English.
+    private static volatile bool _gameReady;
+
+    /// <summary>Call once from the plugin's Load (main thread) so off-thread callers are safe. Reads no game data.</summary>
     internal static void Initialize()
     {
         _mainThreadId = Environment.CurrentManagedThreadId;
-        _ = CurrentLocale;
     }
+
+    /// <summary>Call from the main thread once the game is running (first UI tick). Enables reading the game language.</summary>
+    internal static void MarkGameReady() => _gameReady = true;
 
     /// <summary>Raised (on the main thread) when the game language changes. See <see cref="PollLocaleChange"/>.</summary>
     internal static event Action? LocaleChanged;
@@ -73,6 +80,7 @@ internal static class Loc
     internal static void ResetThreadState()
     {
         _mainThreadId = -1;
+        _gameReady = false;
         _lastLocale = EnglishLocale;
         _announcedLocale = null;
     }
@@ -84,6 +92,7 @@ internal static class Loc
         {
             var forced = ForcedLocale;
             if (forced != null) return forced;
+            if (!_gameReady) return _lastLocale;
             if (_mainThreadId != -1 && Environment.CurrentManagedThreadId != _mainThreadId)
                 return _lastLocale;
             try

@@ -80,3 +80,10 @@ El workflow *CI* fallaba en los jobs **"Starlight managed build, tests, and sing
 Resultado local: `package-starlight.sh Release` + `verify-release-assets.py --starlight-dll` + `DependencySanitizer validate` pasan y producen un único `PerfectCommsStarlight.dll`. El job de Windows ejecuta el mismo empaquetado y después una prueba de interoperabilidad con Pion que no pude correr aquí; confírmalo en CI.
 
 Además: `scripts/localization.py` **no se había subido** (el `.gitignore` ignora `scripts/*` salvo una lista); se añadió a la lista y se subió.
+
+## 7. Crash en el splash con Town of Us Mira (corregido)
+
+`Loc.Initialize()` leia `DataManager.Settings.Language` dentro de `Load()`. Tocar `DataManager`
+tan pronto inicializa los datos del juego antes de tiempo y el splash crasheaba (con el Perfect
+Comms de upstream no pasaba). Ahora `Initialize()` no lee nada del juego y `Loc.CurrentLocale`
+devuelve ingles hasta que `VoiceUiKit.Tick` llama a `Loc.MarkGameReady()` (primer frame de UI).

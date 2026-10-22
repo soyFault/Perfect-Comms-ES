@@ -134,6 +134,18 @@ public sealed class LocalizationTests
         finally { Loc.ResetThreadState(); }
     }
 
+    [Fact]
+    public void LocaleIsNotReadFromTheGameBeforeItIsMarkedReady()
+    {
+        // Regression: reading DataManager during the plugin Load crashed the splash screen.
+        // The source gate is what keeps Load away from the game's data.
+        var src = System.IO.File.ReadAllText(System.IO.Path.Combine(LocScanner.FindRepoRoot(), "Comms", "Loc.cs"));
+        Assert.Contains("if (!_gameReady) return _lastLocale;", src);
+        var init = src.Substring(src.IndexOf("internal static void Initialize()", StringComparison.Ordinal));
+        init = init.Substring(0, init.IndexOf('}'));
+        Assert.DoesNotContain("CurrentLocale", init);
+    }
+
     // ---- Stage 2: pure policies and HUD text ----
 
     [Fact]
