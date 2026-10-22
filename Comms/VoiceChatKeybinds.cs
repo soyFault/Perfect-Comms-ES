@@ -31,41 +31,49 @@ public static class VoiceChatKeybinds
     public static void Initialize(ConfigFile config)
     {
         const string s = "Keybinds";
-        ToggleMute = new VoiceKeybind(config, s, "Mute / Unmute Mic", KeyCode.RightAlt,
-            KeyCode.None, VoiceModifierMatch.Exact,
-            helpText: "Toggles whether your microphone sends voice.");
+        ToggleMute = VoiceKeybind.Localized(config, s, Loc.L("keybind.mute", "Mute / Unmute Mic"),
+            Loc.L("keybind.mute_help", "Toggles whether your microphone sends voice."),
+            KeyCode.RightAlt, KeyCode.None, explicitMatch: VoiceModifierMatch.Exact);
         // Preserve the original persisted key so existing preview-build bindings survive the rename.
-        PushToMute = new VoiceKeybind(
-            config, s, "Push To Mute", "Hold To Mute", KeyCode.None,
-            helpText: "Mutes your microphone only while the key is held; releasing restores your previous mute state.");
-        TeamRadio = new VoiceKeybind(config, s, "Team Radio (Hold)", KeyCode.V,
-            helpText: "While held, transmits over your selected private team channel when your role and the host settings allow it.");
-        CycleTeamRadioChannel = new VoiceKeybind(config, s, "Cycle Team Radio Channel", KeyCode.G,
-            helpText: "Cycles through the built-in and mod-registered team-radio channels available to you.");
-        PushToTalk = new VoiceKeybind(config, s, "Push To Talk (Hold)", KeyCode.C,
-            helpText: "While held, transmits your microphone when Mic Mode is set to Push To Talk.");
-        ToggleMicMode = new VoiceKeybind(config, s, "Toggle Open Mic / Push To Talk", KeyCode.None,
-            helpText: "Switches your microphone between Open Mic and Push To Talk mode.");
+        PushToMute = VoiceKeybind.Localized(config, s, Loc.L("keybind.push_to_mute", "Push To Mute"),
+            Loc.L("keybind.push_to_mute_help", "Mutes your microphone only while the key is held; releasing restores your previous mute state."),
+            KeyCode.None, configKey: "Hold To Mute");
+        TeamRadio = VoiceKeybind.Localized(config, s, Loc.L("keybind.team_radio", "Team Radio (Hold)"),
+            Loc.L("keybind.team_radio_help", "While held, transmits over your selected private team channel when your role and the host settings allow it."),
+            KeyCode.V);
+        CycleTeamRadioChannel = VoiceKeybind.Localized(config, s, Loc.L("keybind.cycle_team_radio", "Cycle Team Radio Channel"),
+            Loc.L("keybind.cycle_team_radio_help", "Cycles through the built-in and mod-registered team-radio channels available to you."),
+            KeyCode.G);
+        PushToTalk = VoiceKeybind.Localized(config, s, Loc.L("keybind.push_to_talk", "Push To Talk (Hold)"),
+            Loc.L("keybind.push_to_talk_help", "While held, transmits your microphone when Mic Mode is set to Push To Talk."),
+            KeyCode.C);
+        ToggleMicMode = VoiceKeybind.Localized(config, s, Loc.L("keybind.toggle_mic_mode", "Toggle Open Mic / Push To Talk"),
+            Loc.L("keybind.toggle_mic_mode_help", "Switches your microphone between Open Mic and Push To Talk mode."),
+            KeyCode.None);
         // Keep the pre-v4 persisted key so the clearer deafen label does not reset existing binds.
-        ToggleSpeaker = new VoiceKeybind(
-            config, s, ToggleDeafenDisplayName, "Toggle Speaker", KeyCode.RightControl,
-            ToggleDeafenHelpText);
-        VolumeMenu = new VoiceKeybind(
-            config, s, "Player Volumes", KeyCode.B, KeyCode.LeftShift, VoiceModifierMatch.EitherSide,
-            helpText: "Opens the local per-player volume mixer. Its adjustments affect only what you hear.");
-        AliveLouderDeadQuieter = new VoiceKeybind(
-            config, s, "Alive Louder / Dead Quieter (Hold)", KeyCode.None,
-            helpText: "While held, applies this binding's configured Alive and Dead volume levels. Releasing restores both groups to 100%. If both mix bindings are held, neither profile is applied.");
-        AliveQuieterDeadLouder = new VoiceKeybind(
-            config, s, "Alive Quieter / Dead Louder (Hold)", KeyCode.None,
-            helpText: "While held, applies this binding's separately configured Alive and Dead volume levels. Releasing restores both groups to 100%. If both mix bindings are held, neither profile is applied.");
-        LocalVoiceRefresh = new VoiceKeybind(config, s, "Refresh Voice Connection", KeyCode.F7,
-            helpText: "Rejoins only your local voice session to repair stuck audio. It has a 10-second cooldown.");
+        ToggleSpeaker = VoiceKeybind.Localized(
+            config, s, Loc.L("keybind.toggle_deafen", "Toggle Deafen"),
+            Loc.L("keybind.toggle_deafen_help", "Deafens or undeafens Perfect Comms. Deafening mutes voice playback and pauses microphone transmission."),
+            KeyCode.RightControl, configKey: "Toggle Speaker");
+        VolumeMenu = VoiceKeybind.Localized(config, s, Loc.L("keybind.player_volumes", "Player Volumes"),
+            Loc.L("keybind.player_volumes_help", "Opens the local per-player volume mixer. Its adjustments affect only what you hear."),
+            KeyCode.B, KeyCode.LeftShift, explicitMatch: VoiceModifierMatch.EitherSide);
+        AliveLouderDeadQuieter = VoiceKeybind.Localized(config, s, Loc.L("keybind.alive_louder", "Alive Louder / Dead Quieter (Hold)"),
+            Loc.L("keybind.alive_louder_help", "While held, applies this binding's configured Alive and Dead volume levels. Releasing restores both groups to 100%. If both mix bindings are held, neither profile is applied."),
+            KeyCode.None);
+        AliveQuieterDeadLouder = VoiceKeybind.Localized(config, s, Loc.L("keybind.alive_quieter", "Alive Quieter / Dead Louder (Hold)"),
+            Loc.L("keybind.alive_quieter_help", "While held, applies this binding's separately configured Alive and Dead volume levels. Releasing restores both groups to 100%. If both mix bindings are held, neither profile is applied."),
+            KeyCode.None);
+        LocalVoiceRefresh = VoiceKeybind.Localized(config, s, Loc.L("keybind.refresh_voice", "Refresh Voice Connection"),
+            Loc.L("keybind.refresh_voice_help", "Rejoins only your local voice session to repair stuck audio. It has a 10-second cooldown."),
+            KeyCode.F7);
         RemoveRetiredHostRefreshBindings(config, s);
-        OpenVoiceMenu = new VoiceKeybind(config, s, "Open Voice Menu", KeyCode.F10,
-            helpText: "Opens or closes this local Perfect Comms settings menu.");
-        OpenHostVoiceSettings = new VoiceKeybind(config, s, "Open Host Voice Settings", KeyCode.F11,
-            helpText: "Opens the host-only voice rules for the current lobby. It does nothing if you are not the host.");
+        OpenVoiceMenu = VoiceKeybind.Localized(config, s, Loc.L("keybind.open_voice_menu", "Open Voice Menu"),
+            Loc.L("keybind.open_voice_menu_help", "Opens or closes this local Perfect Comms settings menu."),
+            KeyCode.F10);
+        OpenHostVoiceSettings = VoiceKeybind.Localized(config, s, Loc.L("keybind.open_host_settings", "Open Host Voice Settings"),
+            Loc.L("keybind.open_host_settings_help", "Opens the host-only voice rules for the current lobby. It does nothing if you are not the host."),
+            KeyCode.F11);
         _allBindings = new[]
         {
             ToggleMute,

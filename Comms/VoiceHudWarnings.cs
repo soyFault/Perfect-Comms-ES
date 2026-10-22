@@ -37,8 +37,8 @@ internal static class VoiceHudWarnings
             int secs = VoiceRoleMuteState.GracePeriodSecondsRemaining;
             var local = PlayerControl.LocalPlayer;
             if (local != null && VoiceRoleMuteState.GracePeriodCallerId == local.PlayerId)
-                return $"you have the floor ({secs}s)";
-            return $"caller has the floor ({secs}s)";
+                return Loc.T("warning.floor_self", "you have the floor ({0}s)", secs);
+            return Loc.T("warning.floor_caller", "caller has the floor ({0}s)", secs);
         }
 
         var connection = room.ConnectionProgress;
@@ -57,10 +57,10 @@ internal static class VoiceHudWarnings
         }
 
         if (!room.UsingMicrophone && !room.Mute)
-            return "mic unavailable";
+            return Loc.T("warning.mic_unavailable", "mic unavailable");
 
         if (!room.UsingSpeaker && !VoiceChatHudState.IsSpeakerMuted)
-            return "speaker unavailable";
+            return Loc.T("warning.speaker_unavailable", "speaker unavailable");
 
         return string.Empty;
     }

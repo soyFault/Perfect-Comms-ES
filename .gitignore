@@ -28,6 +28,7 @@ scripts/*
 !scripts/live-turn-smoke.py
 !scripts/p2p-mesh-smoke.py
 !scripts/verify-release-assets.py
+!scripts/localization.py
 !scripts/package-api.sh
 !scripts/package-api.ps1
 !scripts/verify-nuget-package.py

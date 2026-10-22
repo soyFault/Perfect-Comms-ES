@@ -137,7 +137,8 @@ internal static class VoiceLobbyLiveBrowserClient
     private static ClientWebSocket? _socket;
     private static CancellationTokenSource? _lifetime;
     private static string _endpoint = "";
-    private static string _status = "Disconnected";
+    // null until the first update: the "Disconnected" text is resolved when read, in the current language.
+    private static string? _status;
     private static bool _dirty = true;
     private static int _generation;
 
@@ -154,7 +155,7 @@ internal static class VoiceLobbyLiveBrowserClient
             _lifetime = new CancellationTokenSource();
             generation = ++_generation;
             token = _lifetime.Token;
-            _status = "Connecting to Perfect Comms live lobbies...";
+            _status = Loc.T("browser.connecting", "Connecting to Perfect Comms live lobbies...");
             _dirty = true;
         }
 
@@ -182,7 +183,7 @@ internal static class VoiceLobbyLiveBrowserClient
                 .OrderByDescending(listing => string.Equals(listing.State, "Lobby", StringComparison.OrdinalIgnoreCase))
                 .ThenByDescending(listing => listing.UpdatedAt)
                 .ToArray();
-            status = _status;
+            status = _status ?? Loc.T("livedir.disconnected", "Disconnected");
             var dirty = _dirty;
             _dirty = false;
             return dirty;
@@ -200,7 +201,7 @@ internal static class VoiceLobbyLiveBrowserClient
             StopLocked();
             _endpoint = "";
             Listings.Clear();
-            _status = "Disconnected";
+            _status = Loc.T("livedir.disconnected", "Disconnected");
             _dirty = true;
         }
 
@@ -233,7 +234,7 @@ internal static class VoiceLobbyLiveBrowserClient
                 if (!TrySetSocket(generation, socket)) return;
 
                 attempt = 0;
-                SetStatus(generation, "Perfect Comms live directory connected");
+                SetStatus(generation, Loc.T("livedir.connected_directory", "Perfect Comms live directory connected"));
                 while (!cancellationToken.IsCancellationRequested)
                 {
                     var text = await VoiceLobbyLiveProtocol.ReceiveTextAsync(socket, cancellationToken)
@@ -306,21 +307,21 @@ internal static class VoiceLobbyLiveBrowserClient
                     Listings.Clear();
                     foreach (var listing in envelope.Lobbies ?? new List<VoiceLobbyListing>())
                         if (!string.IsNullOrWhiteSpace(listing.Id)) Listings[listing.Id] = listing;
-                    _status = $"Perfect Comms live connected: {Listings.Count} lobby/lobbies";
+                    _status = Loc.T("livedir.connected_count", "Perfect Comms live connected: {0} lobby/lobbies", Listings.Count);
                     _dirty = true;
                     break;
                 case "upsert" when envelope.Lobby != null && !string.IsNullOrWhiteSpace(envelope.Lobby.Id):
                     Listings[envelope.Lobby.Id] = envelope.Lobby;
-                    _status = $"Perfect Comms live connected: {Listings.Count} lobby/lobbies";
+                    _status = Loc.T("livedir.connected_count", "Perfect Comms live connected: {0} lobby/lobbies", Listings.Count);
                     _dirty = true;
                     break;
                 case "remove" when !string.IsNullOrWhiteSpace(envelope.Id):
                     Listings.Remove(envelope.Id);
-                    _status = $"Perfect Comms live connected: {Listings.Count} lobby/lobbies";
+                    _status = Loc.T("livedir.connected_count", "Perfect Comms live connected: {0} lobby/lobbies", Listings.Count);
                     _dirty = true;
                     break;
                 case "error":
-                    _status = "Live directory error: " + FriendlyError(envelope.Error);
+                    _status = Loc.T("livedir.error", "Live directory error: {0}", FriendlyError(envelope.Error));
                     _dirty = true;
                     break;
             }
@@ -348,8 +349,8 @@ internal static class VoiceLobbyLiveBrowserClient
 
     private static void SetConnectingStatus(int generation, int attempt)
         => SetStatus(generation, attempt == 0
-            ? "Connecting to Perfect Comms live lobbies..."
-            : $"Reconnecting to Perfect Comms live lobbies (attempt {attempt + 1})...");
+            ? Loc.T("browser.connecting", "Connecting to Perfect Comms live lobbies...")
+            : Loc.T("livedir.reconnecting", "Reconnecting to Perfect Comms live lobbies (attempt {0})...", attempt + 1));
 
     private static void SetStatus(int generation, string status)
     {
@@ -367,7 +368,7 @@ internal static class VoiceLobbyLiveBrowserClient
         {
             if (generation != _generation || _lifetime == null) return;
             Listings.Clear();
-            _status = "Live directory unavailable: " + error;
+            _status = Loc.T("livedir.unavailable", "Live directory unavailable: {0}", error);
             _dirty = true;
         }
         VoiceDiagnostics.DebugWarning("[VC] Live lobby browser failed: " + error);
@@ -376,10 +377,10 @@ internal static class VoiceLobbyLiveBrowserClient
     private static string FriendlyError(string error)
         => error switch
         {
-            "directory_capacity" => "directory is at capacity",
-            "rate_limited" => "too many requests",
-            "wire_version_mismatch" => "client/server protocol mismatch",
-            _ => string.IsNullOrWhiteSpace(error) ? "unknown server error" : error.Replace('_', ' '),
+            "directory_capacity" => Loc.T("livedir.err_capacity", "directory is at capacity"),
+            "rate_limited" => Loc.T("livedir.err_rate_limited", "too many requests"),
+            "wire_version_mismatch" => Loc.T("livedir.err_protocol", "client/server protocol mismatch"),
+            _ => string.IsNullOrWhiteSpace(error) ? Loc.T("livedir.err_unknown", "unknown server error") : error.Replace('_', ' '),
         };
 
     private static void AbortAndDispose(ClientWebSocket? socket)

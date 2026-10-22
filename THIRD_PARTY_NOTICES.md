@@ -72,6 +72,12 @@ The plugin embeds these managed assemblies as resources and resolves them at run
 | System.Text.Encodings.Web and System.Text.Json 10.0.10 | [.NET runtime](https://github.com/dotnet/runtime), MIT. The package license is embedded as `Licenses.dotnet-runtime-MIT.txt`; the exact 10.x package notices are embedded as `Licenses.System.Text.Encodings.Web-THIRD-PARTY-NOTICES.txt` and `Licenses.System.Text.Json-THIRD-PARTY-NOTICES.txt`. |
 | Microsoft.Bcl.AsyncInterfaces and System.IO.Pipelines 10.0.10 | [.NET runtime](https://github.com/dotnet/runtime), MIT. These System.Text.Json runtime dependencies share the embedded .NET runtime license and 10.x NuGet third-party notices above. |
 
+## Localization pattern
+
+`Comms/Loc.cs` (XML locale files selected by the Among Us language, with fallback) adapts the design of
+`MiraLocaleManager` from [MiraAPI](https://github.com/All-Of-Us-Mods/MiraAPI), LGPL-2.1, the same license as this
+project. No MiraAPI code or binary is bundled and there is no runtime dependency on it.
+
 ## Native Rust dependencies
 
 The native desktop `pc-capture` helpers statically link a locked Rust dependency graph, including

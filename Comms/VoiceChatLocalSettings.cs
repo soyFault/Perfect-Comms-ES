@@ -97,6 +97,7 @@ public class VoiceChatLocalSettings
 
     private static volatile VoiceDeviceInfo[] _micDevices = Array.Empty<VoiceDeviceInfo>();
     private static volatile string[] _micDeviceNames = Array.Empty<string>();
+    private static volatile string _micDeviceNamesLocale = Loc.EnglishLocale;
     private static volatile string _savedMicIdForPublication = string.Empty;
     private static volatile string _savedMicNameForPublication = string.Empty;
     private static volatile bool _micNamesFromSidecar;
@@ -105,6 +106,7 @@ public class VoiceChatLocalSettings
     private static Task? _sidecarProbeTask;
     private static volatile VoiceDeviceInfo[] _spkDevices = Array.Empty<VoiceDeviceInfo>();
     private static volatile string[] _spkDeviceNames = Array.Empty<string>();
+    private static volatile string _spkDeviceNamesLocale = Loc.EnglishLocale;
     private static volatile string _savedSpkIdForPublication = string.Empty;
     private static volatile string _savedSpkNameForPublication = string.Empty;
     private static volatile bool _spkNamesFromSidecar;
@@ -112,7 +114,20 @@ public class VoiceChatLocalSettings
 #endif
 
     internal static VoiceDeviceInfo[] MicDevices => _micDevices;
-    public static string[] MicDeviceNames => _micDeviceNames;
+    public static string[] MicDeviceNames
+    {
+        get
+        {
+            // Display names follow the game language: rebuild them when it changes.
+            string locale = Loc.CurrentLocale;
+            if (!string.Equals(locale, _micDeviceNamesLocale, StringComparison.Ordinal))
+            {
+                _micDeviceNames = DeviceNames(_micDevices);
+                _micDeviceNamesLocale = locale;
+            }
+            return _micDeviceNames;
+        }
+    }
     public static int MicDeviceListVersion => Volatile.Read(ref _micDeviceListVersion);
 
     internal static void SetMicDevicesFromSidecar(IReadOnlyList<VoiceDeviceInfo> devices)
@@ -141,7 +156,19 @@ public class VoiceChatLocalSettings
 #endif
 #if WINDOWS
     internal static VoiceDeviceInfo[] SpkDevices => _spkDevices;
-    public static string[] SpkDeviceNames => _spkDeviceNames;
+    public static string[] SpkDeviceNames
+    {
+        get
+        {
+            string locale = Loc.CurrentLocale;
+            if (!string.Equals(locale, _spkDeviceNamesLocale, StringComparison.Ordinal))
+            {
+                _spkDeviceNames = DeviceNames(_spkDevices);
+                _spkDeviceNamesLocale = locale;
+            }
+            return _spkDeviceNames;
+        }
+    }
     internal static bool SidecarDeviceProbePending =>
         _sidecarProbeTask != null && !_sidecarProbeTask.IsCompleted;
 
@@ -212,13 +239,24 @@ public class VoiceChatLocalSettings
         return true;
     }
 
-    private static string[] DeviceNames(IReadOnlyList<VoiceDeviceInfo> devices)
+    internal static string[] DeviceNames(IReadOnlyList<VoiceDeviceInfo> devices)
     {
         var names = new string[devices.Count];
         for (int i = 0; i < devices.Count; i++)
+        {
+            // VoiceDeviceInfo.Name stays English: it is persisted and compared. Only the label shown
+            // to the player is translated here.
+            string name = devices[i].Name switch
+            {
+                "Default" when devices[i].IsDefault => Loc.T("device.default", "Default"),
+                "Saved microphone" => Loc.T("device.saved_microphone", "Saved microphone"),
+                "Saved speaker" => Loc.T("device.saved_speaker", "Saved speaker"),
+                var other => other,
+            };
             names[i] = devices[i].IsAvailable
-                ? devices[i].Name
-                : devices[i].Name + " (unavailable)";
+                ? name
+                : Loc.T("device.unavailable_suffix", "{0} (unavailable)", name);
+        }
         return names;
     }
 
@@ -227,6 +265,7 @@ public class VoiceChatLocalSettings
         if (SameDevices(_micDevices, devices)) return;
         _micDevices = devices;
         _micDeviceNames = DeviceNames(devices);
+        _micDeviceNamesLocale = Loc.CurrentLocale;
         Interlocked.Increment(ref _micDeviceListVersion);
     }
 
@@ -236,6 +275,7 @@ public class VoiceChatLocalSettings
         if (SameDevices(_spkDevices, devices)) return;
         _spkDevices = devices;
         _spkDeviceNames = DeviceNames(devices);
+        _spkDeviceNamesLocale = Loc.CurrentLocale;
         Interlocked.Increment(ref _spkDeviceListVersion);
     }
 #endif
@@ -401,56 +441,56 @@ public class VoiceChatLocalSettings
         RefreshDeviceLists();
 
         MicVolume = config.Bind("Audio", "MicVolume", 1f,
-            new ConfigDescription("Adjusts how loudly your microphone is sent to other players. This does not change when the mic counts as speaking.",
+            ConfigHelp.D(Loc.L("help.mic_volume", "Adjusts how loudly your microphone is sent to other players. This does not change when the mic counts as speaking."),
                 new AcceptableValueRange<float>(0.1f, 2f)));
 
         MicSensitivity = config.Bind("Audio", "MicSensitivity", 1f,
-            new ConfigDescription("Controls how easily your mic detects speech. Higher values pick up quieter speech; lower values ignore more room noise.",
+            ConfigHelp.D(Loc.L("help.mic_sensitivity", "Controls how easily your mic detects speech. Higher values pick up quieter speech; lower values ignore more room noise."),
                 new AcceptableValueRange<float>(0.25f, 2f)));
 
         MasterVolume = config.Bind("Audio", "MasterVolume", 1f,
-            new ConfigDescription("Adjusts the overall volume of all Perfect Comms voice audio you hear.",
+            ConfigHelp.D(Loc.L("help.master_volume", "Adjusts the overall volume of all Perfect Comms voice audio you hear."),
                 new AcceptableValueRange<float>(0.1f, 2f)));
 
         MeetingSpatial = config.Bind("Audio", "MeetingSpatial", MeetingSpatialMode.Low,
-            new ConfigDescription(
-                "Spreads natural meeting and end-game voices across the stereo field. Radio remains centered."));
+            ConfigHelp.D(
+                Loc.L("help.meeting_spatial", "Spreads natural meeting and end-game voices across the stereo field. Radio remains centered.")));
 
         AliveFocusAliveVolume = config.Bind("Audio.HoldMix", "AliveFocusAliveVolume",
             VoiceVolumeMath.DefaultLouderVolume,
-            new ConfigDescription(
-                "Sets the volume of audible living players while Alive Louder / Dead Quieter is held. 100% is normal; 0% mutes that group.",
+            ConfigHelp.D(
+                Loc.L("help.alive_focus_alive_volume", "Sets the volume of audible living players while Alive Louder / Dead Quieter is held. 100% is normal; 0% mutes that group."),
                 new AcceptableValueRange<float>(0f, 2f)));
 
         AliveFocusDeadVolume = config.Bind("Audio.HoldMix", "AliveFocusDeadVolume",
             VoiceVolumeMath.DefaultQuieterVolume,
-            new ConfigDescription(
-                "Sets the volume of audible dead players while Alive Louder / Dead Quieter is held. 100% is normal; 0% mutes that group.",
+            ConfigHelp.D(
+                Loc.L("help.alive_focus_dead_volume", "Sets the volume of audible dead players while Alive Louder / Dead Quieter is held. 100% is normal; 0% mutes that group."),
                 new AcceptableValueRange<float>(0f, 2f)));
 
         DeadFocusAliveVolume = config.Bind("Audio.HoldMix", "DeadFocusAliveVolume",
             VoiceVolumeMath.DefaultQuieterVolume,
-            new ConfigDescription(
-                "Sets the volume of audible living players while Alive Quieter / Dead Louder is held. 100% is normal; 0% mutes that group.",
+            ConfigHelp.D(
+                Loc.L("help.dead_focus_alive_volume", "Sets the volume of audible living players while Alive Quieter / Dead Louder is held. 100% is normal; 0% mutes that group."),
                 new AcceptableValueRange<float>(0f, 2f)));
 
         DeadFocusDeadVolume = config.Bind("Audio.HoldMix", "DeadFocusDeadVolume",
             VoiceVolumeMath.DefaultLouderVolume,
-            new ConfigDescription(
-                "Sets the volume of audible dead players while Alive Quieter / Dead Louder is held. 100% is normal; 0% mutes that group.",
+            ConfigHelp.D(
+                Loc.L("help.dead_focus_dead_volume", "Sets the volume of audible dead players while Alive Quieter / Dead Louder is held. 100% is normal; 0% mutes that group."),
                 new AcceptableValueRange<float>(0f, 2f)));
 
         VoiceFalloffSoftness = config.Bind("Audio", "VoiceFalloffSoftness", 0.30f,
-            new ConfigDescription(
-                "How gently voices fade near the edge of vision/range. 0% keeps the original fade; higher keeps voices clear across most of your vision and fades only near the edge. Layers on top of the host's falloff and never extends hearing range.",
+            ConfigHelp.D(
+                Loc.L("help.voice_falloff_softness", "How gently voices fade near the edge of vision/range. 0% keeps the original fade; higher keeps voices clear across most of your vision and fades only near the edge. Layers on top of the host's falloff and never extends hearing range."),
                 new AcceptableValueRange<float>(0f, 1f)));
         VoiceAudioOcclusion.ProximitySoftness01 = VoiceFalloffSoftness.Value;
 
         MicMode = config.Bind("Audio", "MicMode", VoiceMicMode.OpenMic,
-            new ConfigDescription("Chooses whether your mic transmits automatically when you speak or only while Push To Talk is held."));
+            ConfigHelp.D(Loc.L("help.mic_mode", "Chooses whether your mic transmits automatically when you speak or only while Push To Talk is held.")));
 
         NoiseGateEnabled = config.Bind("Audio", "NoiseGateEnabled", false,
-            new ConfigDescription("Optionally gates residual room noise between phrases. Leave this off to preserve the quietest speech, breaths, and word endings."));
+            ConfigHelp.D(Loc.L("help.noise_gate_enabled", "Optionally gates residual room noise between phrases. Leave this off to preserve the quietest speech, breaths, and word endings.")));
 
         NoiseGateThreshold = config.Bind("Audio.Advanced", "NoiseGateThreshold", 0.003f,
             new ConfigDescription("Advanced base gate threshold. Effective value is divided by MicSensitivity.",
@@ -461,17 +501,17 @@ public class VoiceChatLocalSettings
                 new AcceptableValueRange<float>(0.002f, 0.080f)));
 
         StartMuted = config.Bind("Audio", "StartMuted", false,
-            new ConfigDescription("Starts each voice session with your microphone muted."));
+            ConfigHelp.D(Loc.L("help.start_muted", "Starts each voice session with your microphone muted.")));
 
         StartDeafened = config.Bind("Audio", "StartDeafened", false,
-            new ConfigDescription("Starts each voice session deafened: voice playback is muted and microphone transmission is paused until you undeafen."));
+            ConfigHelp.D(Loc.L("help.start_deafened", "Starts each voice session deafened: voice playback is muted and microphone transmission is paused until you undeafen.")));
 
         AllowKeybindsWhileChatOpen = config.Bind(
             "Keybinds",
             "AllowKeybindsWhileChatOpen",
             false,
-            new ConfigDescription(
-                "Lets Perfect Comms shortcuts run while Among Us chat is open. Printable shortcuts can both trigger their action and type into the message."));
+            ConfigHelp.D(
+                Loc.L("help.allow_keybinds_while_chat_open", "Lets Perfect Comms shortcuts run while Among Us chat is open. Printable shortcuts can both trigger their action and type into the message.")));
 
         _savedMicDeviceId = config.Bind("Audio", "MicDeviceId", "",
             "Stable microphone device identifier. Display names are stored separately and are not used for selection.");
@@ -487,11 +527,11 @@ public class VoiceChatLocalSettings
 
         MicrophoneDeviceIndex = config.Bind("Audio", "Microphone",
             MicDeviceEnum.Default,
-            new ConfigDescription("Selects the recording device Perfect Comms uses. Default follows the system's default input device."));
+            ConfigHelp.D(Loc.L("help.microphone", "Selects the recording device Perfect Comms uses. Default follows the system's default input device.")));
 #if WINDOWS
         SpeakerDeviceIndex = config.Bind("Audio", "Speaker",
             SpkDeviceEnum.Default,
-            new ConfigDescription("Selects the playback device Perfect Comms uses for voice audio. Default follows the system's default output device."));
+            ConfigHelp.D(Loc.L("help.speaker", "Selects the playback device Perfect Comms uses for voice audio. Default follows the system's default output device.")));
 #endif
 
         ApplyLegacyDefaultCanonicalization(
@@ -576,96 +616,96 @@ public class VoiceChatLocalSettings
 #endif
 
         ButtonPositionX = config.Bind("UI", "ButtonPositionX", 0.99f,
-            new ConfigDescription("Horizontal position of voice buttons (0 = left edge, 1 = right edge)",
+            ConfigHelp.D(Loc.L("help.button_position_x", "Horizontal position of voice buttons (0 = left edge, 1 = right edge)"),
                 new AcceptableValueRange<float>(0f, 1f)));
 
         ButtonPositionY = config.Bind("UI", "ButtonPositionY", 0.10f,
-            new ConfigDescription("Vertical position of voice buttons (0 = bottom, 1 = top)",
+            ConfigHelp.D(Loc.L("help.button_position_y", "Vertical position of voice buttons (0 = bottom, 1 = top)"),
                 new AcceptableValueRange<float>(0f, 1f)));
 
         ShowMuteDeafenStatusAlerts = config.Bind("UI", "ShowMuteDeafenStatusAlerts", true,
-            new ConfigDescription("Shows a small persistent HUD reminder while the microphone is muted or voice playback is deafened."));
+            ConfigHelp.D(Loc.L("help.show_mute_deafen_status_alerts", "Shows a small persistent HUD reminder while the microphone is muted or voice playback is deafened.")));
 
         ShowVoiceConnectionStatus = config.Bind("UI", "ShowVoiceConnectionStatus", true,
-            new ConfigDescription("Shows voice connection progress in the lobby and active retry failures in other phases."));
+            ConfigHelp.D(Loc.L("help.show_voice_connection_status", "Shows voice connection progress in the lobby and active retry failures in other phases.")));
 
         DisableVoiceControlsHud = config.Bind("UI", "DisableVoiceControlsHud", false,
-            new ConfigDescription("Hides the microphone, speaker, and mobile radio controls while keeping their keybinds active."));
+            ConfigHelp.D(Loc.L("help.disable_voice_controls_hud", "Hides the microphone, speaker, and mobile radio controls while keeping their keybinds active.")));
 
         VoiceControlsLayout = config.Bind("UI", "VoiceControlsLayout",
             VoiceChatPlugin.VoiceChat.VoiceControlsLayout.Vertical,
-            new ConfigDescription("Arranges the Perfect Comms HUD controls vertically or horizontally."));
+            ConfigHelp.D(Loc.L("help.voice_controls_layout", "Arranges the Perfect Comms HUD controls vertically or horizontally.")));
 
         DisableSpeakingBar = config.Bind("UI", "DisableSpeakingBar", false,
-            new ConfigDescription("Hides the in-game speaking bar completely."));
+            ConfigHelp.D(Loc.L("help.disable_speaking_bar", "Hides the in-game speaking bar completely.")));
 
         SpeakingBarPosition = config.Bind("UI", "SpeakingBarPosition",
             VoiceChatPlugin.VoiceChat.SpeakingBarPosition.TopMiddle,
-            new ConfigDescription("Chooses the speaking bar's screen preset while manual layout is disabled."));
+            ConfigHelp.D(Loc.L("help.speaking_bar_position", "Chooses the speaking bar's screen preset while manual layout is disabled.")));
 
         SpeakingBarSideLayout = config.Bind("UI", "SpeakingBarSideLayout",
             VoiceChatPlugin.VoiceChat.SpeakingBarSideLayout.SingleLane,
-            new ConfigDescription("Chooses whether left/right speaking-bar presets use one vertical lane or wrap into additional columns. Top Middle and Bottom Middle always wrap."));
+            ConfigHelp.D(Loc.L("help.speaking_bar_side_layout", "Chooses whether left/right speaking-bar presets use one vertical lane or wrap into additional columns. Top Middle and Bottom Middle always wrap.")));
 
         SpeakingBarManualLayout = config.Bind("UI", "SpeakingBarManualLayout", false,
-            new ConfigDescription("Use the sliders and layout below instead of the position preset."));
+            ConfigHelp.D(Loc.L("help.speaking_bar_manual_layout", "Use the sliders and layout below instead of the position preset.")));
 
         SpeakingBarX = config.Bind("UI", "SpeakingBarX", 0.5f,
-            new ConfigDescription("Speaking bar horizontal position (0 = left, 1 = right).",
+            ConfigHelp.D(Loc.L("help.speaking_bar_x", "Speaking bar horizontal position (0 = left, 1 = right)."),
                 new AcceptableValueRange<float>(0f, 1f)));
 
         SpeakingBarY = config.Bind("UI", "SpeakingBarY", 0.85f,
-            new ConfigDescription("Speaking bar vertical position (0 = bottom, 1 = top).",
+            ConfigHelp.D(Loc.L("help.speaking_bar_y", "Speaking bar vertical position (0 = bottom, 1 = top)."),
                 new AcceptableValueRange<float>(0f, 1f)));
 
         SpeakingBarLayout = config.Bind("UI", "SpeakingBarLayout",
             VoiceChatPlugin.VoiceChat.VoiceControlsLayout.Horizontal,
-            new ConfigDescription("Speaking bar icon direction."));
+            ConfigHelp.D(Loc.L("help.speaking_bar_layout", "Speaking bar icon direction.")));
 
         SpeakingBarAvatarFacing = config.Bind("UI", "SpeakingBarAvatarFacing",
             VoiceChatPlugin.VoiceChat.SpeakingBarAvatarFacing.Right,
-            new ConfigDescription("Chooses whether speaking-bar avatars face left or right while manual layout is enabled."));
+            ConfigHelp.D(Loc.L("help.speaking_bar_avatar_facing", "Chooses whether speaking-bar avatars face left or right while manual layout is enabled.")));
 
         _speakingBarSettingsVersion = config.Bind("UI.Internal", "SpeakingBarSettingsVersion", 0,
             new ConfigDescription("Internal migration version for speaking-bar appearance settings."));
 
         SpeakingBarNamePosition = config.Bind("UI", "SpeakingBarNamePosition",
             VoiceChatPlugin.VoiceChat.SpeakingBarNamePosition.Auto,
-            new ConfigDescription("Where the player name sits relative to its speaking-bar icon. Auto keeps names inside the screen based on the bar position."));
+            ConfigHelp.D(Loc.L("help.speaking_bar_name_position", "Where the player name sits relative to its speaking-bar icon. Auto keeps names inside the screen based on the bar position.")));
 
         SpeakingBarBackdrop = config.Bind("UI", "SpeakingBarBackdrop", true,
-            new ConfigDescription("Show a translucent dark backdrop behind the speaking bar."));
+            ConfigHelp.D(Loc.L("help.speaking_bar_backdrop", "Show a translucent dark backdrop behind the speaking bar.")));
 
         SpeakingBarScale = config.Bind("UI", "SpeakingBarScale", 1.0f,
-            new ConfigDescription("Changes the size of the speaking bar, including its player icons and names. In v4, 100% is the same rendered size as 90% in earlier versions.",
+            ConfigHelp.D(Loc.L("help.speaking_bar_scale", "Changes the size of the speaking bar, including its player icons and names. In v4, 100% is the same rendered size as 90% in earlier versions."),
                 new AcceptableValueRange<float>(
                     SpeakingBarScalePolicy.MinimumUserScale,
                     SpeakingBarScalePolicy.MaximumUserScale)));
 
         SpeakingBarFixedAllPlayers = config.Bind("UI", "SpeakingBarFixedAllPlayers", false,
-            new ConfigDescription("Keeps a stable speaking-bar slot for every connected player, including across meeting transitions, instead of showing only current speakers."));
+            ConfigHelp.D(Loc.L("help.speaking_bar_fixed_all_players", "Keeps a stable speaking-bar slot for every connected player, including across meeting transitions, instead of showing only current speakers.")));
 
         SpeakingBarLivePreview = config.Bind("UI", "SpeakingBarLivePreview", SpeakingBarLivePreviewDefault,
-            new ConfigDescription("Temporarily moves the local settings panel aside and shows an isolated, realistic 15-player live preview of the speaking bar. It turns off when the panel closes, when you leave the HUD tab, and on every game launch."));
+            ConfigHelp.D(Loc.L("help.speaking_bar_live_preview", "Temporarily moves the local settings panel aside and shows an isolated, realistic 15-player live preview of the speaking bar. It turns off when the panel closes, when you leave the HUD tab, and on every game launch.")));
 
 
         // Meeting overlay — on by default.
         MeetingSpeakingOverlay = config.Bind("UI", "MeetingSpeakingOverlay", true,
-            new ConfigDescription(
-                "Shows a coloured glow around a player's meeting card while they are speaking, subject to concealment and blindness privacy rules."));
+            ConfigHelp.D(
+                Loc.L("help.meeting_speaking_overlay", "Shows a coloured glow around a player's meeting card while they are speaking, subject to concealment and blindness privacy rules.")));
 
         OverlayScale = config.Bind("UI", "OverlayScale", 1.30f,
-            new ConfigDescription("Changes the size of the voice HUD buttons.",
+            ConfigHelp.D(Loc.L("help.overlay_scale", "Changes the size of the voice HUD buttons."),
                 new AcceptableValueRange<float>(0.75f, 3.00f)));
 
         NoiseSuppressionEnabled = config.Bind("Audio", "NoiseSuppressionEnabled", true,
-            new ConfigDescription("Use WebRTC noise suppression on outgoing microphone audio while preserving quiet speech."));
+            ConfigHelp.D(Loc.L("help.noise_suppression_enabled", "Use WebRTC noise suppression on outgoing microphone audio while preserving quiet speech.")));
 
         StrongerNoiseSuppressionEnabled = config.Bind("Audio", "StrongerNoiseSuppressionEnabled", false,
-            new ConfigDescription("Use stronger WebRTC noise suppression. This can remove more background noise but may make quiet speech sound less natural."));
+            ConfigHelp.D(Loc.L("help.stronger_noise_suppression_enabled", "Use stronger WebRTC noise suppression. This can remove more background noise but may make quiet speech sound less natural.")));
 
         EchoCancellationEnabled = config.Bind("Audio", "EchoCancellationEnabled", true,
-            new ConfigDescription("Cancel echo/feedback of incoming voice picked up by your microphone."));
+            ConfigHelp.D(Loc.L("help.echo_cancellation_enabled", "Cancel echo/feedback of incoming voice picked up by your microphone.")));
 
         DebugVoiceStats = config.Bind("Debug", "DebugVoiceStats", false,
             new ConfigDescription("Enable Perfect Comms diagnostic files and debug log output."));
@@ -673,7 +713,7 @@ public class VoiceChatLocalSettings
         SyntheticMicTone = config.Bind("Debug.Advanced", "SyntheticMicTone", false,
             new ConfigDescription("Transmit a quiet generated 48 kHz mono test tone through the native voice engine instead of relying on physical microphone audio."));
         ShowFake15Players = config.Bind("Debug.Advanced", "ShowFake15Players", false,
-            new ConfigDescription("Temporarily show a 15-player fake roster in the speaking bar for layout testing. It resets off on every game launch."));
+            ConfigHelp.D(Loc.L("help.show_fake15_players", "Temporarily show a 15-player fake roster in the speaking bar for layout testing. It resets off on every game launch.")));
         MicCalibrationDiagnostics = config.Bind("Debug", "MicCalibrationDiagnostics", false,
             new ConfigDescription("Log live microphone peak/RMS/gate calibration diagnostics for the native voice engine."));
 

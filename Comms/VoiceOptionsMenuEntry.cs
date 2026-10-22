@@ -46,7 +46,7 @@ public static class VoiceOptionsMenuEntry
         if (_chip.Built) return;
         try
         {
-            _chip.Build("PERFECT COMMS", "VOICE SETTINGS",
+            _chip.Build("PERFECT COMMS", Loc.T("chip.voice_settings", "VOICE SETTINGS"),
                 new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f),
                 new Vector2(14f, 0f),
                 VoiceSettingsPanel.Show,
@@ -60,6 +60,11 @@ public static class VoiceOptionsMenuEntry
     }
 
     public static bool CursorOverChip => _chip.CursorOver;
+
+    internal static void RefreshLanguage()
+    {
+        if (_chip.Built) _chip.SetLabel(Loc.T("chip.voice_settings", "VOICE SETTINGS"));
+    }
 
     public static void TickButton() => _chip.Tick();
 }

@@ -14,7 +14,7 @@ internal readonly record struct FirstRunSetupBinding(
 
     internal string Label
         => Key == KeyCode.None
-            ? "None"
+            ? Loc.T("ui.bind_none", "None")
             : Modifier == KeyCode.None
                 ? VoiceKeybind.FormatKey(Key)
                 : VoiceKeybind.FormatModifier(Modifier, ModifierMatch) + "+" +
@@ -25,13 +25,21 @@ internal readonly record struct FirstRunSetupBinding(
 }
 
 internal readonly record struct FirstRunHudPreset(
-    string Name,
-    string Description,
+    Loc.LocText NameText,
+    Loc.LocText DescriptionText,
     SpeakingBarPosition Position,
     SpeakingBarSideLayout SideLayout,
     SpeakingBarNamePosition NamePosition,
     float Scale,
-    bool Backdrop);
+    bool Backdrop)
+{
+    /// <summary>Stable English id of the preset (never localized).</summary>
+    internal string Name => NameText.English;
+    internal string Description => DescriptionText.English;
+    /// <summary>Text to show, in the current game language.</summary>
+    internal string DisplayName => NameText.Text;
+    internal string DisplayDescription => DescriptionText.Text;
+}
 
 internal static class FirstRunHudPresets
 {
@@ -40,34 +48,34 @@ internal static class FirstRunHudPresets
     internal static readonly IReadOnlyList<FirstRunHudPreset> All =
         new FirstRunHudPreset[]
         {
-            new("Top Middle", "The familiar default above the action, wrapping cleanly in full lobbies",
+            new(Loc.L("preset.top_middle", "Top Middle"), Loc.L("preset.top_middle_desc", "The familiar default above the action, wrapping cleanly in full lobbies"),
                 SpeakingBarPosition.TopMiddle, SpeakingBarSideLayout.Wrapped,
                 SpeakingBarNamePosition.Auto, 1.00f, true),
-            new("Middle Right", "A single vertical lane on the right with no wrapping",
+            new(Loc.L("preset.middle_right", "Middle Right"), Loc.L("preset.middle_right_desc", "A single vertical lane on the right with no wrapping"),
                 SpeakingBarPosition.MiddleRight, SpeakingBarSideLayout.SingleLane,
                 SpeakingBarNamePosition.Auto, 1.00f, true),
-            new("Middle Left", "A single vertical lane on the left with no wrapping",
+            new(Loc.L("preset.middle_left", "Middle Left"), Loc.L("preset.middle_left_desc", "A single vertical lane on the left with no wrapping"),
                 SpeakingBarPosition.MiddleLeft, SpeakingBarSideLayout.SingleLane,
                 SpeakingBarNamePosition.Auto, 1.00f, true),
-            new("Compact", "A smaller clean bar with no backdrop",
+            new(Loc.L("preset.compact", "Compact"), Loc.L("preset.compact_desc", "A smaller clean bar with no backdrop"),
                 SpeakingBarPosition.TopMiddle, SpeakingBarSideLayout.Wrapped,
                 SpeakingBarNamePosition.Auto, 0.78f, false),
-            new("Top Left", "A familiar corner layout with vertical flow",
+            new(Loc.L("preset.top_left", "Top Left"), Loc.L("preset.top_left_desc", "A familiar corner layout with vertical flow"),
                 SpeakingBarPosition.TopLeft, SpeakingBarSideLayout.Wrapped,
                 SpeakingBarNamePosition.Auto, 0.90f, true),
-            new("Top Right", "Corner layout beside the voice controls",
+            new(Loc.L("preset.top_right", "Top Right"), Loc.L("preset.top_right_desc", "Corner layout beside the voice controls"),
                 SpeakingBarPosition.TopRight, SpeakingBarSideLayout.Wrapped,
                 SpeakingBarNamePosition.Auto, 0.90f, true),
-            new("Left Stack", "A wrapped side stack that keeps the center clear",
+            new(Loc.L("preset.left_stack", "Left Stack"), Loc.L("preset.left_stack_desc", "A wrapped side stack that keeps the center clear"),
                 SpeakingBarPosition.MiddleLeft, SpeakingBarSideLayout.Wrapped,
                 SpeakingBarNamePosition.Auto, 0.84f, true),
-            new("Right Stack", "A wrapped side stack near the HUD edge",
+            new(Loc.L("preset.right_stack", "Right Stack"), Loc.L("preset.right_stack_desc", "A wrapped side stack near the HUD edge"),
                 SpeakingBarPosition.MiddleRight, SpeakingBarSideLayout.Wrapped,
                 SpeakingBarNamePosition.Auto, 0.84f, true),
-            new("Bottom Center", "Centered below the action with wrapped rows",
+            new(Loc.L("preset.bottom_center", "Bottom Center"), Loc.L("preset.bottom_center_desc", "Centered below the action with wrapped rows"),
                 SpeakingBarPosition.BottomMiddle, SpeakingBarSideLayout.Wrapped,
                 SpeakingBarNamePosition.Auto, 0.90f, true),
-            new("Minimal", "Small, quiet, and tucked into the bottom right",
+            new(Loc.L("preset.minimal", "Minimal"), Loc.L("preset.minimal_desc", "Small, quiet, and tucked into the bottom right"),
                 SpeakingBarPosition.BottomRight, SpeakingBarSideLayout.SingleLane,
                 SpeakingBarNamePosition.Auto, 0.75f, false),
         };
@@ -420,10 +428,10 @@ internal sealed class FirstRunSetupDraft
         string savedName,
         IReadOnlyList<VoiceDeviceInfo> devices)
     {
-        if (string.IsNullOrEmpty(savedId)) return "System Default";
+        if (string.IsNullOrEmpty(savedId)) return Loc.T("device.system_default", "System Default");
         for (int i = 1; i < devices.Count; i++)
             if (string.Equals(savedId, devices[i].Id, StringComparison.Ordinal))
                 return devices[i].Name;
-        return string.IsNullOrWhiteSpace(savedName) ? "Saved device" : savedName;
+        return string.IsNullOrWhiteSpace(savedName) ? Loc.T("device.saved", "Saved device") : savedName;
     }
 }

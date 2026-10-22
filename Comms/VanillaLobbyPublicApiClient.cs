@@ -37,7 +37,11 @@ internal sealed class VanillaLobbyMetadata
     public int RegionId { get; init; }
     public IReadOnlyList<VanillaLobbyModMetadata> Mods { get; init; } = Array.Empty<VanillaLobbyModMetadata>();
 
-    public string StatusLabel => string.IsNullOrWhiteSpace(Status) ? "Unknown" : Status.Trim();
+    // English placeholders are data (shown through VanillaLobbyDisplayData, which localizes them).
+    internal const string UnknownStatus = "Unknown";
+    internal const string UnknownHost = "Unknown host";
+
+    public string StatusLabel => string.IsNullOrWhiteSpace(Status) ? UnknownStatus : Status.Trim();
 
     public bool HasMod(string id)
     {
@@ -50,7 +54,7 @@ internal sealed class VanillaLobbyMetadata
 
     public string GetModSummary(int maxMods)
     {
-        if (Mods.Count == 0) return "None reported";
+        if (Mods.Count == 0) return Loc.T("lobby.mods_none", "None reported");
 
         var parts = new List<string>(Math.Min(maxMods, Mods.Count));
         for (var i = 0; i < Mods.Count && parts.Count < maxMods; i++)
@@ -62,8 +66,8 @@ internal sealed class VanillaLobbyMetadata
                 : $"{mod.DisplayName} {mod.Version}");
         }
 
-        if (Mods.Count > parts.Count) parts.Add($"+{Mods.Count - parts.Count} more");
-        return parts.Count == 0 ? "None reported" : string.Join(", ", parts);
+        if (Mods.Count > parts.Count) parts.Add(Loc.T("lobby.mods_more", "+{0} more", Mods.Count - parts.Count));
+        return parts.Count == 0 ? Loc.T("lobby.mods_none", "None reported") : string.Join(", ", parts);
     }
 }
 
@@ -125,8 +129,8 @@ internal static class VanillaLobbyPublicApiClient
             result[code] = new VanillaLobbyMetadata
             {
                 Code = code,
-                HostName = Clamp(game.HostName, 32, "Unknown host"),
-                Status = Clamp(game.Status, 24, "Unknown"),
+                HostName = Clamp(game.HostName, 32, VanillaLobbyMetadata.UnknownHost),
+                Status = Clamp(game.Status, 24, VanillaLobbyMetadata.UnknownStatus),
                 PlayerCount = Math.Max(0, game.PlayerCount),
                 MaxPlayers = Math.Max(game.MaxPlayers, game.PlayerCount),
                 ChatMode = game.ChatMode,

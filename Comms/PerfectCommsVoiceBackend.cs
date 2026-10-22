@@ -1667,7 +1667,7 @@ internal sealed class PerfectCommsVoiceBackend : IVoiceBackend
         VoiceDiagnostics.Log(
             "voice.mic.recovery",
             $"reason={reason} action=rebuild-helper sourceGeneration={sourceGeneration} previouslyProduced=true");
-        try { VoiceChatHudState.ShowToastThreadSafe("Microphone stalled - restarting audio helper"); } catch { }
+        try { VoiceChatHudState.ShowToastThreadSafe(Loc.T("toast.mic_stalled", "Microphone stalled - restarting audio helper")); } catch { }
         StopVoiceSession("capture-supervisor-exhausted");
         _peerSession?.ResetAndNotify("capture-supervisor-exhausted");
         _rpcKnownClients.Clear();
@@ -1746,7 +1746,7 @@ internal sealed class PerfectCommsVoiceBackend : IVoiceBackend
             $"slot={_activeCaptureSlot} device={VoiceDiagnostics.DescribeDevice(_lastMicDeviceName)} wine={WineEnvironment.IsWine} " +
             "hint=check OS mic permission / antivirus quarantine / helper extraction");
         VoiceDiagnostics.Log("voice.sidecar.unavailable", detail);
-        try { VoiceChatHudState.ShowToastThreadSafe("Voice unavailable - retrying audio helper"); } catch { }
+        try { VoiceChatHudState.ShowToastThreadSafe(Loc.T("toast.voice_retrying_helper", "Voice unavailable - retrying audio helper")); } catch { }
     }
 
     internal static int VoiceRecoveryDelayMs(int priorAttempts)
@@ -1913,7 +1913,7 @@ internal sealed class PerfectCommsVoiceBackend : IVoiceBackend
             VoiceDiagnostics.Log(
                 "voice.mic.degraded",
                 $"code={code} requested={_microphoneRequested} helperReady={_voiceReady} action=native-retry");
-            try { VoiceChatHudState.ShowToastThreadSafe("Microphone unavailable - retrying device"); } catch { }
+            try { VoiceChatHudState.ShowToastThreadSafe(Loc.T("toast.mic_retrying_device", "Microphone unavailable - retrying device")); } catch { }
         });
     }
 
@@ -2371,10 +2371,10 @@ internal sealed class PerfectCommsVoiceBackend : IVoiceBackend
                 string message = fallbackRequested
                     ? fallbackSent
                         ? retryPlanned
-                            ? $"Selected speaker could not be opened - using System Default and retrying once ({failureDetail})"
-                            : $"Selected speaker could not be opened - using System Default; your selection was kept ({failureDetail})"
-                        : $"Selected speaker could not be opened and fallback could not be sent ({failureDetail})"
-                    : $"System Default speaker could not be opened ({failureDetail})";
+                            ? Loc.T("toast.speaker_fallback_retry", "Selected speaker could not be opened - using System Default and retrying once ({0})", failureDetail)
+                            : Loc.T("toast.speaker_fallback_kept", "Selected speaker could not be opened - using System Default; your selection was kept ({0})", failureDetail)
+                        : Loc.T("toast.speaker_fallback_unsent", "Selected speaker could not be opened and fallback could not be sent ({0})", failureDetail)
+                    : Loc.T("toast.speaker_default_failed", "System Default speaker could not be opened ({0})", failureDetail);
                 try { VoiceChatHudState.ShowToastThreadSafe(message); } catch { }
             });
         }
@@ -4193,9 +4193,9 @@ internal sealed class PerfectCommsVoiceBackend : IVoiceBackend
                     {
                         VoiceChatHudState.ShowToastThreadSafe(fallbackSent
                             ? retryPlanned
-                                ? "Selected speaker command failed - using System Default and retrying once; your selection was kept"
-                                : "Selected speaker retry failed - continuing with System Default; your selection was kept"
-                            : "Could not change speaker or request System Default; your selection was kept");
+                                ? Loc.T("toast.speaker_command_failed", "Selected speaker command failed - using System Default and retrying once; your selection was kept")
+                                : Loc.T("toast.speaker_retry_failed", "Selected speaker retry failed - continuing with System Default; your selection was kept")
+                            : Loc.T("toast.speaker_change_failed", "Could not change speaker or request System Default; your selection was kept"));
                     }
                     catch { }
                 });
@@ -4208,7 +4208,7 @@ internal sealed class PerfectCommsVoiceBackend : IVoiceBackend
                         sessionGeneration != Volatile.Read(ref _voiceSessionGeneration) ||
                         expectedSelectionRevision != Volatile.Read(ref _speakerSelectionRevision))
                         return;
-                    try { VoiceChatHudState.ShowToastThreadSafe("Could not request the System Default speaker"); }
+                    try { VoiceChatHudState.ShowToastThreadSafe(Loc.T("toast.speaker_default_request_failed", "Could not request the System Default speaker")); }
                     catch { }
                 });
             }

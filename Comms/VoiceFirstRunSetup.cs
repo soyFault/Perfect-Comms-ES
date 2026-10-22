@@ -36,8 +36,11 @@ internal static class VoiceFirstRunSetup
     private static readonly Color32 SetupSuccess = new(77, 225, 141, 255);
     private static readonly Color32 SetupWarning = new(245, 184, 68, 255);
 
-    private static readonly string[] StepNames =
-        { "Welcome", "Audio", "Controls", "HUD", "Review" };
+    // Property, not a static field: resolved when the page header is built, in the current language.
+    private static string[] StepNames => new[]
+    {
+        Loc.T("setup.step_welcome", "Welcome"), Loc.T("setup.step_audio", "Audio"), Loc.T("setup.step_controls", "Controls"), Loc.T("setup.step_hud", "HUD"), Loc.T("setup.step_review", "Review"),
+    };
 
     private static VoiceUiKit.PanelShell? _shell;
     private static RectTransform? _chromeRoot;
@@ -168,7 +171,7 @@ internal static class VoiceFirstRunSetup
 
             _shell = new VoiceUiKit.PanelShell(
                 "VC_FirstRunSetup",
-                "Perfect Comms Setup",
+                Loc.T("setup.perfect_comms_setup", "Perfect Comms Setup"),
                 PanelWidth,
                 PanelHeight,
                 RequestClose,
@@ -187,6 +190,30 @@ internal static class VoiceFirstRunSetup
             CloseInternal(destroy: true);
             return false;
         }
+    }
+
+    /// <summary>
+    /// Re-renders the current page in the new language, keeping the draft and the page the player is on.
+    /// </summary>
+    internal static void RefreshLanguage()
+    {
+        if (!_shown || _shell == null || _shell.Root == null || _draft == null) return;
+        bool prompt = _closePrompt != null;
+        _shell.SetTitle(Loc.T("setup.perfect_comms_setup", "Perfect Comms Setup"));
+        // The embedded HUD preview builds its title and "LIVE" badge once; recreate it too.
+        if (_hudPreview != null)
+        {
+            try { _hudPreview.Dispose(); } catch { }
+            _hudPreview = null;
+        }
+        if (_hudPreviewHost != null)
+        {
+            Object.Destroy(_hudPreviewHost.gameObject);
+            _hudPreviewHost = null;
+        }
+        EnsureHudPreview();
+        BuildPage();
+        if (prompt) { HideClosePrompt(); ShowClosePrompt(); }
     }
 
     internal static void Tick()
@@ -320,7 +347,7 @@ internal static class VoiceFirstRunSetup
     private static void BuildStepProgress()
     {
         if (_chromeRoot == null || _shell == null) return;
-        AddText(_chromeRoot, $"Step {_page + 1} of {PageCount}", 17f, VoiceUiKit.Accent,
+        AddText(_chromeRoot, Loc.T("setup.step_progress", "Step {0} of {1}", _page + 1, PageCount), 17f, VoiceUiKit.Accent,
             TextAlignmentOptions.Left, FontStyles.Bold,
             new Vector2(2f, -5f), new Vector2(150f, 24f));
         AddText(_chromeRoot, StepNames[_page], 17f, SetupTextSecondary,
@@ -349,48 +376,48 @@ internal static class VoiceFirstRunSetup
         const float gap = 26f;
         float rightW = ContentWidth - leftW - gap;
 
-        AddText(_pageRoot, "Welcome", 17f, VoiceUiKit.Accent,
+        AddText(_pageRoot, Loc.T("setup.welcome_eyebrow", "Welcome"), 17f, VoiceUiKit.Accent,
             TextAlignmentOptions.Left, FontStyles.Bold,
             new Vector2(4f, -78f), new Vector2(leftW, 26f));
-        AddText(_pageRoot, "Set up Perfect Comms.", 40f,
+        AddText(_pageRoot, Loc.T("setup.set_up_perfect_comms", "Set up Perfect Comms."), 40f,
             VoiceUiKit.TextBright, TextAlignmentOptions.Left, FontStyles.Bold,
             new Vector2(4f, -111f), new Vector2(leftW, 58f));
         AddText(_pageRoot,
-            "Choose your audio devices, controls, and HUD. Everyone starts from the same clean recommended setup.",
+            Loc.T("setup.choose_your_audio_devices_controls_and_hud_everyone", "Choose your audio devices, controls, and HUD. Everyone starts from the same clean recommended setup."),
             20f, SetupTextSecondary, TextAlignmentOptions.TopLeft, FontStyles.Normal,
             new Vector2(4f, -181f), new Vector2(leftW - 18f, 92f), wrap: true);
 
         var recommended = BuildCard(_pageRoot, "RecommendedStart", 4f, -306f, leftW - 22f, 92f);
         BuildCheckBadge(recommended, new Vector2(24f, -24f), 38f, SetupSuccess);
-        AddText(recommended, "Recommended defaults are ready", 21f, VoiceUiKit.TextBright,
+        AddText(recommended, Loc.T("setup.recommended_defaults_are_ready", "Recommended defaults are ready"), 21f, VoiceUiKit.TextBright,
             TextAlignmentOptions.Left, FontStyles.Bold,
             new Vector2(76f, -18f), new Vector2(leftW - 122f, 28f));
-        AddText(recommended, "Adjust what matters to you, then save everything together.", 17f,
+        AddText(recommended, Loc.T("setup.adjust_what_matters_to_you_then_save_everything_toge", "Adjust what matters to you, then save everything together."), 17f,
             SetupTextSecondary, TextAlignmentOptions.Left, FontStyles.Normal,
             new Vector2(76f, -49f), new Vector2(leftW - 122f, 26f));
 
         var time = VoiceUiKit.Panel("SetupTime", _pageRoot,
             new Color32(34, 211, 238, 20), rounded: true, soft: true);
         PlaceTopLeft(time.rectTransform, 4f, -421f, 286f, 42f);
-        AddText(time.rectTransform, "About 2 minutes", 17f, VoiceUiKit.Accent,
+        AddText(time.rectTransform, Loc.T("setup.about_2_minutes", "About 2 minutes"), 17f, VoiceUiKit.Accent,
             TextAlignmentOptions.Center, FontStyles.Bold,
             Vector2.zero, new Vector2(286f, 42f));
 
         var journey = BuildCard(_pageRoot, "SetupJourney", leftW + gap, -82f, rightW, 368f);
-        AddCardTitle(journey, "What you'll set up", "Three focused steps, then one review.");
-        BuildJourneyRow(journey, -76f, "A", "Audio", "Choose your input, output, and playback level.");
+        AddCardTitle(journey, Loc.T("setup.what_you_ll_set_up", "What you'll set up"), Loc.T("setup.three_focused_steps_then_one_review", "Three focused steps, then one review."));
+        BuildJourneyRow(journey, -76f, "A", Loc.T("setup.step_audio", "Audio"), Loc.T("setup.choose_your_input_output_and_playback_level", "Choose your input, output, and playback level."));
 #if ANDROID
-        BuildJourneyRow(journey, -167f, "C", "Controls", AndroidVoiceUiPolicy.ControlsJourneyHelp);
+        BuildJourneyRow(journey, -167f, "C", Loc.T("setup.controls", "Controls"), AndroidVoiceUiPolicy.ControlsJourneyHelp);
 #else
-        BuildJourneyRow(journey, -167f, "C", "Controls", "Talk mode, startup behavior, and shortcuts.");
+        BuildJourneyRow(journey, -167f, "C", Loc.T("setup.controls", "Controls"), Loc.T("setup.controls_journey_help", "Talk mode, startup behavior, and shortcuts."));
 #endif
-        BuildJourneyRow(journey, -258f, "H", "HUD", "Choose a layout using the live lobby preview.");
+        BuildJourneyRow(journey, -258f, "H", Loc.T("setup.step_hud", "HUD"), Loc.T("setup.choose_a_layout_using_the_live_lobby_preview", "Choose a layout using the live lobby preview."));
     }
 
     private static void BuildAudioPage()
     {
         if (_pageRoot == null || _shell == null || _draft == null) return;
-        BuildPageHeading("Choose your audio", "Select where your voice comes from and where you hear other players.");
+        BuildPageHeading(Loc.T("setup.choose_your_audio", "Choose your audio"), Loc.T("setup.select_where_your_voice_comes_from_and_where_you_hea", "Select where your voice comes from and where you hear other players."));
         VoiceChatLocalSettings.MaybeRefreshDeviceLists(resolveSavedIndices: false);
         _micListVersion = VoiceChatLocalSettings.MicDeviceListVersion;
         _speakerListVersion = VoiceChatLocalSettings.SpkDeviceListVersion;
@@ -401,8 +428,8 @@ internal static class VoiceFirstRunSetup
         const float cardH = 338f;
         var devices = BuildCard(_pageRoot, "DevicesCard", cardX, ContentTopY, cardW, cardH);
 
-        AddCardTitle(devices, "Input & output", "Use system defaults, or choose a specific device.", 344f);
-        _micTestButton = AddButton(devices, "Test mic", 146f, 44f,
+        AddCardTitle(devices, Loc.T("setup.input_output", "Input & output"), Loc.T("setup.use_system_defaults_or_choose_a_specific_device", "Use system defaults, or choose a specific device."), 344f);
+        _micTestButton = AddButton(devices, Loc.T("setup.test_mic", "Test mic"), 146f, 44f,
             cardW - 324f, -11f, ButtonKind.Secondary,
             () =>
             {
@@ -414,7 +441,7 @@ internal static class VoiceFirstRunSetup
         _micLevelMeter = new VoiceUiKit.LiveLevelMeter(
             devices, "MicLiveLevel", 146f, 6f, hideWhenInactive: true);
         PlaceTopLeft(_micLevelMeter.Root, cardW - 324f, -58f, 146f, 6f);
-        _speakerTestButton = AddButton(devices, "Test output", 146f, 44f,
+        _speakerTestButton = AddButton(devices, Loc.T("setup.test_output", "Test output"), 146f, 44f,
             cardW - 166f, -11f, ButtonKind.Secondary,
             () => _audioPreview?.PlayTestSound(_draft),
             () => _audioPreview is { IsSpeakerTestBusy: false, IsMicrophoneTestStarting: false });
@@ -434,8 +461,8 @@ internal static class VoiceFirstRunSetup
                 DraftMicrophoneCountForUi,
                 DraftMicrophoneNameForUi,
                 compactFullWidth: true)
-            .Build(devices, "Input device", cardW, -66f, 86f,
-                "The microphone Perfect Comms captures."));
+            .Build(devices, Loc.T("setup.input_device", "Input device"), cardW, -66f, 86f,
+                Loc.T("setup.the_microphone_perfect_comms_captures", "The microphone Perfect Comms captures.")));
 
 #if WINDOWS
         AddRow(new VoiceUiKit.StepperRow(
@@ -452,11 +479,11 @@ internal static class VoiceFirstRunSetup
                 DraftSpeakerCountForUi,
                 DraftSpeakerNameForUi,
                 compactFullWidth: true)
-            .Build(devices, "Output device", cardW, -154f, 86f,
-                "The headphones or speakers used for voice playback."));
+            .Build(devices, Loc.T("setup.output_device", "Output device"), cardW, -154f, 86f,
+                Loc.T("setup.the_headphones_or_speakers_used_for_voice_playback", "The headphones or speakers used for voice playback.")));
 #else
         var route = BuildInlineNotice(devices, 22f, -158f, cardW - 44f, 68f,
-            "Output follows your current Android audio route.", VoiceUiKit.Accent);
+            Loc.T("setup.android_output_route", "Output follows your current Android audio route."), VoiceUiKit.Accent);
         route.gameObject.name = "AndroidOutputRoute";
 #endif
         AddRow(new VoiceUiKit.SliderRow(
@@ -464,10 +491,10 @@ internal static class VoiceFirstRunSetup
                 v => _draft.MasterVolume = v,
                 0.1f, 2f, v => $"{Mathf.RoundToInt(v * 100f)}%",
                 stacked: true)
-            .Build(devices, "Voice playback volume", cardW, -244f, 58f,
-                "Overall volume for other players."));
+            .Build(devices, Loc.T("setup.voice_playback_volume", "Voice playback volume"), cardW, -244f, 58f,
+                Loc.T("setup.overall_volume_for_other_players", "Overall volume for other players.")));
 
-        _outputStatus = AddText(devices, "Mic and output tests are optional", 17f,
+        _outputStatus = AddText(devices, Loc.T("setup.mic_and_output_tests_are_optional", "Mic and output tests are optional"), 17f,
             SetupTextSecondary, TextAlignmentOptions.Center, FontStyles.Normal,
             new Vector2(22f, -304f), new Vector2(cardW - 44f, 26f), wrap: true);
     }
@@ -476,9 +503,9 @@ internal static class VoiceFirstRunSetup
     {
         if (_pageRoot == null || _shell == null || _draft == null) return;
 #if ANDROID
-        BuildPageHeading("Choose how you talk", "Set your talk mode and learn the in-game touch controls.");
+        BuildPageHeading(Loc.T("setup.choose_how_you_talk", "Choose how you talk"), Loc.T("setup.set_your_talk_mode_and_learn_the_in_game_touch_contr", "Set your talk mode and learn the in-game touch controls."));
 #else
-        BuildPageHeading("Choose how you talk", "Set your talk mode and the controls you will use in a lobby.");
+        BuildPageHeading(Loc.T("setup.choose_how_you_talk", "Choose how you talk"), Loc.T("setup.set_your_talk_mode_and_the_controls_you_will_use_in", "Set your talk mode and the controls you will use in a lobby."));
 #endif
 
         const float gap = 18f;
@@ -488,38 +515,38 @@ internal static class VoiceFirstRunSetup
         var talk = BuildCard(_pageRoot, "TalkCard", 0f, ContentTopY, leftW, cardH);
         var binds = BuildCard(_pageRoot, "BindingsCard", leftW + gap, ContentTopY, rightW, cardH);
 
-        AddCardTitle(talk, "Talk behavior", "These can be changed later in Settings.");
+        AddCardTitle(talk, Loc.T("setup.talk_behavior", "Talk behavior"), Loc.T("setup.these_can_be_changed_later_in_settings", "These can be changed later in Settings."));
         string microphoneModeHelp =
 #if ANDROID
-            "Open Mic uses voice activation. Push To Talk sends only while you hold the microphone button.";
+            Loc.T("setup.mic_mode_help_android", "Open Mic uses voice activation. Push To Talk sends only while you hold the microphone button.");
 #else
-            "Open Mic uses voice activation. Push To Talk only sends while its key is held.";
+            Loc.T("setup.mic_mode_help", "Open Mic uses voice activation. Push To Talk only sends while its key is held.");
 #endif
         AddRow(new VoiceUiKit.StepperRow(
                 () => (int)_draft.MicMode,
                 i => _draft.MicMode = (VoiceMicMode)Mathf.Clamp(i, 0, 1),
                 () => 2,
-                i => i == 0 ? "Open Mic" : "Push To Talk",
+                i => i == 0 ? Loc.T("setup.open_mic", "Open Mic") : Loc.T("setup.push_to_talk_mode", "Push To Talk"),
                 compactFullWidth: true)
-            .Build(talk, "Microphone mode", leftW, -63f, 84f,
+            .Build(talk, Loc.T("setup.microphone_mode", "Microphone mode"), leftW, -63f, 84f,
                 microphoneModeHelp));
         AddRow(new VoiceUiKit.ToggleRow(
                 () => _draft.StartMuted,
                 v => _draft.StartMuted = v)
-            .Build(talk, "Start with mic muted", leftW, -153f, 54f,
-                "Join each voice room with your microphone muted."));
+            .Build(talk, Loc.T("setup.start_with_mic_muted", "Start with mic muted"), leftW, -153f, 54f,
+                Loc.T("setup.join_each_voice_room_with_your_microphone_muted", "Join each voice room with your microphone muted.")));
         AddRow(new VoiceUiKit.ToggleRow(
                 () => _draft.StartDeafened,
                 v => _draft.StartDeafened = v)
-            .Build(talk, "Start deafened", leftW, -207f, 54f,
-                "Join each voice room with playback muted and microphone transmission paused until you undeafen."));
+            .Build(talk, Loc.T("setup.start_deafened", "Start deafened"), leftW, -207f, 54f,
+                Loc.T("setup.join_each_voice_room_with_playback_muted_and_microph", "Join each voice room with playback muted and microphone transmission paused until you undeafen.")));
 
 #if WINDOWS
         AddRow(new VoiceUiKit.ToggleRow(
                 () => _draft.AllowKeybindsWhileChatOpen,
                 value => _draft.AllowKeybindsWhileChatOpen = value)
-            .Build(talk, "Allow keybinds in chat", leftW, -261f, 54f,
-                "Keeps Perfect Comms shortcuts active while typing. Printable shortcut keys can also type into chat."));
+            .Build(talk, Loc.T("setup.allow_keybinds_in_chat", "Allow keybinds in chat"), leftW, -261f, 54f,
+                Loc.T("setup.keeps_perfect_comms_shortcuts_active_while_typing_pr", "Keeps Perfect Comms shortcuts active while typing. Printable shortcut keys can also type into chat.")));
 #else
         var modeNotice = BuildInlineNotice(talk, 20f, -270f, leftW - 40f, 59f,
             "", VoiceUiKit.Accent);
@@ -532,28 +559,28 @@ internal static class VoiceFirstRunSetup
 #endif
 
 #if WINDOWS
-        AddCardTitle(binds, "Keyboard shortcuts", "Select a shortcut, then press a key or chord.");
-        AddBindingRow(binds, rightW, -62f, "Mute / unmute microphone",
+        AddCardTitle(binds, Loc.T("setup.keyboard_shortcuts", "Keyboard shortcuts"), Loc.T("setup.select_a_shortcut_then_press_a_key_or_chord", "Select a shortcut, then press a key or chord."));
+        AddBindingRow(binds, rightW, -62f, Loc.T("setup.mute_unmute_microphone", "Mute / unmute microphone"),
             () => _draft.ToggleMute, v => _draft.ToggleMute = v,
             null);
-        AddBindingRow(binds, rightW, -116f, "Push to Mute",
+        AddBindingRow(binds, rightW, -116f, Loc.T("setup.push_to_mute", "Push to Mute"),
             () => _draft.PushToMute, v => _draft.PushToMute = v,
-            "Your microphone stays muted only while this shortcut is held.");
-        _pushToTalkRow = AddBindingRow(binds, rightW, -170f, "Push to Talk (hold)",
+            Loc.T("setup.your_microphone_stays_muted_only_while_this_shortcut", "Your microphone stays muted only while this shortcut is held."));
+        _pushToTalkRow = AddBindingRow(binds, rightW, -170f, Loc.T("setup.push_to_talk_hold", "Push to Talk (hold)"),
             () => _draft.PushToTalk, v => _draft.PushToTalk = v,
-            "Required only when Push to Talk mode is selected.");
+            Loc.T("setup.required_only_when_push_to_talk_mode_is_selected", "Required only when Push to Talk mode is selected."));
         _pushToTalkGroup = _pushToTalkRow.Root.gameObject.AddComponent<CanvasGroup>();
-        AddBindingRow(binds, rightW, -224f, "Deafen / undeafen",
+        AddBindingRow(binds, rightW, -224f, Loc.T("setup.deafen_undeafen", "Deafen / undeafen"),
             () => _draft.ToggleSpeaker, v => _draft.ToggleSpeaker = v,
             null);
-        AddBindingRow(binds, rightW, -278f, "Open voice menu",
+        AddBindingRow(binds, rightW, -278f, Loc.T("setup.open_voice_menu", "Open voice menu"),
             () => _draft.OpenVoiceSettings, v => _draft.OpenVoiceSettings = v,
             null);
 #else
-        AddCardTitle(binds, "In-game touch controls", "Open Voice Settings later from the Among Us Options menu.");
-        BuildJourneyRow(binds, -74f, "M", "Microphone", AndroidVoiceUiPolicy.MicrophoneControlHelp);
-        BuildJourneyRow(binds, -160f, "R", "Team Radio", AndroidVoiceUiPolicy.TeamRadioControlHelp);
-        BuildJourneyRow(binds, -246f, "S", "Deafen", "Tap the speaker button to mute playback and pause microphone transmission.");
+        AddCardTitle(binds, Loc.T("setup.touch_controls", "In-game touch controls"), Loc.T("setup.touch_controls_sub", "Open Voice Settings later from the Among Us Options menu."));
+        BuildJourneyRow(binds, -74f, "M", Loc.T("setup.touch_microphone", "Microphone"), AndroidVoiceUiPolicy.MicrophoneControlHelp);
+        BuildJourneyRow(binds, -160f, "R", Loc.T("setup.touch_team_radio", "Team Radio"), AndroidVoiceUiPolicy.TeamRadioControlHelp);
+        BuildJourneyRow(binds, -246f, "S", Loc.T("setup.touch_deafen", "Deafen"), Loc.T("setup.touch_deafen_help", "Tap the speaker button to mute playback and pause microphone transmission."));
 #endif
     }
 
@@ -561,8 +588,8 @@ internal static class VoiceFirstRunSetup
     {
         if (_pageRoot == null || _shell == null || _draft == null) return;
         _hudDescriptionText = BuildPageHeading(
-            "Choose your HUD",
-            "Choose what appears in game, then preview a speaking-bar layout.");
+            Loc.T("setup.choose_your_hud", "Choose your HUD"),
+            Loc.T("setup.choose_what_appears_in_game_then_preview_a_speaking", "Choose what appears in game, then preview a speaking-bar layout."));
         EnsureHudPreview();
 
         const float visibilityGap = 10f;
@@ -575,8 +602,8 @@ internal static class VoiceFirstRunSetup
         AddRow(new VoiceUiKit.ToggleRow(
                 () => _draft.HideVoiceControls,
                 value => _draft.HideVoiceControls = value)
-            .Build(controlsVisibility, "Hide controls", visibilityW, -4f, 54f,
-                "Hides the microphone, deafen, and radio controls. Keyboard shortcuts still work.",
+            .Build(controlsVisibility, Loc.T("setup.hide_controls", "Hide controls"), visibilityW, -4f, 54f,
+                Loc.T("setup.hides_the_microphone_deafen_and_radio_controls_keybo", "Hides the microphone, deafen, and radio controls. Keyboard shortcuts still work."),
                 stacked: true));
 
         var barVisibility = BuildCard(
@@ -585,8 +612,8 @@ internal static class VoiceFirstRunSetup
         AddRow(new VoiceUiKit.ToggleRow(
                 () => _draft.HideSpeakingBar,
                 value => _draft.HideSpeakingBar = value)
-            .Build(barVisibility, "Hide speaking bar", visibilityW, -4f, 54f,
-                "Hides the in-game speaking bar and its layout preview.",
+            .Build(barVisibility, Loc.T("setup.hide_speaking_bar", "Hide speaking bar"), visibilityW, -4f, 54f,
+                Loc.T("setup.hides_the_in_game_speaking_bar_and_its_layout_previe", "Hides the in-game speaking bar and its layout preview."),
                 stacked: true));
 
         var meetingVisibility = BuildCard(
@@ -596,8 +623,8 @@ internal static class VoiceFirstRunSetup
         AddRow(new VoiceUiKit.ToggleRow(
                 () => _draft.HideMeetingOverlay,
                 value => _draft.HideMeetingOverlay = value)
-            .Build(meetingVisibility, "Hide meeting overlay", visibilityW, -4f, 54f,
-                "Hides the colored speaking glow around meeting cards.",
+            .Build(meetingVisibility, Loc.T("setup.hide_meeting_overlay", "Hide meeting overlay"), visibilityW, -4f, 54f,
+                Loc.T("setup.hides_the_colored_speaking_glow_around_meeting_cards", "Hides the colored speaking glow around meeting cards."),
                 stacked: true));
 
         var connectionVisibility = BuildCard(
@@ -607,8 +634,8 @@ internal static class VoiceFirstRunSetup
         AddRow(new VoiceUiKit.ToggleRow(
                 () => _draft.HideConnectionStatus,
                 value => _draft.HideConnectionStatus = value)
-            .Build(connectionVisibility, "Hide connection status", visibilityW, -4f, 54f,
-                "Hides lobby connection progress and active retry messages.",
+            .Build(connectionVisibility, Loc.T("setup.hide_connection_status", "Hide connection status"), visibilityW, -4f, 54f,
+                Loc.T("setup.hides_lobby_connection_progress_and_active_retry_mes", "Hides lobby connection progress and active retry messages."),
                 stacked: true));
 
         _builtHudSpeakingBarHidden = _draft.HideSpeakingBar;
@@ -620,7 +647,7 @@ internal static class VoiceFirstRunSetup
                 ContentTopY - 164f,
                 ContentWidth - 240f,
                 92f,
-                "The speaking bar is hidden. Turn off Hide speaking bar to choose and preview a layout.",
+                Loc.T("setup.the_speaking_bar_is_hidden_turn_off_hide_speaking_ba", "The speaking bar is hidden. Turn off Hide speaking bar to choose and preview a layout."),
                 SetupTextSecondary);
             return;
         }
@@ -630,7 +657,7 @@ internal static class VoiceFirstRunSetup
         const float layoutTopY = ContentTopY - 76f;
         float pickerW = ContentWidth - previewW - previewGap;
 
-        AddText(_pageRoot, "MOST COMMON", 16f, VoiceUiKit.Accent,
+        AddText(_pageRoot, Loc.T("setup.most_common", "MOST COMMON"), 16f, VoiceUiKit.Accent,
             TextAlignmentOptions.Left, FontStyles.Bold,
             new Vector2(1f, layoutTopY), new Vector2(pickerW - 2f, 20f));
 
@@ -642,7 +669,7 @@ internal static class VoiceFirstRunSetup
         {
             var preset = FirstRunHudPresets.All[i];
             var previewSettings = FirstRunHudPresets.Apply(_draft.Hud, preset);
-            var card = new HudPresetCard(i, preset.Name, preset.Description,
+            var card = new HudPresetCard(i, preset.DisplayName, preset.DisplayDescription,
                 previewSettings, original: false);
             card.Build(_pageRoot,
                 i * (commonCardW + commonGap), commonY,
@@ -651,7 +678,7 @@ internal static class VoiceFirstRunSetup
         }
 
         const float moreLabelY = commonY - commonCardH - 6f;
-        AddText(_pageRoot, "MORE LAYOUTS", 16f, SetupTextSecondary,
+        AddText(_pageRoot, Loc.T("setup.more_layouts", "MORE LAYOUTS"), 16f, SetupTextSecondary,
             TextAlignmentOptions.Left, FontStyles.Bold,
             new Vector2(1f, moreLabelY), new Vector2(pickerW - 2f, 20f));
 
@@ -667,7 +694,7 @@ internal static class VoiceFirstRunSetup
             int row = visualIndex / 2;
             var preset = FirstRunHudPresets.All[i];
             var previewSettings = FirstRunHudPresets.Apply(_draft.Hud, preset);
-            var card = new HudPresetCard(i, preset.Name, preset.Description,
+            var card = new HudPresetCard(i, preset.DisplayName, preset.DisplayDescription,
                 previewSettings, original: false);
             card.Build(_pageRoot,
                 col * (moreCardW + moreGapX),
@@ -682,61 +709,63 @@ internal static class VoiceFirstRunSetup
     private static void BuildReadyPage()
     {
         if (_pageRoot == null || _shell == null || _draft == null) return;
-        BuildPageHeading("Review and save", "Check the essentials, then apply everything together.");
+        BuildPageHeading(Loc.T("setup.review_and_save", "Review and save"), Loc.T("setup.check_the_essentials_then_apply_everything_together", "Check the essentials, then apply everything together."));
 
         const float gap = 14f;
         float w = (ContentWidth - gap * 2f) / 3f;
-        BuildSummaryCard(0f, w, "Audio", new[]
+        BuildSummaryCard(0f, w, Loc.T("setup.step_audio", "Audio"), new[]
         {
-            "Input: " + CompactDevice(_draft.MicrophoneDisplayName()),
+            Loc.T("setup.sum_input", "Input: {0}", CompactDevice(_draft.MicrophoneDisplayName())),
 #if WINDOWS
-            "Output: " + CompactDevice(_draft.SpeakerDisplayName()),
+            Loc.T("setup.sum_output", "Output: {0}", CompactDevice(_draft.SpeakerDisplayName())),
 #else
-            "Output: Android audio route",
+            Loc.T("setup.sum_output_android", "Output: Android audio route"),
 #endif
-            $"Playback volume: {Mathf.RoundToInt(_draft.MasterVolume * 100f)}%",
+            Loc.T("setup.sum_volume", "Playback volume: {0}%", Mathf.RoundToInt(_draft.MasterVolume * 100f)),
             AudioVerificationSummary(),
         }, () => GoTo(AudioPage));
 
-        string talkMode = _draft.MicMode == VoiceMicMode.OpenMic ? "Open Mic" : "Push to Talk";
-        BuildSummaryCard(w + gap, w, "Controls", new[]
+        string talkMode = _draft.MicMode == VoiceMicMode.OpenMic ? Loc.T("setup.open_mic", "Open Mic") : Loc.T("setup.push_to_talk", "Push to Talk");
+        BuildSummaryCard(w + gap, w, Loc.T("setup.controls", "Controls"), new[]
         {
-            "Mode: " + talkMode,
+            Loc.T("setup.sum_mode", "Mode: {0}", talkMode),
 #if ANDROID
             _draft.MicMode == VoiceMicMode.PushToTalk
-                ? "PTT: hold the microphone button"
-                : "Mic button: tap to mute",
-            "Radio (when available): tap to change channel / hold to talk",
+                ? Loc.T("setup.ptt_hold_the_microphone_button", "PTT: hold the microphone button")
+                : Loc.T("setup.mic_button_tap_to_mute", "Mic button: tap to mute"),
+            Loc.T("setup.radio_when_available_tap_to_change_channel_hold_to_t", "Radio (when available): tap to change channel / hold to talk"),
 #else
             _draft.MicMode == VoiceMicMode.PushToTalk
-                ? "PTT: " + _draft.PushToTalk.Label
-                : "Mute toggle: " + _draft.ToggleMute.Label,
-            $"Push to Mute: {_draft.PushToMute.Label} / Menu: {_draft.OpenVoiceSettings.Label}",
+                ? Loc.T("setup.sum_ptt", "PTT: {0}", _draft.PushToTalk.Label)
+                : Loc.T("setup.sum_mute_toggle", "Mute toggle: {0}", _draft.ToggleMute.Label),
+            Loc.T("setup.sum_ptm_menu", "Push to Mute: {0} / Menu: {1}", _draft.PushToMute.Label, _draft.OpenVoiceSettings.Label),
 #endif
-            $"Start muted: {YesNo(_draft.StartMuted)} / Start deafened: {YesNo(_draft.StartDeafened)}",
+            Loc.T("setup.sum_startup", "Start muted: {0} / Start deafened: {1}", YesNo(_draft.StartMuted), YesNo(_draft.StartDeafened)),
         }, () => GoTo(ControlsPage));
 
         string hudName = _draft.HideSpeakingBar
-            ? "Speaking bar hidden"
+            ? Loc.T("setup.speaking_bar_hidden", "Speaking bar hidden")
             : _draft.SelectedHudPreset >= 0
-                ? FirstRunHudPresets.All[_draft.SelectedHudPreset].Name
-                : "Custom layout";
-        BuildSummaryCard((w + gap) * 2f, w, "HUD", new[]
+                ? FirstRunHudPresets.All[_draft.SelectedHudPreset].DisplayName
+                : Loc.T("setup.custom_layout", "Custom layout");
+        BuildSummaryCard((w + gap) * 2f, w, Loc.T("setup.step_hud", "HUD"), new[]
         {
             hudName,
-            $"Controls {ShownHidden(_draft.HideVoiceControls)} / Connection status {ShownHidden(_draft.HideConnectionStatus)}",
+            (_draft.HideVoiceControls ? Loc.T("setup.sum_controls_hidden", "Controls hidden") : Loc.T("setup.sum_controls_shown", "Controls shown")) + " / " + (_draft.HideConnectionStatus ? Loc.T("setup.sum_connection_hidden", "Connection status hidden") : Loc.T("setup.sum_connection_shown", "Connection status shown")),
             _draft.HideSpeakingBar
-                ? $"Meeting glow {ShownHidden(_draft.HideMeetingOverlay)} / Speaking bar hidden"
-                : $"Meeting glow {ShownHidden(_draft.HideMeetingOverlay)} / {HudPlacementSummary(_draft.Hud)}",
+                ? (_draft.HideMeetingOverlay ? Loc.T("setup.sum_glow_hidden", "Meeting glow hidden") : Loc.T("setup.sum_glow_shown", "Meeting glow shown")) + " / " + Loc.T("setup.speaking_bar_hidden", "Speaking bar hidden")
+                : (_draft.HideMeetingOverlay ? Loc.T("setup.sum_glow_hidden", "Meeting glow hidden") : Loc.T("setup.sum_glow_shown", "Meeting glow shown")) + " / " + HudPlacementSummary(_draft.Hud),
             _draft.HideSpeakingBar
-                ? "Layout can be restored from HUD settings"
-                : $"Scale {Mathf.RoundToInt(_draft.Hud.Scale * 100f)}% / Backdrop {(_draft.Hud.Backdrop ? "on" : "off")}",
+                ? Loc.T("setup.layout_can_be_restored_from_hud_settings", "Layout can be restored from HUD settings")
+                : (_draft.Hud.Backdrop
+                    ? Loc.T("setup.sum_scale_backdrop_on", "Scale {0}% / Backdrop on", Mathf.RoundToInt(_draft.Hud.Scale * 100f))
+                    : Loc.T("setup.sum_scale_backdrop_off", "Scale {0}% / Backdrop off", Mathf.RoundToInt(_draft.Hud.Scale * 100f))),
         }, () => GoTo(HudPage));
 
         string? issue = SetupValidationIssue();
         Color32 noticeColor = issue == null ? SetupSuccess : SetupWarning;
         var notice = BuildInlineNotice(_pageRoot, 84f, -390f, ContentWidth - 168f, 82f,
-            issue ?? "Everything is ready. Save & finish will apply this setup in one clean save.",
+            issue ?? Loc.T("setup.everything_is_ready_save_finish_will_apply_this_setu", "Everything is ready. Save & finish will apply this setup in one clean save."),
             noticeColor);
         _finishError = notice.GetComponentInChildren<TextMeshProUGUI>();
     }
@@ -762,31 +791,31 @@ internal static class VoiceFirstRunSetup
         glow.rectTransform.anchoredPosition = new Vector2(center, -132f);
         BuildCheckBadge(_pageRoot, new Vector2(center - 47f, -85f), 94f, SetupSuccess);
 
-        var title = AddText(_pageRoot, "You're all set", 38f, VoiceUiKit.TextBright,
+        var title = AddText(_pageRoot, Loc.T("setup.you_re_all_set", "You're all set"), 38f, VoiceUiKit.TextBright,
             TextAlignmentOptions.Center, FontStyles.Bold,
             new Vector2(0f, -205f), new Vector2(ContentWidth, 54f));
         AddText(_pageRoot,
-            "Your Perfect Comms setup has been saved and is ready for the next lobby.",
+            Loc.T("setup.your_perfect_comms_setup_has_been_saved_and_is_ready", "Your Perfect Comms setup has been saved and is ready for the next lobby."),
             19f, SetupTextSecondary, TextAlignmentOptions.Center, FontStyles.Normal,
             new Vector2(110f, -258f), new Vector2(ContentWidth - 220f, 46f), wrap: true);
 
         var checklist = BuildCard(_pageRoot, "CompletionChecklist",
             center - 310f, -326f, 620f, 76f);
         BuildCheckBadge(checklist, new Vector2(20f, -19f), 34f, SetupSuccess);
-        AddText(checklist, "Audio, controls, and HUD saved", 18f, VoiceUiKit.TextBright,
+        AddText(checklist, Loc.T("setup.done_checklist", "Audio, controls, and HUD saved"), 18f, VoiceUiKit.TextBright,
             TextAlignmentOptions.Left, FontStyles.Bold,
             new Vector2(70f, -14f), new Vector2(520f, 26f));
-        AddText(checklist, "Run this setup again anytime from Perfect Comms Settings.", 17f,
+        AddText(checklist, Loc.T("setup.run_this_setup_again_anytime_from_perfect_comms_sett", "Run this setup again anytime from Perfect Comms Settings."), 17f,
             SetupTextSecondary, TextAlignmentOptions.Left, FontStyles.Normal,
             new Vector2(70f, -41f), new Vector2(520f, 24f));
 
-        AddButton(_pageRoot, "Advanced settings", 220f, 50f, center - 230f, -430f,
+        AddButton(_pageRoot, Loc.T("setup.advanced_settings", "Advanced settings"), 220f, 50f, center - 230f, -430f,
             ButtonKind.Secondary, () =>
             {
                 CloseInternal(destroy: true);
                 VoiceSettingsPanel.ShowDeferred();
             });
-        AddButton(_pageRoot, "Done", 220f, 50f, center + 10f, -430f,
+        AddButton(_pageRoot, Loc.T("setup.done", "Done"), 220f, 50f, center + 10f, -430f,
             ButtonKind.Primary, () => CloseInternal(destroy: true));
     }
 
@@ -797,24 +826,24 @@ internal static class VoiceFirstRunSetup
             new Color32(105, 124, 150, 32), rounded: false);
         PlaceTopLeft(divider.rectTransform, 0f, FooterY + 17f, ContentWidth, 1f);
 
-        AddButton(_chromeRoot, "Use existing settings", 220f, 48f,
+        AddButton(_chromeRoot, Loc.T("setup.use_existing_settings", "Use existing settings"), 220f, 48f,
             0f, FooterY, ButtonKind.Secondary, UseExistingSettings);
 
         if (_page > WelcomePage)
-            AddButton(_chromeRoot, "Back", 140f, 48f,
+            AddButton(_chromeRoot, Loc.T("setup.back", "Back"), 140f, 48f,
                 ContentWidth - 350f, FooterY, ButtonKind.Secondary,
                 () => GoTo(_page - 1));
 
         if (_page < ReadyPage)
         {
-            string text = _page == WelcomePage ? "Start setup" : "Continue";
+            string text = _page == WelcomePage ? Loc.T("setup.start_setup", "Start setup") : Loc.T("setup.continue", "Continue");
             AddButton(_chromeRoot, text, 190f, 48f,
                 ContentWidth - 190f, FooterY, ButtonKind.Primary,
                 () => GoTo(_page + 1));
         }
         else
         {
-            AddButton(_chromeRoot, "Save & finish", 190f, 48f,
+            AddButton(_chromeRoot, Loc.T("setup.save_finish", "Save & finish"), 190f, 48f,
                 ContentWidth - 190f, FooterY, ButtonKind.Primary, FinishSetup,
                 () => SetupValidationIssue() == null);
         }
@@ -838,7 +867,7 @@ internal static class VoiceFirstRunSetup
             {
                 _promptMessage.color = VoiceUiKit.Danger;
                 _promptMessage.text =
-                    "Existing settings were not changed, but the setup choice could not be saved. Please try again.";
+                    Loc.T("setup.error_existing_not_saved", "Existing settings were not changed, but the setup choice could not be saved. Please try again.");
             }
         }
     }
@@ -885,7 +914,7 @@ internal static class VoiceFirstRunSetup
             VoiceChatPlugin.VoiceChatPluginMain.Logger.LogError(
                 "[PC-SETUP] Could not save setup: " + ex);
             if (_finishError != null)
-                _finishError.text = "Could not save your setup. Your previous settings are still active. Try again.";
+                _finishError.text = Loc.T("setup.error_not_saved", "Could not save your setup. Your previous settings are still active. Try again.");
         }
     }
 
@@ -926,23 +955,23 @@ internal static class VoiceFirstRunSetup
         _closePromptCard = card.rectTransform;
         AddPanelBorder(card.rectTransform, SetupBorder);
 
-        AddText(card.rectTransform, "Leave setup?", 31f,
+        AddText(card.rectTransform, Loc.T("setup.leave_setup", "Leave setup?"), 31f,
             VoiceUiKit.TextBright, TextAlignmentOptions.Center, FontStyles.Bold,
             new Vector2(42f, -35f), new Vector2(536f, 44f));
         _promptMessage = AddText(card.rectTransform,
-            "Continue with the recommended setup, or keep the settings already on this device.",
+            Loc.T("setup.continue_with_the_recommended_setup_or_keep_the_sett", "Continue with the recommended setup, or keep the settings already on this device."),
             20f, SetupTextSecondary, TextAlignmentOptions.Center, FontStyles.Normal,
             new Vector2(62f, -90f), new Vector2(496f, 62f), wrap: true);
 
         AddText(card.rectTransform,
-            "Use existing settings completes this one-time setup without changing anything.",
+            Loc.T("setup.use_existing_settings_completes_this_one_time_setup", "Use existing settings completes this one-time setup without changing anything."),
             17f, SetupTextTertiary, TextAlignmentOptions.Center, FontStyles.Normal,
             new Vector2(58f, -159f), new Vector2(504f, 42f), wrap: true);
 
         PromptButtons.Clear();
-        PromptButtons.Add(new SetupButton(card.rectTransform, "Continue setup", 230f, 50f,
+        PromptButtons.Add(new SetupButton(card.rectTransform, Loc.T("setup.continue_setup", "Continue setup"), 230f, 50f,
             70f, -222f, ButtonKind.Primary, HideClosePrompt));
-        PromptButtons.Add(new SetupButton(card.rectTransform, "Use existing settings", 230f, 50f,
+        PromptButtons.Add(new SetupButton(card.rectTransform, Loc.T("setup.use_existing_settings", "Use existing settings"), 230f, 50f,
             320f, -222f, ButtonKind.Secondary, UseExistingSettings));
         VoiceUiKit.SwallowClick();
         _inputLockedUntilFrame = Time.frameCount + 1;
@@ -1014,11 +1043,11 @@ internal static class VoiceFirstRunSetup
                 : SetupTextSecondary;
         }
         _micTestButton?.SetText(_audioPreview.IsMicrophoneTestStarting
-            ? "Cancel mic start"
-            : _audioPreview.IsMicrophoneTestActive ? "Stop mic test" : "Test mic");
+            ? Loc.T("setup.cancel_mic_start", "Cancel mic start")
+            : _audioPreview.IsMicrophoneTestActive ? Loc.T("setup.stop_mic_test", "Stop mic test") : Loc.T("setup.test_mic", "Test mic"));
         _speakerTestButton?.SetText(_audioPreview.IsPlayingTone
-            ? "Playing..."
-            : _audioPreview.IsPreparingTone ? "Opening output..." : "Test output");
+            ? Loc.T("setup.playing", "Playing...")
+            : _audioPreview.IsPreparingTone ? Loc.T("setup.opening_output", "Opening output...") : Loc.T("setup.test_output", "Test output"));
 
         if (_audioPreview.ConsumeUiRefresh() ||
             (!VoiceUiKit.RebindRow.IsCapturing &&
@@ -1039,8 +1068,8 @@ internal static class VoiceFirstRunSetup
             _micModeHelpText.text = AndroidVoiceUiPolicy.MicModeHelp(pushToTalk);
 #else
             _micModeHelpText.text = pushToTalk
-                ? "Voice is sent only while your\nPush to Talk shortcut is held."
-                : "Voice activation sends speech\nautomatically when you talk.";
+                ? Loc.T("setup.voice_is_sent_only_while_your_npush_to_talk_shortcut", "Voice is sent only while your\nPush to Talk shortcut is held.")
+                : Loc.T("setup.voice_activation_sends_speech_nautomatically_when_yo", "Voice activation sends speech\nautomatically when you talk.");
 #endif
             _micModeHelpText.color = pushToTalk ? SetupWarning : VoiceUiKit.Accent;
         }
@@ -1325,7 +1354,7 @@ internal static class VoiceFirstRunSetup
         BuildCheckBadge(card, new Vector2(18f, -16f), 30f, SetupSuccess);
         AddText(card, title, 21f, VoiceUiKit.TextBright, TextAlignmentOptions.Left,
             FontStyles.Bold, new Vector2(60f, -15f), new Vector2(width - 150f, 32f));
-        AddButton(card, "Edit", 70f, 34f, width - 88f, -13f,
+        AddButton(card, Loc.T("setup.edit", "Edit"), 70f, 34f, width - 88f, -13f,
             ButtonKind.Ghost, edit);
         for (int i = 0; i < lines.Count && i < 4; i++)
         {
@@ -1404,7 +1433,7 @@ internal static class VoiceFirstRunSetup
 
     private static string DeviceName(IReadOnlyList<string> names, int index)
         => names.Count == 0
-            ? "No devices found"
+            ? Loc.T("setup.no_devices_found", "No devices found")
             : names[Mathf.Clamp(index, 0, names.Count - 1)];
 
     private static int DraftMicrophoneIndexForUi()
@@ -1424,7 +1453,7 @@ internal static class VoiceFirstRunSetup
     private static string DraftMicrophoneNameForUi(int index)
         => index < VoiceChatLocalSettings.MicDeviceNames.Length
             ? DeviceName(VoiceChatLocalSettings.MicDeviceNames, index)
-            : (_draft?.MicrophoneDisplayName() ?? "Saved device") + " (saved device)";
+            : Loc.T("setup.saved_device_suffix", "{0} (saved device)", _draft?.MicrophoneDisplayName() ?? Loc.T("setup.saved_device", "Saved device"));
 
 #if WINDOWS
     private static int DraftSpeakerIndexForUi()
@@ -1444,12 +1473,12 @@ internal static class VoiceFirstRunSetup
     private static string DraftSpeakerNameForUi(int index)
         => index < VoiceChatLocalSettings.SpkDeviceNames.Length
             ? DeviceName(VoiceChatLocalSettings.SpkDeviceNames, index)
-            : (_draft?.SpeakerDisplayName() ?? "Saved device") + " (saved device)";
+            : Loc.T("setup.saved_device_suffix", "{0} (saved device)", _draft?.SpeakerDisplayName() ?? Loc.T("setup.saved_device", "Saved device"));
 #endif
 
     private static string CompactDevice(string displayName)
     {
-        string value = string.IsNullOrWhiteSpace(displayName) ? "System Default" : displayName;
+        string value = string.IsNullOrWhiteSpace(displayName) ? Loc.T("setup.system_default", "System Default") : displayName;
         return value.Length <= 30 ? value : value.Substring(0, 27) + "...";
     }
 
@@ -1466,57 +1495,60 @@ internal static class VoiceFirstRunSetup
     private static string AudioVerificationSummary()
     {
         if (MicrophoneVerifiedForCurrentDraft && OutputVerifiedForCurrentDraft)
-            return "Mic and output tested";
-        if (MicrophoneVerifiedForCurrentDraft) return "Mic tested / output optional";
-        if (OutputVerifiedForCurrentDraft) return "Output tested / mic optional";
-        return "Audio tests optional";
+            return Loc.T("setup.mic_and_output_tested", "Mic and output tested");
+        if (MicrophoneVerifiedForCurrentDraft) return Loc.T("setup.mic_tested_output_optional", "Mic tested / output optional");
+        if (OutputVerifiedForCurrentDraft) return Loc.T("setup.output_tested_mic_optional", "Output tested / mic optional");
+        return Loc.T("setup.audio_tests_optional", "Audio tests optional");
     }
 
-    private static string YesNo(bool value) => value ? "Yes" : "No";
-    private static string ShownHidden(bool hidden) => hidden ? "hidden" : "shown";
+    private static string YesNo(bool value) => value ? Loc.T("setup.yes", "Yes") : Loc.T("setup.no", "No");
+    
 
     private static string FriendlyPosition(SpeakingBarPosition position) => position switch
     {
-        SpeakingBarPosition.TopLeft => "Top left",
-        SpeakingBarPosition.TopMiddle => "Top center",
-        SpeakingBarPosition.TopRight => "Top right",
-        SpeakingBarPosition.MiddleLeft => "Middle left",
-        SpeakingBarPosition.MiddleRight => "Middle right",
-        SpeakingBarPosition.BottomLeft => "Bottom left",
-        SpeakingBarPosition.BottomMiddle => "Bottom center",
-        SpeakingBarPosition.BottomRight => "Bottom right",
+        SpeakingBarPosition.TopLeft => Loc.T("setup.top_left", "Top left"),
+        SpeakingBarPosition.TopMiddle => Loc.T("setup.top_center", "Top center"),
+        SpeakingBarPosition.TopRight => Loc.T("setup.top_right", "Top right"),
+        SpeakingBarPosition.MiddleLeft => Loc.T("setup.middle_left", "Middle left"),
+        SpeakingBarPosition.MiddleRight => Loc.T("setup.middle_right", "Middle right"),
+        SpeakingBarPosition.BottomLeft => Loc.T("setup.bottom_left", "Bottom left"),
+        SpeakingBarPosition.BottomMiddle => Loc.T("setup.bottom_center", "Bottom center"),
+        SpeakingBarPosition.BottomRight => Loc.T("setup.bottom_right", "Bottom right"),
         _ => position.ToString(),
     };
 
     private static string HudPlacementSummary(SpeakingBarPreviewSettings settings)
         => settings.ManualLayout
-            ? $"Manual {settings.ManualOrientation.ToString().ToLowerInvariant()} / " +
-              $"X {Mathf.RoundToInt(settings.ManualX * 100f)}% / Y {Mathf.RoundToInt(settings.ManualY * 100f)}%"
+            ? Loc.T("setup.hud_manual_summary", "Manual {0} / X {1}% / Y {2}%",
+                settings.ManualOrientation == VoiceControlsLayout.Vertical
+                    ? Loc.T("setup.orientation_vertical", "vertical")
+                    : Loc.T("setup.orientation_horizontal", "horizontal"),
+                Mathf.RoundToInt(settings.ManualX * 100f), Mathf.RoundToInt(settings.ManualY * 100f))
             : FriendlyPosition(settings.Position);
 
     private static string SelectedHudDescription()
     {
-        if (_draft == null) return "Hover a layout to preview it live. Select one to use it.";
+        if (_draft == null) return Loc.T("setup.hover_a_layout_to_preview_it_live_select_one_to_use", "Hover a layout to preview it live. Select one to use it.");
         int index = _draft.SelectedHudPreset;
         return index >= 0 && index < FirstRunHudPresets.All.Count
             ? FirstRunHudPresets.All[index].Description
-            : "Choose a HUD layout to continue.";
+            : Loc.T("setup.choose_a_hud_layout_to_continue", "Choose a HUD layout to continue.");
     }
 
     private static string? SetupValidationIssue()
     {
-        if (_draft == null) return "Setup is still loading.";
+        if (_draft == null) return Loc.T("setup.setup_is_still_loading", "Setup is still loading.");
         if (_draft.MicrophoneSelectionChanged &&
             !string.IsNullOrEmpty(_draft.MicrophoneDevice) && _draft.MicrophoneIndex() < 0)
-            return "The selected microphone is no longer available. Return to Audio and choose another device or Default.";
+            return Loc.T("setup.the_selected_microphone_is_no_longer_available_retur", "The selected microphone is no longer available. Return to Audio and choose another device or Default.");
 #if WINDOWS
         if (_draft.SpeakerSelectionChanged &&
             !string.IsNullOrEmpty(_draft.SpeakerDevice) && _draft.SpeakerIndex() < 0)
-            return "The selected output device is no longer available. Return to Audio and choose another device or Default.";
+            return Loc.T("setup.the_selected_output_device_is_no_longer_available_re", "The selected output device is no longer available. Return to Audio and choose another device or Default.");
 #endif
 #if WINDOWS
         if (_draft.MicMode == VoiceMicMode.PushToTalk && _draft.PushToTalk.Key == KeyCode.None)
-            return "Choose a Push to Talk shortcut before saving, or switch to Open Mic.";
+            return Loc.T("setup.choose_a_push_to_talk_shortcut_before_saving_or_swit", "Choose a Push to Talk shortcut before saving, or switch to Open Mic.");
 
         string? bindingIssue = BindingValidationIssue(_draft);
         if (bindingIssue != null) return bindingIssue;
@@ -1528,17 +1560,17 @@ internal static class VoiceFirstRunSetup
     {
         var bindings = new (string Name, FirstRunSetupBinding Binding)[]
         {
-            ("Mute microphone", draft.ToggleMute),
-            ("Push to Mute", draft.PushToMute),
-            ("Push to Talk", draft.PushToTalk),
-            ("Mute playback", draft.ToggleSpeaker),
-            ("Open voice menu", draft.OpenVoiceSettings),
+            (Loc.T("setup.bind_mute_microphone", "Mute microphone"), draft.ToggleMute),
+            (Loc.T("setup.push_to_mute", "Push to Mute"), draft.PushToMute),
+            (Loc.T("setup.push_to_talk", "Push to Talk"), draft.PushToTalk),
+            (Loc.T("setup.bind_mute_playback", "Mute playback"), draft.ToggleSpeaker),
+            (Loc.T("setup.open_voice_menu", "Open voice menu"), draft.OpenVoiceSettings),
         };
         for (int i = 0; i < bindings.Length; i++)
             for (int j = i + 1; j < bindings.Length; j++)
             {
                 if (!BindingsConflict(bindings[i].Binding, bindings[j].Binding)) continue;
-                return $"{bindings[i].Name} and {bindings[j].Name} use the same shortcut. Edit Controls before saving.";
+                return Loc.T("setup.bind_conflict", "{0} and {1} use the same shortcut. Edit Controls before saving.", bindings[i].Name, bindings[j].Name);
             }
         return null;
     }

@@ -31,17 +31,13 @@ internal static class SpeakingBarPreviewRoster
     internal const int PlayerCount = 15;
     internal const int GhostStartIndex = 10;
 
-    private static readonly string[] Names =
-    {
-        "Player 01", "Player 02", "Player 03", "Player 04", "Player 05",
-        "Player 06", "Player 07", "Player 08", "Player 09", "Player 10",
-        "Ghost 11", "Ghost 12", "Ghost 13", "Ghost 14", "Ghost 15",
-    };
-
     internal static string Name(int previewIndex)
     {
         ValidateIndex(previewIndex);
-        return Names[previewIndex];
+        // Resolved per call (not cached) so the sample roster follows the game language.
+        return previewIndex < GhostStartIndex
+            ? Loc.T("preview.player", "Player {0:00}", previewIndex + 1)
+            : Loc.T("preview.ghost", "Ghost {0:00}", previewIndex + 1);
     }
 
     internal static bool IsGhost(int previewIndex)

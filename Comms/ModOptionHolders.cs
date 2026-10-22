@@ -15,10 +15,11 @@ public sealed class ModToggleHolder : OptionHolder
     public ModToggleHolder(string composedKey, string label, string helpText)
     {
         _composedKey = composedKey;
-        Label = label;
-        HelpText = string.IsNullOrWhiteSpace(helpText)
-            ? "Enables or disables this host option provided by the connected mod. The host's choice is synchronized to the lobby."
-            : helpText;
+        Id = composedKey;
+        LabelText = Loc.LocText.Plain(label);
+        HelpLoc = string.IsNullOrWhiteSpace(helpText)
+            ? Loc.L("host.default_mod_toggle_help", "Enables or disables this host option provided by the connected mod. The host's choice is synchronized to the lobby.")
+            : Loc.LocText.Plain(helpText);
     }
 
     public bool Value
@@ -42,11 +43,12 @@ public sealed class ModEnumHolder : OptionHolder
     public ModEnumHolder(string composedKey, string label, string[] labels, string helpText)
     {
         _composedKey = composedKey;
-        Label = label;
+        Id = composedKey;
+        LabelText = Loc.LocText.Plain(label);
         Labels = labels;
-        HelpText = string.IsNullOrWhiteSpace(helpText)
-            ? "Chooses the value for this host option provided by the connected mod. The host's choice is synchronized to the lobby."
-            : helpText;
+        HelpLoc = string.IsNullOrWhiteSpace(helpText)
+            ? Loc.L("host.default_mod_enum_help", "Chooses the value for this host option provided by the connected mod. The host's choice is synchronized to the lobby.")
+            : Loc.LocText.Plain(helpText);
     }
 
     public int Value
@@ -75,14 +77,15 @@ public sealed class ModNumberHolder : OptionHolder
         string helpText)
     {
         _composedKey = composedKey;
-        Label = label;
+        Id = composedKey;
+        LabelText = Loc.LocText.Plain(label);
         Min = min;
         Max = max;
         Step = step;
         Format = string.IsNullOrWhiteSpace(format) ? "0.0" : format;
-        HelpText = string.IsNullOrWhiteSpace(helpText)
-            ? "Adjusts this host option provided by the connected mod. The host's choice is synchronized to the lobby."
-            : helpText;
+        HelpLoc = string.IsNullOrWhiteSpace(helpText)
+            ? Loc.L("host.default_mod_number_help", "Adjusts this host option provided by the connected mod. The host's choice is synchronized to the lobby.")
+            : Loc.LocText.Plain(helpText);
     }
 
     public float Value
