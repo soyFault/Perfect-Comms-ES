@@ -952,7 +952,10 @@ internal static class VoiceLobbyBrowserUi
 internal static class VoiceLobbyMainMenuStartPatch
 {
     private static void Postfix(MainMenuManager __instance)
-        => VoiceLobbyBrowserUi.EnsureMainMenuButton(__instance);
+    {
+        Loc.MarkGameReady();
+        VoiceLobbyBrowserUi.EnsureMainMenuButton(__instance);
+    }
 }
 
 [HarmonyPatch(typeof(MainMenuManager), "LateUpdate")]
@@ -960,6 +963,7 @@ internal static class VoiceLobbyMainMenuUpdatePatch
 {
     private static void Postfix(MainMenuManager __instance)
     {
+        Loc.MarkGameReady();
         VoiceLobbyBrowserUi.EnsureMainMenuButton(__instance);
         VoiceLobbyBrowserUi.Update();
     }

@@ -140,7 +140,6 @@ internal static class VoiceUiKit
         if (frame == _tickFrame) return;
         _tickFrame = frame;
         UpdateSwallow();
-        Loc.MarkGameReady();
         try { Loc.PollLocaleChange(); } catch (Exception e) { VoiceChatPlugin.VoiceChatPluginMain.Logger.LogWarning("[PC-UI] language refresh threw: " + e.Message); }
         if (AnyPanelOpen)
         {

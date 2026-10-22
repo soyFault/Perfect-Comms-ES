@@ -47,7 +47,8 @@ internal static class Loc
 
     // DataManager must not be touched while the plugin loads: reading DataManager.Settings that early
     // initialises the game's save/settings data before the game does and crashes the splash screen
-    // with Town of Us Mira loaded. Until the first UI tick (MarkGameReady) every lookup is English.
+    // with Town of Us Mira loaded. VoiceUiKit.Tick also runs that early (KeyboardJoystick.Update), so the
+    // flag is only set by patches on scenes that exist once the game has finished starting up.
     private static volatile bool _gameReady;
 
     /// <summary>Call once from the plugin's Load (main thread) so off-thread callers are safe. Reads no game data.</summary>
@@ -56,21 +57,20 @@ internal static class Loc
         _mainThreadId = Environment.CurrentManagedThreadId;
     }
 
-    /// <summary>Call from the main thread once the game is running (first UI tick). Enables reading the game language.</summary>
+    /// <summary>Call from the main thread once the main menu, options menu or HUD exists. Enables reading the game language.</summary>
     internal static void MarkGameReady() => _gameReady = true;
 
     /// <summary>Raised (on the main thread) when the game language changes. See <see cref="PollLocaleChange"/>.</summary>
     internal static event Action? LocaleChanged;
-    private static string? _announcedLocale;
+    private static string? _announcedLocale = EnglishLocale;
 
     /// <summary>
-    /// Call every frame from the main thread. The first call only records the current language;
-    /// afterwards <see cref="LocaleChanged"/> fires once per change so cached UI can be rebuilt.
+    /// Call every frame from the main thread. <see cref="LocaleChanged"/> fires once per change
+    /// (including the first switch from English once the game language becomes readable) so cached UI can be rebuilt.
     /// </summary>
     internal static void PollLocaleChange()
     {
         string now = CurrentLocale;
-        if (_announcedLocale == null) { _announcedLocale = now; return; }
         if (string.Equals(now, _announcedLocale, StringComparison.Ordinal)) return;
         _announcedLocale = now;
         LocaleChanged?.Invoke();
@@ -82,7 +82,7 @@ internal static class Loc
         _mainThreadId = -1;
         _gameReady = false;
         _lastLocale = EnglishLocale;
-        _announcedLocale = null;
+        _announcedLocale = EnglishLocale;
     }
 
     /// <summary>Locale used for lookups right now: forced, else the Among Us language, else English.</summary>

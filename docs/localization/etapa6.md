@@ -86,4 +86,4 @@ Además: `scripts/localization.py` **no se había subido** (el `.gitignore` igno
 `Loc.Initialize()` leia `DataManager.Settings.Language` dentro de `Load()`. Tocar `DataManager`
 tan pronto inicializa los datos del juego antes de tiempo y el splash crasheaba (con el Perfect
 Comms de upstream no pasaba). Ahora `Initialize()` no lee nada del juego y `Loc.CurrentLocale`
-devuelve ingles hasta que `VoiceUiKit.Tick` llama a `Loc.MarkGameReady()` (primer frame de UI).
+devuelve ingles hasta `Loc.MarkGameReady()`. Primer intento (marcar en `VoiceUiKit.Tick`) seguia crasheando: `Tick` corre desde `KeyboardJoystick.Update`, que ya existe en el splash. Ahora solo marcan `MainMenuManager.Start/LateUpdate`, `OptionsMenuBehaviour.Update` y `HudManager.Update`; `PollLocaleChange` parte de en_US, asi que el primer cambio a es_* reconstruye la UI ya creada.

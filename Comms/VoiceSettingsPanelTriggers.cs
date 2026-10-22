@@ -100,6 +100,7 @@ public static class VoiceSettingsPanelTriggers
     [HarmonyPostfix]
     static void PerfectComms_OptionsTick(OptionsMenuBehaviour __instance)
     {
+        Loc.MarkGameReady();
         VoiceOptionsMenuEntry.NotifyOptionsActive(__instance);
         VoiceUiKit.Tick();
     }
@@ -108,6 +109,7 @@ public static class VoiceSettingsPanelTriggers
     [HarmonyPostfix]
     static void PerfectComms_HudTick()
     {
+        Loc.MarkGameReady();
         VoiceUiKit.Tick();
     }
 }
