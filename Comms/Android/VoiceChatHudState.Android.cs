@@ -399,7 +399,7 @@ public static partial class VoiceChatHudState
         _sharedMicTooltipOwner = SharedMicTooltipOwner.Radio;
 
         string channel = TeamRadioDisplayName(NormalizeTeamRadioState());
-        string status = TryGetLocalTransmitBlockReason(out string transmitBlockReason)
+        string status = TryGetLocalTransmitBlockReason(out string transmitBlockReason, allowGhostListening: false)
             ? transmitBlockReason
             : _speakerMuted ? Loc.T("hud.deafened", "Deafened")
             : IsManualMuteActive() ? Loc.T("android.status_mic_muted", "Microphone muted")

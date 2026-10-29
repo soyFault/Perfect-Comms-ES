@@ -32,6 +32,9 @@ internal sealed class SpeakingBarLivePreview
     private const float EmbeddedRevealSlide = 12f;
     private const float PixelsPerWorldUnit = 36f;
     private const int SlotsPerPrewarmTick = 3;
+    private const float MaximumRingPulseScale = 1.12f;
+    private const float IconHalfExtent =
+        SpeakingBarVisualMetrics.RingScale * MaximumRingPulseScale * 0.5f;
     internal static Vector2 EmbeddedCardSize => new(EmbeddedCardWidth, EmbeddedCardHeight);
 
     private static readonly Color BackdropColor = new(0f, 0f, 0f, 0.5f);
@@ -107,6 +110,8 @@ internal sealed class SpeakingBarLivePreview
     private bool _hasLastSettings;
     private float _lastViewportWidth = -1f;
     private float _lastViewportHeight = -1f;
+    private float _lastHudWidth;
+    private float _lastHudHeight;
     private int _lastLineCount;
     private bool _shouldRender;
     private bool _disposed;
@@ -135,8 +140,8 @@ internal sealed class SpeakingBarLivePreview
         _revealSlide = embedded ? EmbeddedRevealSlide : DefaultRevealSlide;
         _presentationStartScale = embedded ? 1f : 0.96f;
         _liveBadgeLabel = embedded
-            ? Loc.T("preview.live", "LIVE")
-            : "\u25CF  " + Loc.T("preview.live", "LIVE");
+            ? Loc.T("preview.live", "Live")
+            : "\u25CF  " + Loc.T("preview.live", "Live");
 
         float cardWidth = embedded
             ? EmbeddedCardWidth
@@ -184,6 +189,7 @@ internal sealed class SpeakingBarLivePreview
         var surfaceImage = surface.gameObject.AddComponent<Image>();
         surfaceImage.sprite = embedded ? VoiceUiKit.Rounded(true) : VoiceUiKit.PanelGradient();
         surfaceImage.type = Image.Type.Sliced;
+        surfaceImage.Round(VoiceUiKit.RadiusCard);
         surfaceImage.color = embedded ? new Color32(17, 22, 30, 248) : Color.white;
         surfaceImage.raycastTarget = false;
 
@@ -215,12 +221,12 @@ internal sealed class SpeakingBarLivePreview
         var title = VoiceUiKit.Text(
             "PreviewTitle",
             header,
-            embedded ? Loc.T("preview.title_embedded", "HUD PREVIEW") : Loc.T("preview.title", "HUD LIVE PREVIEW"),
+            embedded ? Loc.T("preview.title_embedded", "HUD preview") : Loc.T("preview.title", "HUD live preview"),
             embedded ? 20f : 25f,
             VoiceUiKit.TextBright,
             TextAlignmentOptions.Left,
             FontStyles.Bold);
-        title.characterSpacing = embedded ? 1.25f : 3f;
+        title.characterSpacing = 0f;
         title.rectTransform.Anchor(
             new Vector2(0f, 0.5f),
             new Vector2(1f, 0.5f),
@@ -305,8 +311,8 @@ internal sealed class SpeakingBarLivePreview
             new Vector2(0.5f, 0.5f),
             new Vector2(0.5f, 0.5f));
         _backdrop = backdropRect.gameObject.AddComponent<Image>();
-        _backdrop.sprite = VoiceUiKit.Rounded(true);
-        _backdrop.type = Image.Type.Sliced;
+        _backdrop.sprite = VoiceUiKit.Solid(Color.white);
+        _backdrop.type = Image.Type.Simple;
         _backdrop.color = BackdropColor;
         _backdrop.raycastTarget = false;
 
@@ -400,8 +406,6 @@ internal sealed class SpeakingBarLivePreview
         _ = unscaledDeltaTime;
         AdvanceSlotBuild();
         if (!IsWarmupReady) return false;
-        _badgeText.text = _liveBadgeLabel;
-        _badgeText.color = new Color32(118, 239, 165, 255);
         UpdatePreview(settings);
         return true;
     }
@@ -431,9 +435,9 @@ internal sealed class SpeakingBarLivePreview
 
     private void SetWarmupStatus()
     {
-        _badgeText.text = Loc.T("preview.loading", "LOADING");
+        _badgeText.text = Loc.T("preview.loading", "Loading");
         _badgeText.color = VoiceUiKit.TextMuted;
-        _statusText.text = Loc.T("preview.preparing", "PREPARING PREVIEW");
+        _statusText.text = Loc.T("preview.preparing", "Preparing preview");
         _detailText.text = Loc.T("preview.building", "Building the canvas HUD preview");
     }
 
@@ -473,6 +477,7 @@ internal sealed class SpeakingBarLivePreview
         slot.Ring = slot.RingRoot.gameObject.AddComponent<Image>();
         slot.Ring.sprite = VoiceUiKit.Rounded(true);
         slot.Ring.type = Image.Type.Sliced;
+        slot.Ring.Round();
         slot.Ring.color = SpeakingGreen;
         slot.Ring.raycastTarget = false;
 
@@ -485,6 +490,7 @@ internal sealed class SpeakingBarLivePreview
         var ringCutoutImage = ringCutout.gameObject.AddComponent<Image>();
         ringCutoutImage.sprite = VoiceUiKit.Rounded(true);
         ringCutoutImage.type = Image.Type.Sliced;
+        ringCutoutImage.Round();
         ringCutoutImage.color = new Color32(4, 7, 11, 255);
         ringCutoutImage.raycastTarget = false;
         slot.RingRoot.gameObject.SetActive(SpeakingBarPreviewRoster.VoiceLevel(index) > 0f);
@@ -556,6 +562,7 @@ internal sealed class SpeakingBarLivePreview
         var image = rect.gameObject.AddComponent<Image>();
         image.sprite = VoiceUiKit.Rounded(true);
         image.type = Image.Type.Sliced;
+        image.Round();
         image.color = color;
         image.raycastTarget = false;
         return image;
@@ -574,24 +581,35 @@ internal sealed class SpeakingBarLivePreview
         float height = _viewportRoot.rect.height;
         if (width <= 1f) width = _viewportMaxWidth;
         if (height <= 1f) height = _viewportMaxHeight;
+        bool hasHudCapacity = global::VoiceChatPlugin.PingTrackerPatch.TryGetAvailableLayoutSize(
+            Camera.main, out float hudWidth, out float hudHeight);
 
         if (!_hasLastSettings ||
             settings != _lastSettings ||
             Mathf.Abs(width - _lastViewportWidth) > 0.01f ||
-            Mathf.Abs(height - _lastViewportHeight) > 0.01f)
+            Mathf.Abs(height - _lastViewportHeight) > 0.01f ||
+            Mathf.Abs(hudWidth - _lastHudWidth) > 0.001f ||
+            Mathf.Abs(hudHeight - _lastHudHeight) > 0.001f)
         {
-            Layout(settings, width / PixelsPerWorldUnit, height / PixelsPerWorldUnit);
+            Layout(settings, width / PixelsPerWorldUnit, height / PixelsPerWorldUnit,
+                hudWidth, hudHeight);
+            _badgeText.text = hasHudCapacity ? _liveBadgeLabel : Loc.T("preview.badge_preview", "Preview");
+            _badgeText.color = hasHudCapacity ? new Color32(118, 239, 165, 255) : VoiceUiKit.TextMuted;
             _lastSettings = settings;
             _hasLastSettings = true;
             _lastViewportWidth = width;
             _lastViewportHeight = height;
+            _lastHudWidth = hudWidth;
+            _lastHudHeight = hudHeight;
         }
     }
 
     private void Layout(
         SpeakingBarPreviewSettings settings,
         float availableWidth,
-        float availableHeight)
+        float availableHeight,
+        float hudWidth,
+        float hudHeight)
     {
         if (_slots.Count == 0) return;
 
@@ -623,10 +641,8 @@ internal sealed class SpeakingBarLivePreview
             itemMaxY = Mathf.Max(itemMaxY, maxY);
         }
 
-        float primaryPitch = namePosition == SpeakingBarNamePosition.Top
-            ? SpeakingBarVisualMetrics.SlotHeight +
-              SpeakingBarVisualMetrics.TopNameExtraPitch
-            : SpeakingBarVisualMetrics.SlotHeight;
+        float primaryPitch = SpeakingBarVisualMetrics.VerticalPitch(
+            namePosition, itemMaxY - itemMinY);
         float outerPad = SpeakingBarVisualMetrics.BackdropPad * 2f;
         float itemWidth = itemMaxX - itemMinX + outerPad;
         float itemHeight = itemMaxY - itemMinY + outerPad;
@@ -635,7 +651,7 @@ internal sealed class SpeakingBarLivePreview
             SpeakingBarLayoutPolicy.UsesSingleVerticalLaneFor(
                 settings.Position,
                 settings.SideLayout);
-        var solution = SpeakingBarLayoutPolicy.SolveTwoDimensional(
+        var solution = SpeakingBarLivePreviewLayoutPolicy.Solve(
             _slots.Count,
             vertical,
             itemWidth,
@@ -645,12 +661,9 @@ internal sealed class SpeakingBarLivePreview
             availableWidth,
             availableHeight,
             requestedScale,
-            maxItemsPerLine: singleLane
-                ? _slots.Count
-                : SpeakingBarLayoutPolicy.PreferredMaxItemsPerLine,
-            requiredLineCount: SpeakingBarLivePreviewLayoutPolicy.RequiredLineCount(
-                _slots.Count,
-                singleLane));
+            singleLane,
+            hudWidth,
+            hudHeight);
 
         var primaryDirection = SpeakingBarLayoutPolicy.ResolvePrimaryDirection(
             settings.ManualLayout,
@@ -773,7 +786,7 @@ internal sealed class SpeakingBarLivePreview
         PreviewSlot slot,
         SpeakingBarNamePosition namePosition)
     {
-        const float ringHalf = SpeakingBarVisualMetrics.RingScale * 0.5f;
+        const float ringHalf = IconHalfExtent;
         return namePosition switch
         {
             SpeakingBarNamePosition.Left or SpeakingBarNamePosition.Right
@@ -792,7 +805,7 @@ internal sealed class SpeakingBarLivePreview
         out float min,
         out float max)
     {
-        const float ringHalf = SpeakingBarVisualMetrics.RingScale * 0.5f;
+        const float ringHalf = IconHalfExtent;
         switch (namePosition)
         {
             case SpeakingBarNamePosition.Left:
@@ -818,7 +831,7 @@ internal sealed class SpeakingBarLivePreview
         out float min,
         out float max)
     {
-        const float ringHalf = SpeakingBarVisualMetrics.RingScale * 0.5f;
+        const float ringHalf = IconHalfExtent;
         float labelHalf = slot.LabelHeight * 0.5f;
         switch (namePosition)
         {
@@ -928,7 +941,7 @@ internal sealed class SpeakingBarLivePreview
             Color color = SpeakingGreen;
             color.a = Mathf.Lerp(0.24f, 0.90f, brightness);
             slot.Ring.color = color;
-            float scale = Mathf.Lerp(0.92f, 1.12f, brightness);
+            float scale = Mathf.Lerp(0.92f, MaximumRingPulseScale, brightness);
             slot.RingRoot.localScale = new Vector3(scale, scale, 1f);
         }
     }
@@ -936,11 +949,11 @@ internal sealed class SpeakingBarLivePreview
     private void UpdateStatus(SpeakingBarPreviewSettings settings, int lineCount)
     {
         string placement = settings.ManualLayout
-            ? Loc.T("preview.manual", "MANUAL {0}", OrientationLabel(settings.ManualOrientation))
+            ? Loc.T("preview.manual", "Manual {0}", settings.ManualOrientation.ToString().ToLowerInvariant())
             : PositionLabel(settings.Position);
         string layout = lineCount == 1
-            ? Loc.T("preview.lane", "1 LANE")
-            : Loc.T("preview.lines", "{0} LINES", lineCount);
+            ? Loc.T("preview.lane", "1 lane")
+            : Loc.T("preview.lines", "{0} lines", lineCount);
         int percent = Mathf.RoundToInt(settings.Scale * 100f);
         _statusText.text = $"{placement} / {layout} / {percent}%";
         _detailText.text = settings.Backdrop
@@ -950,15 +963,15 @@ internal sealed class SpeakingBarLivePreview
 
     private static string PositionLabel(SpeakingBarPosition position) => position switch
     {
-        SpeakingBarPosition.TopLeft => Loc.T("preview.position_top_left", "TOP LEFT"),
-        SpeakingBarPosition.TopMiddle => Loc.T("preview.position_top_middle", "TOP MIDDLE"),
-        SpeakingBarPosition.TopRight => Loc.T("preview.position_top_right", "TOP RIGHT"),
-        SpeakingBarPosition.MiddleLeft => Loc.T("preview.position_middle_left", "MIDDLE LEFT"),
-        SpeakingBarPosition.MiddleRight => Loc.T("preview.position_middle_right", "MIDDLE RIGHT"),
-        SpeakingBarPosition.BottomLeft => Loc.T("preview.position_bottom_left", "BOTTOM LEFT"),
-        SpeakingBarPosition.BottomMiddle => Loc.T("preview.position_bottom_middle", "BOTTOM MIDDLE"),
-        SpeakingBarPosition.BottomRight => Loc.T("preview.position_bottom_right", "BOTTOM RIGHT"),
-        _ => Loc.T("preview.position_default", "SPEAKING BAR"),
+        SpeakingBarPosition.TopLeft => Loc.T("preview.position_top_left", "Top left"),
+        SpeakingBarPosition.TopMiddle => Loc.T("preview.position_top_middle", "Top middle"),
+        SpeakingBarPosition.TopRight => Loc.T("preview.position_top_right", "Top right"),
+        SpeakingBarPosition.MiddleLeft => Loc.T("preview.position_middle_left", "Middle left"),
+        SpeakingBarPosition.MiddleRight => Loc.T("preview.position_middle_right", "Middle right"),
+        SpeakingBarPosition.BottomLeft => Loc.T("preview.position_bottom_left", "Bottom left"),
+        SpeakingBarPosition.BottomMiddle => Loc.T("preview.position_bottom_middle", "Bottom middle"),
+        SpeakingBarPosition.BottomRight => Loc.T("preview.position_bottom_right", "Bottom right"),
+        _ => Loc.T("preview.position_default", "Speaking bar"),
     };
 
     private static string OrientationLabel(VoiceControlsLayout layout) => layout == VoiceControlsLayout.Vertical

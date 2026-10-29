@@ -69,8 +69,8 @@ The plugin embeds these managed assemblies as resources and resolves them at run
 
 | Assembly | Upstream and license text |
 |----------|---------------------------|
-| System.Text.Encodings.Web and System.Text.Json 10.0.10 | [.NET runtime](https://github.com/dotnet/runtime), MIT. The package license is embedded as `Licenses.dotnet-runtime-MIT.txt`; the exact 10.x package notices are embedded as `Licenses.System.Text.Encodings.Web-THIRD-PARTY-NOTICES.txt` and `Licenses.System.Text.Json-THIRD-PARTY-NOTICES.txt`. |
-| Microsoft.Bcl.AsyncInterfaces and System.IO.Pipelines 10.0.10 | [.NET runtime](https://github.com/dotnet/runtime), MIT. These System.Text.Json runtime dependencies share the embedded .NET runtime license and 10.x NuGet third-party notices above. |
+| System.Text.Encodings.Web and System.Text.Json 10.0.14 | [.NET runtime](https://github.com/dotnet/runtime), MIT. The package license is embedded as `Licenses.dotnet-runtime-MIT.txt`; the exact 10.x package notices are embedded as `Licenses.System.Text.Encodings.Web-THIRD-PARTY-NOTICES.txt` and `Licenses.System.Text.Json-THIRD-PARTY-NOTICES.txt`. |
+| Microsoft.Bcl.AsyncInterfaces and System.IO.Pipelines 10.0.14 | [.NET runtime](https://github.com/dotnet/runtime), MIT. These System.Text.Json runtime dependencies share the embedded .NET runtime license and 10.x NuGet third-party notices above. |
 
 ## Localization pattern
 

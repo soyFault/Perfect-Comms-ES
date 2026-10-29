@@ -85,11 +85,13 @@ x64, Linux x64, the final APM-containing/signature-verified universal macOS
 app, the matching desktop Pion C-shared transport libraries, and desktop WebRTC
 APM libraries.
 
-Desktop helpers require sidecar protocol 17 and Pion ABI 3 for private-only audio
-recipient selection. Rebuild every platform's helper and Pion companion together;
-older binaries must not be packaged. Public fanout and ICE behavior are unchanged.
-Voice clients use game protocol 7 for the impostor settings and phase-scoped radio
-state; the mobile interop contract remains ABI 5.
+Desktop helpers require sidecar protocol 18 for OBS recording control and
+privacy-safe recording metadata; Pion ABI remains 3. Rebuild every platform's
+helper and Pion companion together; older binaries must not be packaged.
+Public fanout and ICE behavior are unchanged.
+Voice clients use game protocol 8 and host-settings schema 5 for the default-off
+ghost-listening rule and its restricted task audience. All voice participants must
+update together; the mobile interop contract remains ABI 5.
 
 RustSec audits every native lockfile during CI. The desktop codec is the bundled
 libopus 1.6.1 source from the pinned `opusic-sys` binding, compiled with DRED on
@@ -106,7 +108,7 @@ The Starlight/Pion probe drives capture and playback on fixed 20 ms ticks.
 Encoding and correlation work do not add drift to the simulated audio clock;
 the probe still requires 16 consecutive correlated playback frames.
 
-Pion release builds require Go 1.26.2 exactly. Build and optionally stage one
+Pion release builds require Go 1.26.10 exactly. Build and optionally stage one
 target with:
 
 ```bash
@@ -117,6 +119,43 @@ Build both macOS architecture slices before `mac-universal`; the normal
 `scripts/build-mac.sh` flow does this automatically and seals
 `libpc-pion.dylib` into the app before signing. For a manual macOS build, run
 `mac-x64` and `mac-arm64` without `--stage`, then run `mac-universal --stage`.
+
+## Optional Windows OBS plugin
+
+The recording integration targets native Windows x64 and is built and tested with
+official OBS Studio 32.2.2, independently of desktop mod installation. Other OBS
+versions are unverified. With PowerShell, CMake 3.24+,
+Visual Studio x64 C++ tools, and a Windows SDK installed, run from the repository
+root:
+
+```powershell
+pwsh -File scripts/build-obs-plugin.ps1 -Configuration Release
+```
+
+The script downloads SHA-256-pinned official OBS 32.2.2 source/runtime archives,
+generates import libraries from official DLL exports, builds the plugin, runs
+CTest by default, and creates `artifacts/PerfectComms-OBS-win-x64.zip`.
+`-SkipTests` explicitly skips CTest. Optional `-ObsRoot`, `-ObsSource`, and
+`-BuildDirectory` select existing runtime/source roots and the build directory;
+caller-supplied SDK/runtime roots are not hash-verified downloads.
+
+MSVC builds statically link the C/C++ runtime. Before uploading the ZIP, CI runs
+`scripts/verify-release-assets.py --pe-no-private-runtime` against the plugin DLL
+to reject unbundled compiler-runtime dependencies.
+
+The ZIP contains `obs-plugins/64bit/perfect-comms-obs.dll`, the plugin README,
+GPL/LGPL texts, and the scoped GPL conversion notice. It contains no OBS runtime
+and is not an installer. Users extract it into their OBS installation folder and
+restart OBS;
+the script does not write into an installed OBS copy. See
+[`native/obs-plugin/README.md`](native/obs-plugin/README.md) for source/track
+routing, supported recording outputs, and timeline-zero WAV import.
+
+The native-helper workflow builds/uploads `obs-plugin-win-x64`; the release
+workflow publishes `PerfectComms-OBS-win-x64.zip` alongside the existing desktop
+assets as an optional download. Starlight remains a separate managed-only DLL
+with its existing packaging guards. This plugin build does not establish local
+Linux/macOS rebuilds or compatibility with other OBS versions.
 
 ## Release assembly
 
@@ -191,28 +230,32 @@ The workflow requests only a short-lived OIDC credential; no long-lived NuGet AP
 Before tagging, open **Actions -> Release -> Run workflow** and run it against
 `main`. A manual run never creates a GitHub Release. It runs the complete
 managed, native, RTC, desktop, Starlight, and packaging gates, then uploads
-three Actions artifacts for 14 days:
+four Actions artifacts for 14 days:
 
 - `PerfectComms-standalone-dlls-*`, containing the desktop `PerfectComms.dll`;
 - `PerfectComms-Starlight-testers-*`, containing only
   `PerfectCommsStarlight.dll` for Starlight beta or approved local-mod testing;
+- `PerfectComms-OBS-*`, containing the optional `PerfectComms-OBS-win-x64.zip` OBS plugin;
 - `PerfectComms-api-nuget-*`, containing the reference-only `PerfectComms.Api.<PerfectCommsApiPackageVersion>.nupkg`.
 
 ### Publishing a release
 
-1. Set `<Version>` and `<InformationalVersion>` to `X.Y.Z`, set
-   `<AssemblyVersion>` and `<FileVersion>` to `X.Y.Z.0`, set
+1. Set `<Version>` and `<InformationalVersion>` to `X.Y.Z` and
+   `<AssemblyVersion>` and `<FileVersion>` to `X.Y.Z.0` in both
+   `PerfectComms.csproj` and `PerfectComms.Starlight.csproj`, set
    `VoiceChatPluginMain.Version` to `X.Y.Z`, and set
    `<PerfectCommsApiPackageVersion>` to the immutable NuGet version published for that API contract.
-2. Add the matching `Perfect Comms vX.Y.Z` changelog entry, commit the changes
+2. Add the matching `## Perfect Comms vX.Y.Z` changelog entry, commit the changes
    on `main`, and wait for every workflow triggered by that push.
-3. Run the manual Release rehearsal and inspect its packaged artifact.
-4. Create and push tag `vX.Y.Z` on that tested `main` commit.
+3. Copy any changed `wiki/` pages to the GitHub wiki (see `wiki/README.md`).
+4. Run the manual Release rehearsal and inspect its packaged artifacts.
+5. Create and push tag `vX.Y.Z` on that tested `main` commit.
 
 The tag run repeats every gate, verifies the tag is the current `main` tip,
-checks every version field, publishes the desktop `PerfectComms.dll` GitHub
-release asset, and publishes the reference-only API package to NuGet.org using
-OIDC. The single managed `PerfectCommsStarlight.dll` remains the
-`PerfectComms-Starlight-testers-*` workflow artifact for Starlight beta or
-approved local-mod testing. GitHub release notes are generated automatically.
+checks every version field, publishes the desktop `PerfectComms.dll` and
+`PerfectComms-OBS-win-x64.zip` GitHub release assets, and publishes the
+reference-only API package to NuGet.org using OIDC. The single managed
+`PerfectCommsStarlight.dll` remains the `PerfectComms-Starlight-testers-*`
+workflow artifact for Starlight beta or approved local-mod testing. The GitHub
+release notes are the matching `CHANGELOG.md` section.
 A failed gate cannot publish a partial release.

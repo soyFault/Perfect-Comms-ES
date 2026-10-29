@@ -43,8 +43,6 @@ internal readonly record struct FirstRunHudPreset(
 
 internal static class FirstRunHudPresets
 {
-    internal const int CommonCount = 3;
-
     internal static readonly IReadOnlyList<FirstRunHudPreset> All =
         new FirstRunHudPreset[]
         {
@@ -291,6 +289,15 @@ internal sealed class FirstRunSetupDraft
         Hud = OriginalHud;
         SelectedHudPreset = FirstRunHudPresets.Match(Hud);
         OriginalHudSelected = true;
+    }
+
+    internal string SelectedHudDescription()
+    {
+        if (SelectedHudPreset >= 0 && SelectedHudPreset < FirstRunHudPresets.All.Count)
+            return FirstRunHudPresets.All[SelectedHudPreset].Description;
+        return OriginalHudSelected
+            ? Loc.T("setup.keeps_custom_layout", "Keeps your existing custom layout.")
+            : Loc.T("setup.choose_a_hud_layout_to_continue", "Choose a HUD layout to continue.");
     }
 
     internal int MicrophoneIndex()

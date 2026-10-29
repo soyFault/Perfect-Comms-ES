@@ -3,6 +3,8 @@
 Compara **`artriy/Perfect-Comms`** (upstream, solo inglés) con **tu versión** (`soyFault/Perfect-Comms-ES`, rama `claude-local`, lista para llevar a `new-spanish`), y explica cómo funciona el sistema de locales.
 Detalle por etapa: `etapa0.md` … `etapa6.md`. Plan original: `../LOCALIZATION-PLAN.md`.
 
+> **Actualizacion 4.1.12.** La rama `4.1.12` aplica esta localizacion sobre upstream `3835ed2` (v4.1.12); detalles en `etapa7-4.1.12.md`. Lo de abajo describe la comparacion contra 4.1.11 (`17177e1`).
+
 > **Punto de partida.** Al escribir esto, `main` de upstream está en `17177e1 "redesign"` (18-oct-2026), que es **exactamente** la base de tu `new-spanish`. Por eso la comparación es limpia: todo lo que difiere es lo que se añadió en `claude-local` (15 commits, 50 archivos fuera de `docs/`, +4364 / −804 líneas; la mayoría son los XML y las pruebas).
 
 ## 1. Resumen en una tabla

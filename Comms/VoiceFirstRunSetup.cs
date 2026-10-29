@@ -13,34 +13,30 @@ namespace VoiceChatPlugin.VoiceChat;
 /// </summary>
 internal static class VoiceFirstRunSetup
 {
-    private const int WelcomePage = 0;
-    private const int AudioPage = 1;
-    private const int ControlsPage = 2;
-    private const int HudPage = 3;
-    private const int ReadyPage = 4;
-    private const int PageCount = 5;
+    private const int AudioPage = 0;
+    private const int ControlsPage = 1;
+    private const int HudPage = 2;
+    private const int ReadyPage = 3;
+    private const int PageCount = 4;
 
-    private const float PanelWidth = 1040f;
-    private const float PanelHeight = 680f;
-    private const float FooterY = -496f;
-    private const float ContentTopY = -130f;
+    private const float PanelWidth = 1060f;
+    private const float PanelHeight = 760f;
+    private const float FooterHeight = 80f;
+    private const float ContentTopY = -96f;
+    private const float HudPreviewScale = 1.15f;
     private const float ShellClipInset = 16f;
     private const float ContentSideInset = 12f;
 
-    private static readonly Color32 SetupSurface = new(18, 24, 33, 255);
-    private static readonly Color32 SetupSurfaceRaised = new(23, 31, 42, 255);
-    private static readonly Color32 SetupSurfaceHover = new(29, 39, 52, 255);
-    private static readonly Color32 SetupBorder = new(69, 86, 108, 105);
-    private static readonly Color32 SetupTextSecondary = new(194, 204, 218, 255);
-    private static readonly Color32 SetupTextTertiary = new(156, 173, 196, 255);
+    private static readonly Color32 SetupSurfaceRaised = VoiceUiKit.PanelInner;
+    private static readonly Color32 SetupSurfaceHover = VoiceUiKit.ControlHover;
+    private static readonly Color32 SetupBorder = VoiceUiKit.Divider;
+    private static readonly Color32 SetupTextSecondary = VoiceUiKit.TextMuted;
+    private static readonly Color32 SetupTextTertiary = VoiceUiKit.TextFaint;
     private static readonly Color32 SetupSuccess = new(77, 225, 141, 255);
     private static readonly Color32 SetupWarning = new(245, 184, 68, 255);
 
-    // Property, not a static field: resolved when the page header is built, in the current language.
-    private static string[] StepNames => new[]
-    {
-        Loc.T("setup.step_welcome", "Welcome"), Loc.T("setup.step_audio", "Audio"), Loc.T("setup.step_controls", "Controls"), Loc.T("setup.step_hud", "HUD"), Loc.T("setup.step_review", "Review"),
-    };
+    private static readonly string[] StepNames =
+        { Loc.T("setup.audio", "Audio"), Loc.T("setup.controls", "Controls"), Loc.T("setup.hud", "HUD"), Loc.T("setup.review", "Review") };
 
     private static VoiceUiKit.PanelShell? _shell;
     private static RectTransform? _chromeRoot;
@@ -55,21 +51,21 @@ internal static class VoiceFirstRunSetup
     private static SpeakingBarLivePreview? _hudPreview;
     private static VoiceUiKit.LiveLevelMeter? _micLevelMeter;
     private static readonly List<VoiceUiKit.Row> Rows = new();
-    private static readonly List<SetupButton> Buttons = new();
-    private static readonly List<SetupButton> PromptButtons = new();
+    private static readonly List<VoiceUiKit.ActionButton> Buttons = new();
+    private static readonly List<VoiceUiKit.ActionButton> PromptButtons = new();
     private static readonly List<HudPresetCard> HudCards = new();
-    private static readonly List<CelebrationDot> CelebrationDots = new();
 
     private static TextMeshProUGUI? _outputStatus;
     private static TextMeshProUGUI? _micModeHelpText;
     private static TextMeshProUGUI? _hudDescriptionText;
-    private static SetupButton? _micTestButton;
-    private static SetupButton? _speakerTestButton;
+    private static VoiceUiKit.ActionButton? _micTestButton;
+    private static VoiceUiKit.ActionButton? _speakerTestButton;
     private static TextMeshProUGUI? _finishError;
     private static TextMeshProUGUI? _promptMessage;
     private static VoiceUiKit.Row? _pushToTalkRow;
     private static CanvasGroup? _pushToTalkGroup;
     private static bool _builtHudSpeakingBarHidden;
+    private static bool _returnToReview;
 
     private static int _page;
     private static int _inputLockedUntilFrame;
@@ -109,7 +105,8 @@ internal static class VoiceFirstRunSetup
         var settings = VoiceSettings.Instance;
         if (settings == null || !settings.NeedsFirstRunSetup || _automaticAttemptedThisSession)
             return false;
-        if (VoiceSettingsPanel.IsOpen || HostSettingsPanel.IsOpen || VoiceVolumeMenu.IsOpen)
+        if (VoiceSettingsPanel.IsOpen || HostSettingsPanel.IsOpen || VoiceVolumeMenu.IsOpen ||
+            VoiceLobbyBrowserUi.IsOpen)
             return false;
 
         bool shown = Show(settings, manual: false);
@@ -125,6 +122,7 @@ internal static class VoiceFirstRunSetup
         VoiceSettingsPanel.ForceClose();
         HostSettingsPanel.ForceClose();
         VoiceVolumeMenu.ForceClose();
+        VoiceLobbyBrowserUi.ForceClose();
         if (Show(settings, manual: true))
             _automaticAttemptedThisSession = true;
     }
@@ -156,7 +154,8 @@ internal static class VoiceFirstRunSetup
                 ? FirstRunSetupDraft.CaptureExisting(settings)
                 : FirstRunSetupDraft.CreateFresh(settings);
             _completed = false;
-            _page = WelcomePage;
+            _page = AudioPage;
+            _returnToReview = false;
             _appear = 0f;
             _pageAppear = 0f;
             _hudReveal = 0f;
@@ -178,6 +177,8 @@ internal static class VoiceFirstRunSetup
                 rail: false,
                 backdrop: true,
                 guided: true);
+            var clipMin = _shell.PaneClip.offsetMin;
+            _shell.PaneClip.offsetMin = new Vector2(clipMin.x, FooterHeight + 20f);
             EnsureHudPreview();
             BuildPage();
             VoiceUiKit.RaiseAbove(_shell.RootRect);
@@ -200,6 +201,7 @@ internal static class VoiceFirstRunSetup
         if (!_shown || _shell == null || _shell.Root == null || _draft == null) return;
         bool prompt = _closePrompt != null;
         _shell.SetTitle(Loc.T("setup.perfect_comms_setup", "Perfect Comms Setup"));
+        _shell.SetSubtitle(Loc.T("ui.first_time_setup", "First-time setup"));
         // The embedded HUD preview builds its title and "LIVE" badge once; recreate it too.
         if (_hudPreview != null)
         {
@@ -279,7 +281,6 @@ internal static class VoiceFirstRunSetup
         if (_page == AudioPage) TickAudioPage(dt);
         else if (_page == ControlsPage) TickControlsPage();
         else if (_page == HudPage) TickHudCards(dt);
-        else if (_completed) TickCelebration(dt);
 
         TickHudPreview(dt, render: _page == HudPage && !_completed);
     }
@@ -298,7 +299,6 @@ internal static class VoiceFirstRunSetup
         Rows.Clear();
         Buttons.Clear();
         HudCards.Clear();
-        CelebrationDots.Clear();
         _outputStatus = null;
         _micModeHelpText = null;
         _hudDescriptionText = null;
@@ -311,140 +311,90 @@ internal static class VoiceFirstRunSetup
         _hoveredHudSettings = null;
         _hoveredHudDescription = null;
 
-        if (_chromeRoot != null) Object.Destroy(_chromeRoot.gameObject);
-        _chromeRoot = VoiceUiKit.Rect("SetupChrome", _shell.PaneRoot);
-        _chromeRoot.Anchor(new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f));
-        _chromeRoot.sizeDelta = new Vector2(-ContentSideInset * 2f, 0f);
-        _chromeRoot.anchoredPosition = Vector2.zero;
+        if (_chromeRoot != null)
+        {
+            _chromeRoot.gameObject.SetActive(false);
+            Object.Destroy(_chromeRoot.gameObject);
+        }
+        if (_pageRoot != null)
+        {
+            _pageRoot.gameObject.SetActive(false);
+            Object.Destroy(_pageRoot.gameObject);
+        }
+        _chromeRoot = VoiceUiKit.Rect("SetupChrome", _shell.RootRect);
+        _chromeRoot.Anchor(Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f));
+        _chromeRoot.offsetMin = Vector2.zero;
+        _chromeRoot.offsetMax = Vector2.zero;
 
-        _pageRoot = VoiceUiKit.Rect("SetupPage", _chromeRoot);
+        _pageRoot = VoiceUiKit.Rect("SetupPage", _shell.PaneRoot);
         _pageRoot.Anchor(new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f));
-        _pageRoot.sizeDelta = Vector2.zero;
+        _pageRoot.sizeDelta = new Vector2(-ContentSideInset * 2f, 0f);
         _pageRoot.anchoredPosition = new Vector2(14f, 0f);
         _pageGroup = _pageRoot.gameObject.AddComponent<CanvasGroup>();
         _pageGroup.alpha = 0f;
         _pageAppear = 0f;
         _inputLockedUntilFrame = Time.frameCount + 1;
 
-        if (_completed)
-        {
-            BuildCompletedPage();
-            return;
-        }
-
         BuildStepProgress();
-        switch (_page)
+        if (_completed)
+            BuildCompletedPage();
+        else
         {
-            case WelcomePage: BuildWelcomePage(); break;
-            case AudioPage: BuildAudioPage(); break;
-            case ControlsPage: BuildControlsPage(); break;
-            case HudPage: BuildHudPage(); break;
-            default: BuildReadyPage(); break;
+            switch (_page)
+            {
+                case AudioPage: BuildAudioPage(); break;
+                case ControlsPage: BuildControlsPage(); break;
+                case HudPage: BuildHudPage(); break;
+                default: BuildReadyPage(); break;
+            }
         }
         BuildFooter();
     }
 
     private static void BuildStepProgress()
     {
-        if (_chromeRoot == null || _shell == null) return;
-        AddText(_chromeRoot, Loc.T("setup.step_progress", "Step {0} of {1}", _page + 1, PageCount), 17f, VoiceUiKit.Accent,
-            TextAlignmentOptions.Left, FontStyles.Bold,
-            new Vector2(2f, -5f), new Vector2(150f, 24f));
-        AddText(_chromeRoot, StepNames[_page], 17f, SetupTextSecondary,
-            TextAlignmentOptions.Right, FontStyles.Bold,
-            new Vector2(ContentWidth - 180f, -5f), new Vector2(178f, 24f));
-
-        const float gap = 8f;
-        float segment = (ContentWidth - gap * (PageCount - 1)) / PageCount;
+        if (_chromeRoot == null) return;
+        var progress = VoiceUiKit.Rect("SetupProgress", _chromeRoot);
+        PlaceTopLeft(progress, PanelWidth - 348f, -20f, 240f, 60f);
+        AddText(progress, _completed ? Loc.T("setup.setup_saved", "Setup saved") : StepNames[_page], 18f,
+            VoiceUiKit.TextBright, TextAlignmentOptions.Left, FontStyles.Bold,
+            Vector2.zero, new Vector2(174f, 28f));
+        AddText(progress, $"{(_completed ? PageCount : _page + 1)} / {PageCount}", 14f,
+            SetupTextSecondary, TextAlignmentOptions.Right, FontStyles.Normal,
+            new Vector2(176f, 0f), new Vector2(64f, 28f));
+        const float gap = 6f;
+        float width = (240f - gap * (PageCount - 1)) / PageCount;
         for (int i = 0; i < PageCount; i++)
         {
-            bool done = i < _page;
-            bool current = i == _page;
-            Color32 color = current
-                ? VoiceUiKit.Accent
-                : done ? new Color32(34, 211, 238, 135) : new Color32(54, 66, 84, 210);
-            var segmentImage = VoiceUiKit.Panel("StepSegment", _chromeRoot, color,
-                rounded: true, soft: true);
-            PlaceTopLeft(segmentImage.rectTransform, i * (segment + gap), -35f, segment, 5f);
+            var track = VoiceUiKit.Panel("StepTrack", progress, VoiceUiKit.TrackBg, rounded: false);
+            PlaceTopLeft(track.rectTransform, i * (width + gap), -40f, width, 3f);
+            if (!_completed && i > _page) continue;
+            var accent = VoiceUiKit.Panel("StepProgress", track.transform, VoiceUiKit.Accent, true, true);
+            accent.rectTransform.Anchor(Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f));
+            accent.rectTransform.offsetMin = Vector2.zero;
+            accent.rectTransform.offsetMax = Vector2.zero;
         }
     }
 
-    private static void BuildWelcomePage()
-    {
-        if (_pageRoot == null || _shell == null) return;
-        const float leftW = 568f;
-        const float gap = 26f;
-        float rightW = ContentWidth - leftW - gap;
-
-        AddText(_pageRoot, Loc.T("setup.welcome_eyebrow", "Welcome"), 17f, VoiceUiKit.Accent,
-            TextAlignmentOptions.Left, FontStyles.Bold,
-            new Vector2(4f, -78f), new Vector2(leftW, 26f));
-        AddText(_pageRoot, Loc.T("setup.set_up_perfect_comms", "Set up Perfect Comms."), 40f,
-            VoiceUiKit.TextBright, TextAlignmentOptions.Left, FontStyles.Bold,
-            new Vector2(4f, -111f), new Vector2(leftW, 58f));
-        AddText(_pageRoot,
-            Loc.T("setup.choose_your_audio_devices_controls_and_hud_everyone", "Choose your audio devices, controls, and HUD. Everyone starts from the same clean recommended setup."),
-            20f, SetupTextSecondary, TextAlignmentOptions.TopLeft, FontStyles.Normal,
-            new Vector2(4f, -181f), new Vector2(leftW - 18f, 92f), wrap: true);
-
-        var recommended = BuildCard(_pageRoot, "RecommendedStart", 4f, -306f, leftW - 22f, 92f);
-        BuildCheckBadge(recommended, new Vector2(24f, -24f), 38f, SetupSuccess);
-        AddText(recommended, Loc.T("setup.recommended_defaults_are_ready", "Recommended defaults are ready"), 21f, VoiceUiKit.TextBright,
-            TextAlignmentOptions.Left, FontStyles.Bold,
-            new Vector2(76f, -18f), new Vector2(leftW - 122f, 28f));
-        AddText(recommended, Loc.T("setup.adjust_what_matters_to_you_then_save_everything_toge", "Adjust what matters to you, then save everything together."), 17f,
-            SetupTextSecondary, TextAlignmentOptions.Left, FontStyles.Normal,
-            new Vector2(76f, -49f), new Vector2(leftW - 122f, 26f));
-
-        var time = VoiceUiKit.Panel("SetupTime", _pageRoot,
-            new Color32(34, 211, 238, 20), rounded: true, soft: true);
-        PlaceTopLeft(time.rectTransform, 4f, -421f, 286f, 42f);
-        AddText(time.rectTransform, Loc.T("setup.about_2_minutes", "About 2 minutes"), 17f, VoiceUiKit.Accent,
-            TextAlignmentOptions.Center, FontStyles.Bold,
-            Vector2.zero, new Vector2(286f, 42f));
-
-        var journey = BuildCard(_pageRoot, "SetupJourney", leftW + gap, -82f, rightW, 368f);
-        AddCardTitle(journey, Loc.T("setup.what_you_ll_set_up", "What you'll set up"), Loc.T("setup.three_focused_steps_then_one_review", "Three focused steps, then one review."));
-        BuildJourneyRow(journey, -76f, "A", Loc.T("setup.step_audio", "Audio"), Loc.T("setup.choose_your_input_output_and_playback_level", "Choose your input, output, and playback level."));
-#if ANDROID
-        BuildJourneyRow(journey, -167f, "C", Loc.T("setup.controls", "Controls"), AndroidVoiceUiPolicy.ControlsJourneyHelp);
-#else
-        BuildJourneyRow(journey, -167f, "C", Loc.T("setup.controls", "Controls"), Loc.T("setup.controls_journey_help", "Talk mode, startup behavior, and shortcuts."));
-#endif
-        BuildJourneyRow(journey, -258f, "H", Loc.T("setup.step_hud", "HUD"), Loc.T("setup.choose_a_layout_using_the_live_lobby_preview", "Choose a layout using the live lobby preview."));
-    }
 
     private static void BuildAudioPage()
     {
         if (_pageRoot == null || _shell == null || _draft == null) return;
-        BuildPageHeading(Loc.T("setup.choose_your_audio", "Choose your audio"), Loc.T("setup.select_where_your_voice_comes_from_and_where_you_hea", "Select where your voice comes from and where you hear other players."));
+        BuildPageHeading(Loc.T("setup.let_s_get_you_heard", "Let's get you heard."), Loc.T("setup.choose_your_devices_first_nothing_changes_until", "Choose your devices first. Nothing changes until the final save."));
         VoiceChatLocalSettings.MaybeRefreshDeviceLists(resolveSavedIndices: false);
         _micListVersion = VoiceChatLocalSettings.MicDeviceListVersion;
         _speakerListVersion = VoiceChatLocalSettings.SpkDeviceListVersion;
         _audioPreview ??= new FirstRunAudioPreview();
 
-        const float cardW = 780f;
-        float cardX = (ContentWidth - cardW) * 0.5f;
-        const float cardH = 338f;
-        var devices = BuildCard(_pageRoot, "DevicesCard", cardX, ContentTopY, cardW, cardH);
-
-        AddCardTitle(devices, Loc.T("setup.input_output", "Input & output"), Loc.T("setup.use_system_defaults_or_choose_a_specific_device", "Use system defaults, or choose a specific device."), 344f);
-        _micTestButton = AddButton(devices, Loc.T("setup.test_mic", "Test mic"), 146f, 44f,
-            cardW - 324f, -11f, ButtonKind.Secondary,
-            () =>
-            {
-                if (_audioPreview == null || _draft == null) return;
-                if (_audioPreview.IsMicrophoneTestActive) _audioPreview.StopMicrophone();
-                else _audioPreview.StartMicrophone(_draft);
-            },
-            () => _audioPreview?.IsSpeakerTestBusy != true);
-        _micLevelMeter = new VoiceUiKit.LiveLevelMeter(
-            devices, "MicLiveLevel", 146f, 6f, hideWhenInactive: true);
-        PlaceTopLeft(_micLevelMeter.Root, cardW - 324f, -58f, 146f, 6f);
-        _speakerTestButton = AddButton(devices, Loc.T("setup.test_output", "Test output"), 146f, 44f,
-            cardW - 166f, -11f, ButtonKind.Secondary,
-            () => _audioPreview?.PlayTestSound(_draft),
-            () => _audioPreview is { IsSpeakerTestBusy: false, IsMicrophoneTestStarting: false });
+        float channelWidth = (ContentWidth - 32f) * 0.5f;
+        var input = VoiceUiKit.Rect("InputChannel", _pageRoot);
+        PlaceTopLeft(input, 0f, ContentTopY, channelWidth, 196f);
+        var output = VoiceUiKit.Rect("OutputChannel", _pageRoot);
+        PlaceTopLeft(output, channelWidth + 32f, ContentTopY, channelWidth, 196f);
+        AddText(input, Loc.T("setup.your_voice", "Your voice"), 13f, VoiceUiKit.TextFaint, TextAlignmentOptions.Left,
+            FontStyles.Bold, new Vector2(22f, 0f), new Vector2(channelWidth - 44f, 22f));
+        AddText(output, Loc.T("setup.your_lobby", "Your lobby"), 13f, VoiceUiKit.TextFaint, TextAlignmentOptions.Left,
+            FontStyles.Bold, new Vector2(22f, 0f), new Vector2(channelWidth - 44f, 22f));
         AddRow(new VoiceUiKit.StepperRow(
                 DraftMicrophoneIndexForUi,
                 i =>
@@ -458,12 +408,22 @@ internal static class VoiceFirstRunSetup
                     _audioPreview?.InvalidateMicrophoneVerification();
                     _audioPreview?.RestartForDeviceChange(_draft);
                 },
-                DraftMicrophoneCountForUi,
-                DraftMicrophoneNameForUi,
+                DraftMicrophoneCountForUi, DraftMicrophoneNameForUi,
                 compactFullWidth: true)
-            .Build(devices, Loc.T("setup.input_device", "Input device"), cardW, -66f, 86f,
+            .Build(input, Loc.T("setup.microphone", "Microphone"), channelWidth, -30f, 86f,
                 Loc.T("setup.the_microphone_perfect_comms_captures", "The microphone Perfect Comms captures.")));
-
+        _micTestButton = AddButton(input, Loc.T("setup.test_mic", "Test mic"), 154f, 44f,
+            22f, -136f, VoiceUiKit.ButtonKind.Secondary,
+            () =>
+            {
+                if (_audioPreview == null || _draft == null) return;
+                if (_audioPreview.IsMicrophoneTestActive) _audioPreview.StopMicrophone();
+                else _audioPreview.StartMicrophone(_draft);
+            },
+            () => _audioPreview?.IsSpeakerTestBusy != true);
+        _micLevelMeter = new VoiceUiKit.LiveLevelMeter(
+            input, "MicLiveLevel", channelWidth - 222f, 8f, hideWhenInactive: true);
+        PlaceTopLeft(_micLevelMeter.Root, 198f, -154f, channelWidth - 222f, 8f);
 #if WINDOWS
         AddRow(new VoiceUiKit.StepperRow(
                 DraftSpeakerIndexForUi,
@@ -476,233 +436,178 @@ internal static class VoiceFirstRunSetup
                     _verifiedSpeakerDevice = string.Empty;
                     _audioPreview?.InvalidateOutputVerification();
                 },
-                DraftSpeakerCountForUi,
-                DraftSpeakerNameForUi,
+                DraftSpeakerCountForUi, DraftSpeakerNameForUi,
                 compactFullWidth: true)
-            .Build(devices, Loc.T("setup.output_device", "Output device"), cardW, -154f, 86f,
-                Loc.T("setup.the_headphones_or_speakers_used_for_voice_playback", "The headphones or speakers used for voice playback.")));
+            .Build(output, Loc.T("setup.headphones_or_speakers", "Headphones or speakers"), channelWidth, -30f, 86f,
+                Loc.T("setup.where_you_hear_other_players", "Where you hear other players.")));
 #else
-        var route = BuildInlineNotice(devices, 22f, -158f, cardW - 44f, 68f,
-            Loc.T("setup.android_output_route", "Output follows your current Android audio route."), VoiceUiKit.Accent);
-        route.gameObject.name = "AndroidOutputRoute";
+        BuildInlineNotice(output, 22f, -30f, channelWidth - 44f, 86f,
+            Loc.T("setup.output_follows_your_current_android_audio_route", "Output follows your current Android audio route."), VoiceUiKit.Accent);
 #endif
+        _speakerTestButton = AddButton(output, Loc.T("setup.test_output", "Test output"), 154f, 44f,
+            22f, -136f, VoiceUiKit.ButtonKind.Secondary,
+            () => _audioPreview?.PlayTestSound(_draft),
+            () => _audioPreview is { IsSpeakerTestBusy: false, IsMicrophoneTestStarting: false });
+        _outputStatus = AddText(_pageRoot, Loc.T("setup.mic_and_output_tests_are_optional", "Mic and output tests are optional"), 16f,
+            SetupTextSecondary, TextAlignmentOptions.Left, FontStyles.Normal,
+            new Vector2(22f, -302f), new Vector2(ContentWidth - 44f, 42f), wrap: true);
+        var divider = VoiceUiKit.Panel("AudioDivider", _pageRoot, VoiceUiKit.Divider, rounded: false);
+        PlaceTopLeft(divider.rectTransform, 22f, -356f, ContentWidth - 44f, 1f);
         AddRow(new VoiceUiKit.SliderRow(
-                () => _draft.MasterVolume,
-                v => _draft.MasterVolume = v,
-                0.1f, 2f, v => $"{Mathf.RoundToInt(v * 100f)}%",
-                stacked: true)
-            .Build(devices, Loc.T("setup.voice_playback_volume", "Voice playback volume"), cardW, -244f, 58f,
+                () => _draft.MasterVolume, v => _draft.MasterVolume = v,
+                0.1f, 2f, v => $"{Mathf.RoundToInt(v * 100f)}%", stacked: true)
+            .Build(_pageRoot, Loc.T("setup.voice_playback_volume", "Voice playback volume"), ContentWidth, -374f, 76f,
                 Loc.T("setup.overall_volume_for_other_players", "Overall volume for other players.")));
-
-        _outputStatus = AddText(devices, Loc.T("setup.mic_and_output_tests_are_optional", "Mic and output tests are optional"), 17f,
-            SetupTextSecondary, TextAlignmentOptions.Center, FontStyles.Normal,
-            new Vector2(22f, -304f), new Vector2(cardW - 44f, 26f), wrap: true);
+        AddText(_pageRoot, Loc.T("setup.tests_are_optional_you_can_change_these", "Tests are optional. You can change these choices later."), 14f,
+            SetupTextTertiary, TextAlignmentOptions.Left, FontStyles.Normal,
+            new Vector2(22f, -476f), new Vector2(ContentWidth - 44f, 24f));
     }
 
     private static void BuildControlsPage()
     {
-        if (_pageRoot == null || _shell == null || _draft == null) return;
-#if ANDROID
-        BuildPageHeading(Loc.T("setup.choose_how_you_talk", "Choose how you talk"), Loc.T("setup.set_your_talk_mode_and_learn_the_in_game_touch_contr", "Set your talk mode and learn the in-game touch controls."));
-#else
-        BuildPageHeading(Loc.T("setup.choose_how_you_talk", "Choose how you talk"), Loc.T("setup.set_your_talk_mode_and_the_controls_you_will_use_in", "Set your talk mode and the controls you will use in a lobby."));
-#endif
-
-        const float gap = 18f;
-        float leftW = 388f;
-        float rightW = ContentWidth - leftW - gap;
-        const float cardH = 338f;
-        var talk = BuildCard(_pageRoot, "TalkCard", 0f, ContentTopY, leftW, cardH);
-        var binds = BuildCard(_pageRoot, "BindingsCard", leftW + gap, ContentTopY, rightW, cardH);
-
-        AddCardTitle(talk, Loc.T("setup.talk_behavior", "Talk behavior"), Loc.T("setup.these_can_be_changed_later_in_settings", "These can be changed later in Settings."));
+        if (_pageRoot == null || _draft == null) return;
+        BuildPageHeading(Loc.T("setup.your_voice_your_controls", "Your voice, your controls."), Loc.T("setup.pick_a_talk_mode_then_put_the", "Pick a talk mode, then put the essentials within reach."));
         string microphoneModeHelp =
 #if ANDROID
             Loc.T("setup.mic_mode_help_android", "Open Mic uses voice activation. Push To Talk sends only while you hold the microphone button.");
 #else
             Loc.T("setup.mic_mode_help", "Open Mic uses voice activation. Push To Talk only sends while its key is held.");
 #endif
-        AddRow(new VoiceUiKit.StepperRow(
-                () => (int)_draft.MicMode,
-                i => _draft.MicMode = (VoiceMicMode)Mathf.Clamp(i, 0, 1),
-                () => 2,
-                i => i == 0 ? Loc.T("setup.open_mic", "Open Mic") : Loc.T("setup.push_to_talk_mode", "Push To Talk"),
-                compactFullWidth: true)
-            .Build(talk, Loc.T("setup.microphone_mode", "Microphone mode"), leftW, -63f, 84f,
-                microphoneModeHelp));
-        AddRow(new VoiceUiKit.ToggleRow(
-                () => _draft.StartMuted,
-                v => _draft.StartMuted = v)
-            .Build(talk, Loc.T("setup.start_with_mic_muted", "Start with mic muted"), leftW, -153f, 54f,
-                Loc.T("setup.join_each_voice_room_with_your_microphone_muted", "Join each voice room with your microphone muted.")));
-        AddRow(new VoiceUiKit.ToggleRow(
-                () => _draft.StartDeafened,
-                v => _draft.StartDeafened = v)
-            .Build(talk, Loc.T("setup.start_deafened", "Start deafened"), leftW, -207f, 54f,
-                Loc.T("setup.join_each_voice_room_with_playback_muted_and_microph", "Join each voice room with playback muted and microphone transmission paused until you undeafen.")));
-
+        AddRow(new VoiceUiKit.MicModeRow(
+                () => _draft.MicMode, mode => _draft.MicMode = mode)
+            .Build(_pageRoot, ContentWidth, ContentTopY, 64f, microphoneModeHelp));
+        _micModeHelpText = AddText(_pageRoot, "", 15f, SetupTextSecondary,
+            TextAlignmentOptions.Left, FontStyles.Normal,
+            new Vector2(22f, -164f), new Vector2(ContentWidth - 44f, 42f), wrap: true);
+        AddText(_pageRoot, Loc.T("setup.joining_shortcuts", "Joining & shortcuts"), 13f, SetupTextSecondary,
+            TextAlignmentOptions.Left, FontStyles.Bold,
+            new Vector2(22f, -214f), new Vector2(ContentWidth - 44f, 22f));
 #if WINDOWS
-        AddRow(new VoiceUiKit.ToggleRow(
-                () => _draft.AllowKeybindsWhileChatOpen,
-                value => _draft.AllowKeybindsWhileChatOpen = value)
-            .Build(talk, Loc.T("setup.allow_keybinds_in_chat", "Allow keybinds in chat"), leftW, -261f, 54f,
-                Loc.T("setup.keeps_perfect_comms_shortcuts_active_while_typing_pr", "Keeps Perfect Comms shortcuts active while typing. Printable shortcut keys can also type into chat.")));
+        float startupWidth = (ContentWidth - 32f) / 3f;
 #else
-        var modeNotice = BuildInlineNotice(talk, 20f, -270f, leftW - 40f, 59f,
-            "", VoiceUiKit.Accent);
-        _micModeHelpText = modeNotice.GetComponentInChildren<TextMeshProUGUI>();
-        if (_micModeHelpText != null)
-        {
-            _micModeHelpText.enableWordWrapping = true;
-            _micModeHelpText.overflowMode = TextOverflowModes.Overflow;
-        }
+        float startupWidth = (ContentWidth - 16f) * 0.5f;
 #endif
-
+        var muted = VoiceUiKit.Rect("StartMuted", _pageRoot);
+        PlaceTopLeft(muted, 0f, -238f, startupWidth, 58f);
+        AddRow(new VoiceUiKit.ToggleRow(() => _draft.StartMuted, value => _draft.StartMuted = value)
+            .Build(muted, Loc.T("setup.start_muted", "Start muted"), startupWidth, 0f, 58f,
+                Loc.T("setup.join_each_voice_room_with_your_microphone", "Join each voice room with your microphone muted."), stacked: true));
+        var deafened = VoiceUiKit.Rect("StartDeafened", _pageRoot);
+        PlaceTopLeft(deafened, startupWidth + 16f, -238f, startupWidth, 58f);
+        AddRow(new VoiceUiKit.ToggleRow(() => _draft.StartDeafened, value => _draft.StartDeafened = value)
+            .Build(deafened, Loc.T("setup.start_deafened", "Start deafened"), startupWidth, 0f, 58f,
+                Loc.T("setup.join_with_playback_muted_and_microphone_transmission", "Join with playback muted and microphone transmission paused until you undeafen."), stacked: true));
 #if WINDOWS
-        AddCardTitle(binds, Loc.T("setup.keyboard_shortcuts", "Keyboard shortcuts"), Loc.T("setup.select_a_shortcut_then_press_a_key_or_chord", "Select a shortcut, then press a key or chord."));
-        AddBindingRow(binds, rightW, -62f, Loc.T("setup.mute_unmute_microphone", "Mute / unmute microphone"),
-            () => _draft.ToggleMute, v => _draft.ToggleMute = v,
-            null);
-        AddBindingRow(binds, rightW, -116f, Loc.T("setup.push_to_mute", "Push to Mute"),
-            () => _draft.PushToMute, v => _draft.PushToMute = v,
-            Loc.T("setup.your_microphone_stays_muted_only_while_this_shortcut", "Your microphone stays muted only while this shortcut is held."));
-        _pushToTalkRow = AddBindingRow(binds, rightW, -170f, Loc.T("setup.push_to_talk_hold", "Push to Talk (hold)"),
-            () => _draft.PushToTalk, v => _draft.PushToTalk = v,
-            Loc.T("setup.required_only_when_push_to_talk_mode_is_selected", "Required only when Push to Talk mode is selected."));
+        var chat = VoiceUiKit.Rect("ChatShortcuts", _pageRoot);
+        PlaceTopLeft(chat, (startupWidth + 16f) * 2f, -238f, startupWidth, 58f);
+        AddRow(new VoiceUiKit.ToggleRow(
+                () => _draft.AllowKeybindsWhileChatOpen, value => _draft.AllowKeybindsWhileChatOpen = value)
+            .Build(chat, Loc.T("setup.shortcuts_in_chat", "Shortcuts in chat"), startupWidth, 0f, 58f,
+                Loc.T("setup.keeps_shortcuts_active_while_typing_printable_keys", "Keeps shortcuts active while typing. Printable keys can also type into chat."), stacked: true));
+        AddText(_pageRoot, Loc.T("setup.your_shortcuts", "Your shortcuts"), 13f, SetupTextSecondary,
+            TextAlignmentOptions.Left, FontStyles.Bold,
+            new Vector2(22f, -318f), new Vector2(ContentWidth - 44f, 22f));
+        float width = (ContentWidth - 32f) * 0.5f;
+        var left = VoiceUiKit.Rect("PrimaryShortcuts", _pageRoot);
+        PlaceTopLeft(left, 0f, -344f, width, 162f);
+        var right = VoiceUiKit.Rect("OtherShortcuts", _pageRoot);
+        PlaceTopLeft(right, width + 32f, -344f, width, 162f);
+        AddBindingRow(left, width, 0f, Loc.T("setup.mute_mic", "Mute mic"),
+            () => _draft.ToggleMute, value => _draft.ToggleMute = value, Loc.T("setup.toggle_microphone_transmission", "Toggle microphone transmission."));
+        AddBindingRow(left, width, -54f, Loc.T("setup.hold_to_mute", "Hold to mute"),
+            () => _draft.PushToMute, value => _draft.PushToMute = value, Loc.T("setup.mute_only_while_held", "Mute only while held."));
+        _pushToTalkRow = AddBindingRow(left, width, -108f, Loc.T("setup.push_to_talk", "Push to talk"),
+            () => _draft.PushToTalk, value => _draft.PushToTalk = value, Loc.T("setup.required_in_push_to_talk_mode", "Required in Push To Talk mode."));
         _pushToTalkGroup = _pushToTalkRow.Root.gameObject.AddComponent<CanvasGroup>();
-        AddBindingRow(binds, rightW, -224f, Loc.T("setup.deafen_undeafen", "Deafen / undeafen"),
-            () => _draft.ToggleSpeaker, v => _draft.ToggleSpeaker = v,
-            null);
-        AddBindingRow(binds, rightW, -278f, Loc.T("setup.open_voice_menu", "Open voice menu"),
-            () => _draft.OpenVoiceSettings, v => _draft.OpenVoiceSettings = v,
-            null);
+        AddBindingRow(right, width, 0f, Loc.T("setup.deafen", "Deafen"),
+            () => _draft.ToggleSpeaker, value => _draft.ToggleSpeaker = value, Loc.T("setup.toggle_playback_and_microphone_pause", "Toggle playback and microphone pause."));
+        AddBindingRow(right, width, -54f, Loc.T("setup.open_voice_menu", "Open voice menu"),
+            () => _draft.OpenVoiceSettings, value => _draft.OpenVoiceSettings = value, null);
+        AddText(right, Loc.T("setup.select_a_shortcut_then_press_a_key", "Select a shortcut, then press a key or chord."), 14f, SetupTextTertiary,
+            TextAlignmentOptions.Left, FontStyles.Normal,
+            new Vector2(22f, -112f), new Vector2(width - 44f, 42f), wrap: true);
 #else
-        AddCardTitle(binds, Loc.T("setup.touch_controls", "In-game touch controls"), Loc.T("setup.touch_controls_sub", "Open Voice Settings later from the Among Us Options menu."));
-        BuildJourneyRow(binds, -74f, "M", Loc.T("setup.touch_microphone", "Microphone"), AndroidVoiceUiPolicy.MicrophoneControlHelp);
-        BuildJourneyRow(binds, -160f, "R", Loc.T("setup.touch_team_radio", "Team Radio"), AndroidVoiceUiPolicy.TeamRadioControlHelp);
-        BuildJourneyRow(binds, -246f, "S", Loc.T("setup.touch_deafen", "Deafen"), Loc.T("setup.touch_deafen_help", "Tap the speaker button to mute playback and pause microphone transmission."));
+        AddText(_pageRoot, Loc.T("setup.in_game_touch_controls", "In-game touch controls"), 13f, SetupTextSecondary,
+            TextAlignmentOptions.Left, FontStyles.Bold,
+            new Vector2(22f, -318f), new Vector2(ContentWidth - 44f, 22f));
+        float width = (ContentWidth - 32f) / 3f;
+        BuildTouchGuide(0f, width, VoiceUiBranding.Logo(), Loc.T("setup.microphone", "Microphone"), AndroidVoiceUiPolicy.MicrophoneControlHelp);
+        BuildTouchGuide(width + 16f, width, VoiceUiBranding.CategoryIcon(VoiceSettingsCategory.Audio),
+            Loc.T("setup.team_radio", "Team Radio"), AndroidVoiceUiPolicy.TeamRadioControlHelp);
+        BuildTouchGuide((width + 16f) * 2f, width, VoiceUiBranding.CategoryIcon(VoiceSettingsCategory.Devices),
+            Loc.T("setup.deafen", "Deafen"), Loc.T("setup.tap_the_speaker_button_to_mute_playback", "Tap the speaker button to mute playback and pause microphone transmission."));
 #endif
+        TickControlsPage();
     }
 
     private static void BuildHudPage()
     {
-        if (_pageRoot == null || _shell == null || _draft == null) return;
-        _hudDescriptionText = BuildPageHeading(
-            Loc.T("setup.choose_your_hud", "Choose your HUD"),
-            Loc.T("setup.choose_what_appears_in_game_then_preview_a_speaking", "Choose what appears in game, then preview a speaking-bar layout."));
+        if (_pageRoot == null || _draft == null) return;
+        _hudDescriptionText = BuildPageHeading(Loc.T("setup.make_it_yours", "Make it yours."), Loc.T("setup.preview_a_layout_then_choose_what_s", "Preview a layout, then choose what's visible in game."));
         EnsureHudPreview();
-
-        const float visibilityGap = 10f;
-        const float visibilityCardH = 62f;
-        float visibilityW = (ContentWidth - visibilityGap * 3f) / 4f;
-
-        var controlsVisibility = BuildCard(
-            _pageRoot, "ControlsVisibility", 0f, ContentTopY,
-            visibilityW, visibilityCardH);
-        AddRow(new VoiceUiKit.ToggleRow(
-                () => _draft.HideVoiceControls,
-                value => _draft.HideVoiceControls = value)
-            .Build(controlsVisibility, Loc.T("setup.hide_controls", "Hide controls"), visibilityW, -4f, 54f,
-                Loc.T("setup.hides_the_microphone_deafen_and_radio_controls_keybo", "Hides the microphone, deafen, and radio controls. Keyboard shortcuts still work."),
-                stacked: true));
-
-        var barVisibility = BuildCard(
-            _pageRoot, "SpeakingBarVisibility", visibilityW + visibilityGap, ContentTopY,
-            visibilityW, visibilityCardH);
-        AddRow(new VoiceUiKit.ToggleRow(
-                () => _draft.HideSpeakingBar,
-                value => _draft.HideSpeakingBar = value)
-            .Build(barVisibility, Loc.T("setup.hide_speaking_bar", "Hide speaking bar"), visibilityW, -4f, 54f,
-                Loc.T("setup.hides_the_in_game_speaking_bar_and_its_layout_previe", "Hides the in-game speaking bar and its layout preview."),
-                stacked: true));
-
-        var meetingVisibility = BuildCard(
-            _pageRoot, "MeetingOverlayVisibility",
-            (visibilityW + visibilityGap) * 2f, ContentTopY,
-            visibilityW, visibilityCardH);
-        AddRow(new VoiceUiKit.ToggleRow(
-                () => _draft.HideMeetingOverlay,
-                value => _draft.HideMeetingOverlay = value)
-            .Build(meetingVisibility, Loc.T("setup.hide_meeting_overlay", "Hide meeting overlay"), visibilityW, -4f, 54f,
-                Loc.T("setup.hides_the_colored_speaking_glow_around_meeting_cards", "Hides the colored speaking glow around meeting cards."),
-                stacked: true));
-
-        var connectionVisibility = BuildCard(
-            _pageRoot, "ConnectionStatusVisibility",
-            (visibilityW + visibilityGap) * 3f, ContentTopY,
-            visibilityW, visibilityCardH);
-        AddRow(new VoiceUiKit.ToggleRow(
-                () => _draft.HideConnectionStatus,
-                value => _draft.HideConnectionStatus = value)
-            .Build(connectionVisibility, Loc.T("setup.hide_connection_status", "Hide connection status"), visibilityW, -4f, 54f,
-                Loc.T("setup.hides_lobby_connection_progress_and_active_retry_mes", "Hides lobby connection progress and active retry messages."),
-                stacked: true));
-
         _builtHudSpeakingBarHidden = _draft.HideSpeakingBar;
+        float previewWidth = SpeakingBarLivePreview.EmbeddedCardSize.x * HudPreviewScale;
+        float pickerX = 22f + previewWidth + 32f;
+        float pickerWidth = ContentWidth - pickerX - 22f;
+        var picker = VoiceUiKit.Rect("LayoutChoices", _pageRoot);
+        PlaceTopLeft(picker, pickerX, ContentTopY, pickerWidth, 302f);
+        picker.gameObject.AddComponent<CanvasGroup>().alpha = _draft.HideSpeakingBar ? 0.38f : 1f;
+        AddText(picker, Loc.T("setup.layouts", "Layouts"), 13f, SetupTextSecondary, TextAlignmentOptions.Left, FontStyles.Bold,
+            Vector2.zero, new Vector2(pickerWidth, 24f));
+        Buttons.Add(new VoiceUiKit.ActionButton(picker, Loc.T("setup.use_existing_layout", "Use existing layout"), 200f, 32f,
+            pickerWidth - 200f, 4f,
+            _draft.OriginalHudSelected && _draft.SelectedHudPreset < 0
+                ? VoiceUiKit.ButtonKind.Secondary
+                : VoiceUiKit.ButtonKind.Ghost,
+            () =>
+            {
+                _draft.SelectOriginalHud();
+                BuildPage();
+            }, () => !_draft.HideSpeakingBar));
+        float cardWidth = (pickerWidth - 12f) * 0.5f;
+        for (int i = 0; i < FirstRunHudPresets.All.Count; i++)
+        {
+            var preset = FirstRunHudPresets.All[i];
+            var card = new HudPresetCard(i, preset.Name, preset.Description,
+                FirstRunHudPresets.Apply(_draft.Hud, preset));
+            card.Build(picker, i % 2 * (cardWidth + 12f), -44f - i / 2 * 52f,
+                cardWidth, 44f);
+            HudCards.Add(card);
+        }
         if (_draft.HideSpeakingBar)
         {
-            BuildInlineNotice(
-                _pageRoot,
-                120f,
-                ContentTopY - 164f,
-                ContentWidth - 240f,
-                92f,
-                Loc.T("setup.the_speaking_bar_is_hidden_turn_off_hide_speaking_ba", "The speaking bar is hidden. Turn off Hide speaking bar to choose and preview a layout."),
-                SetupTextSecondary);
-            return;
+            var placeholder = VoiceUiKit.Panel("HiddenSpeakingBar", _pageRoot, SetupSurfaceRaised);
+            PlaceTopLeft(placeholder.rectTransform, 22f, ContentTopY,
+                previewWidth, SpeakingBarLivePreview.EmbeddedCardSize.y * HudPreviewScale);
+            AddText(placeholder.transform, Loc.T("setup.speaking_bar_hidden", "Speaking bar hidden"), 24f, VoiceUiKit.TextBright,
+                TextAlignmentOptions.Center, FontStyles.Bold,
+                new Vector2(24f, -100f), new Vector2(previewWidth - 48f, 38f));
+            AddText(placeholder.transform, Loc.T("setup.enable_it_below_to_preview_layouts", "Enable it below to preview layouts."), 16f, SetupTextSecondary,
+                TextAlignmentOptions.Center, FontStyles.Normal,
+                new Vector2(24f, -146f), new Vector2(previewWidth - 48f, 28f));
         }
-
-        float previewW = SpeakingBarLivePreview.EmbeddedCardSize.x;
-        const float previewGap = 18f;
-        const float layoutTopY = ContentTopY - 76f;
-        float pickerW = ContentWidth - previewW - previewGap;
-
-        AddText(_pageRoot, Loc.T("setup.most_common", "MOST COMMON"), 16f, VoiceUiKit.Accent,
-            TextAlignmentOptions.Left, FontStyles.Bold,
-            new Vector2(1f, layoutTopY), new Vector2(pickerW - 2f, 20f));
-
-        const float commonGap = 8f;
-        const float commonCardH = 44f;
-        const float commonY = layoutTopY - 22f;
-        float commonCardW = (pickerW - commonGap * 2f) / 3f;
-        for (int i = 0; i < FirstRunHudPresets.CommonCount; i++)
-        {
-            var preset = FirstRunHudPresets.All[i];
-            var previewSettings = FirstRunHudPresets.Apply(_draft.Hud, preset);
-            var card = new HudPresetCard(i, preset.DisplayName, preset.DisplayDescription,
-                previewSettings, original: false);
-            card.Build(_pageRoot,
-                i * (commonCardW + commonGap), commonY,
-                commonCardW, commonCardH, prominent: true);
-            HudCards.Add(card);
-        }
-
-        const float moreLabelY = commonY - commonCardH - 6f;
-        AddText(_pageRoot, Loc.T("setup.more_layouts", "MORE LAYOUTS"), 16f, SetupTextSecondary,
-            TextAlignmentOptions.Left, FontStyles.Bold,
-            new Vector2(1f, moreLabelY), new Vector2(pickerW - 2f, 20f));
-
-        const float moreGapX = 10f;
-        const float moreGapY = 5f;
-        const float moreCardH = 34f;
-        const float moreY = moreLabelY - 22f;
-        float moreCardW = (pickerW - moreGapX) * 0.5f;
-        for (int i = FirstRunHudPresets.CommonCount; i < FirstRunHudPresets.All.Count; i++)
-        {
-            int visualIndex = i - FirstRunHudPresets.CommonCount;
-            int col = visualIndex % 2;
-            int row = visualIndex / 2;
-            var preset = FirstRunHudPresets.All[i];
-            var previewSettings = FirstRunHudPresets.Apply(_draft.Hud, preset);
-            var card = new HudPresetCard(i, preset.DisplayName, preset.DisplayDescription,
-                previewSettings, original: false);
-            card.Build(_pageRoot,
-                col * (moreCardW + moreGapX),
-                moreY - row * (moreCardH + moreGapY),
-                moreCardW, moreCardH, prominent: false);
-            HudCards.Add(card);
-        }
-
+        float width = (ContentWidth - 32f) * 0.5f;
+        var left = VoiceUiKit.Rect("LeftHudVisibility", _pageRoot);
+        PlaceTopLeft(left, 0f, -416f, width, 108f);
+        var right = VoiceUiKit.Rect("RightHudVisibility", _pageRoot);
+        PlaceTopLeft(right, width + 32f, -416f, width, 108f);
+        AddRow(new VoiceUiKit.ToggleRow(
+                () => !_draft.HideVoiceControls, value => _draft.HideVoiceControls = !value)
+            .Build(left, Loc.T("setup.voice_controls", "Voice controls"), width, 0f, 54f,
+                Loc.T("setup.microphone_deafen_and_radio_buttons_keyboard_shortcuts", "Microphone, deafen, and radio buttons. Keyboard shortcuts remain available.")))
+            .ShowDescription(Loc.T("setup.microphone_speaker_and_radio_buttons", "Microphone, speaker and radio buttons."));
+        AddRow(new VoiceUiKit.ToggleRow(
+                () => !_draft.HideSpeakingBar, value => _draft.HideSpeakingBar = !value)
+            .Build(left, Loc.T("setup.speaking_bar", "Speaking bar"), width, -54f, 54f, Loc.T("setup.show_speaking_players_and_their_avatars", "Show speaking players and their avatars.")))
+            .ShowDescription(Loc.T("setup.the_player_list_shown_while_talking", "The player list shown while talking."));
+        AddRow(new VoiceUiKit.ToggleRow(
+                () => !_draft.HideMeetingOverlay, value => _draft.HideMeetingOverlay = !value)
+            .Build(right, Loc.T("setup.meeting_glow", "Meeting glow"), width, 0f, 54f, Loc.T("setup.speaking_glow_around_meeting_cards", "Speaking glow around meeting cards.")))
+            .ShowDescription(Loc.T("setup.show_who_is_talking_in_meetings", "Show who is talking in meetings."));
+        AddRow(new VoiceUiKit.ToggleRow(
+                () => !_draft.HideConnectionStatus, value => _draft.HideConnectionStatus = !value)
+            .Build(right, Loc.T("setup.connection_status", "Connection status"), width, -54f, 54f, Loc.T("setup.lobby_connection_progress_and_retry_messages", "Lobby connection progress and retry messages.")))
+            .ShowDescription(Loc.T("setup.connection_progress_and_retry_messages", "Connection progress and retry messages."));
         if (_hudPreviewHost != null) _hudPreviewHost.SetAsLastSibling();
     }
 
@@ -711,9 +616,7 @@ internal static class VoiceFirstRunSetup
         if (_pageRoot == null || _shell == null || _draft == null) return;
         BuildPageHeading(Loc.T("setup.review_and_save", "Review and save"), Loc.T("setup.check_the_essentials_then_apply_everything_together", "Check the essentials, then apply everything together."));
 
-        const float gap = 14f;
-        float w = (ContentWidth - gap * 2f) / 3f;
-        BuildSummaryCard(0f, w, Loc.T("setup.step_audio", "Audio"), new[]
+        BuildSummaryRow(ContentTopY, VoiceSettingsCategory.Devices, Loc.T("setup.audio", "Audio"), new[]
         {
             Loc.T("setup.sum_input", "Input: {0}", CompactDevice(_draft.MicrophoneDisplayName())),
 #if WINDOWS
@@ -725,8 +628,8 @@ internal static class VoiceFirstRunSetup
             AudioVerificationSummary(),
         }, () => GoTo(AudioPage));
 
-        string talkMode = _draft.MicMode == VoiceMicMode.OpenMic ? Loc.T("setup.open_mic", "Open Mic") : Loc.T("setup.push_to_talk", "Push to Talk");
-        BuildSummaryCard(w + gap, w, Loc.T("setup.controls", "Controls"), new[]
+        string talkMode = _draft.MicMode == VoiceMicMode.OpenMic ? Loc.T("setup.open_mic", "Open Mic") : Loc.T("setup.push_to_talk_2", "Push to Talk");
+        BuildSummaryRow(ContentTopY - 116f, VoiceSettingsCategory.Keybinds, Loc.T("setup.controls", "Controls"), new[]
         {
             Loc.T("setup.sum_mode", "Mode: {0}", talkMode),
 #if ANDROID
@@ -746,9 +649,9 @@ internal static class VoiceFirstRunSetup
         string hudName = _draft.HideSpeakingBar
             ? Loc.T("setup.speaking_bar_hidden", "Speaking bar hidden")
             : _draft.SelectedHudPreset >= 0
-                ? FirstRunHudPresets.All[_draft.SelectedHudPreset].DisplayName
+                ? FirstRunHudPresets.All[_draft.SelectedHudPreset].Name
                 : Loc.T("setup.custom_layout", "Custom layout");
-        BuildSummaryCard((w + gap) * 2f, w, Loc.T("setup.step_hud", "HUD"), new[]
+        BuildSummaryRow(ContentTopY - 232f, VoiceSettingsCategory.Hud, "HUD", new[]
         {
             hudName,
             (_draft.HideVoiceControls ? Loc.T("setup.sum_controls_hidden", "Controls hidden") : Loc.T("setup.sum_controls_shown", "Controls shown")) + " / " + (_draft.HideConnectionStatus ? Loc.T("setup.sum_connection_hidden", "Connection status hidden") : Loc.T("setup.sum_connection_shown", "Connection status shown")),
@@ -764,89 +667,64 @@ internal static class VoiceFirstRunSetup
 
         string? issue = SetupValidationIssue();
         Color32 noticeColor = issue == null ? SetupSuccess : SetupWarning;
-        var notice = BuildInlineNotice(_pageRoot, 84f, -390f, ContentWidth - 168f, 82f,
-            issue ?? Loc.T("setup.everything_is_ready_save_finish_will_apply_this_setu", "Everything is ready. Save & finish will apply this setup in one clean save."),
+        var notice = BuildInlineNotice(_pageRoot, 22f, -466f, ContentWidth - 44f, 60f,
+            issue ?? Loc.T("setup.save_these_choices_on_this_device_you", "Save these choices on this device. You can adjust them later in Settings."),
             noticeColor);
         _finishError = notice.GetComponentInChildren<TextMeshProUGUI>();
     }
 
     private static void BuildCompletedPage()
     {
-        if (_pageRoot == null || _shell == null) return;
+        if (_pageRoot == null) return;
         float center = ContentWidth * 0.5f;
-        for (int i = 0; i < 10; i++)
-        {
-            float angle = i * (Mathf.PI * 2f / 10f);
-            float radius = 108f + (i % 2) * 34f;
-            var dot = new CelebrationDot();
-            dot.Build(_pageRoot, new Vector2(
-                center + Mathf.Cos(angle) * radius,
-                -132f + Mathf.Sin(angle) * radius), i);
-            CelebrationDots.Add(dot);
-        }
-
-        var glow = VoiceUiKit.GlowImage("SuccessGlow", _pageRoot, new Color32(77, 225, 141, 54));
-        glow.rectTransform.Anchor(new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0.5f, 0.5f));
-        glow.rectTransform.sizeDelta = new Vector2(154f, 154f);
-        glow.rectTransform.anchoredPosition = new Vector2(center, -132f);
-        BuildCheckBadge(_pageRoot, new Vector2(center - 47f, -85f), 94f, SetupSuccess);
-
-        var title = AddText(_pageRoot, Loc.T("setup.you_re_all_set", "You're all set"), 38f, VoiceUiKit.TextBright,
+        BuildCheckBadge(_pageRoot, new Vector2(center - 34f, -92f), 68f, VoiceUiKit.Accent);
+        AddText(_pageRoot, Loc.T("setup.your_setup_is_saved", "Your setup is saved."), 34f, VoiceUiKit.TextBright,
             TextAlignmentOptions.Center, FontStyles.Bold,
-            new Vector2(0f, -205f), new Vector2(ContentWidth, 54f));
-        AddText(_pageRoot,
-            Loc.T("setup.your_perfect_comms_setup_has_been_saved_and_is_ready", "Your Perfect Comms setup has been saved and is ready for the next lobby."),
-            19f, SetupTextSecondary, TextAlignmentOptions.Center, FontStyles.Normal,
-            new Vector2(110f, -258f), new Vector2(ContentWidth - 220f, 46f), wrap: true);
-
-        var checklist = BuildCard(_pageRoot, "CompletionChecklist",
-            center - 310f, -326f, 620f, 76f);
-        BuildCheckBadge(checklist, new Vector2(20f, -19f), 34f, SetupSuccess);
-        AddText(checklist, Loc.T("setup.done_checklist", "Audio, controls, and HUD saved"), 18f, VoiceUiKit.TextBright,
-            TextAlignmentOptions.Left, FontStyles.Bold,
-            new Vector2(70f, -14f), new Vector2(520f, 26f));
-        AddText(checklist, Loc.T("setup.run_this_setup_again_anytime_from_perfect_comms_sett", "Run this setup again anytime from Perfect Comms Settings."), 17f,
-            SetupTextSecondary, TextAlignmentOptions.Left, FontStyles.Normal,
-            new Vector2(70f, -41f), new Vector2(520f, 24f));
-
-        AddButton(_pageRoot, Loc.T("setup.advanced_settings", "Advanced settings"), 220f, 50f, center - 230f, -430f,
-            ButtonKind.Secondary, () =>
-            {
-                CloseInternal(destroy: true);
-                VoiceSettingsPanel.ShowDeferred();
-            });
-        AddButton(_pageRoot, Loc.T("setup.done", "Done"), 220f, 50f, center + 10f, -430f,
-            ButtonKind.Primary, () => CloseInternal(destroy: true));
+            new Vector2(22f, -190f), new Vector2(ContentWidth - 44f, 52f));
+        AddText(_pageRoot, Loc.T("setup.join_a_lobby_to_start_using_perfect", "Join a lobby to start using Perfect Comms."), 18f, SetupTextSecondary,
+            TextAlignmentOptions.Center, FontStyles.Normal,
+            new Vector2(100f, -254f), new Vector2(ContentWidth - 200f, 32f));
+        AddText(_pageRoot, Loc.T("setup.audio_controls_and_hud_saved_on_this", "Audio, controls and HUD saved on this device."), 15f, SetupTextTertiary,
+            TextAlignmentOptions.Center, FontStyles.Normal,
+            new Vector2(100f, -310f), new Vector2(ContentWidth - 200f, 30f));
     }
 
     private static void BuildFooter()
     {
-        if (_chromeRoot == null || _shell == null) return;
-        var divider = VoiceUiKit.Panel("FooterDivider", _chromeRoot,
-            new Color32(105, 124, 150, 32), rounded: false);
-        PlaceTopLeft(divider.rectTransform, 0f, FooterY + 17f, ContentWidth, 1f);
-
-        AddButton(_chromeRoot, Loc.T("setup.use_existing_settings", "Use existing settings"), 220f, 48f,
-            0f, FooterY, ButtonKind.Secondary, UseExistingSettings);
-
-        if (_page > WelcomePage)
-            AddButton(_chromeRoot, Loc.T("setup.back", "Back"), 140f, 48f,
-                ContentWidth - 350f, FooterY, ButtonKind.Secondary,
-                () => GoTo(_page - 1));
-
-        if (_page < ReadyPage)
+        if (_chromeRoot == null) return;
+        var footer = VoiceUiKit.Panel("SetupFooter", _chromeRoot, VoiceUiKit.RailSurface, rounded: false);
+        footer.rectTransform.Anchor(Vector2.zero, new Vector2(1f, 0f), new Vector2(0.5f, 0f));
+        footer.rectTransform.sizeDelta = new Vector2(-2f, FooterHeight);
+        footer.rectTransform.anchoredPosition = new Vector2(0f, 1f);
+        var divider = VoiceUiKit.Panel("FooterDivider", footer.transform, VoiceUiKit.Divider, rounded: false);
+        PlaceTopLeft(divider.rectTransform, 0f, 0f, PanelWidth, 1f);
+        float nextX = PanelWidth - 210f;
+        if (_completed)
         {
-            string text = _page == WelcomePage ? Loc.T("setup.start_setup", "Start setup") : Loc.T("setup.continue", "Continue");
-            AddButton(_chromeRoot, text, 190f, 48f,
-                ContentWidth - 190f, FooterY, ButtonKind.Primary,
-                () => GoTo(_page + 1));
+            AddButton(footer.rectTransform, Loc.T("setup.advanced_settings", "Advanced settings"), 210f, 48f,
+                28f, -16f, VoiceUiKit.ButtonKind.Secondary, () =>
+                {
+                    CloseInternal(destroy: true);
+                    VoiceSettingsPanel.ShowDeferred();
+                });
+            AddButton(footer.rectTransform, Loc.T("setup.done", "Done"), 182f, 48f,
+                nextX, -16f, VoiceUiKit.ButtonKind.Primary, () => CloseInternal(destroy: true));
+            return;
         }
+        AddButton(footer.rectTransform, Loc.T("setup.use_existing_settings", "Use existing settings"), 210f, 48f,
+            28f, -16f, VoiceUiKit.ButtonKind.Ghost, UseExistingSettings);
+        if (_page > AudioPage && !_returnToReview)
+            AddButton(footer.rectTransform, Loc.T("setup.back", "Back"), 108f, 48f,
+                nextX - 124f, -16f, VoiceUiKit.ButtonKind.Secondary, () => GoTo(_page - 1));
+        if (_returnToReview)
+            AddButton(footer.rectTransform, Loc.T("setup.back_to_review", "Back to review"), 182f, 48f,
+                nextX, -16f, VoiceUiKit.ButtonKind.Primary, () => GoTo(ReadyPage));
+        else if (_page < ReadyPage)
+            AddButton(footer.rectTransform, Loc.T("setup.continue", "Continue"), 182f, 48f,
+                nextX, -16f, VoiceUiKit.ButtonKind.Primary, () => GoTo(_page + 1));
         else
-        {
-            AddButton(_chromeRoot, Loc.T("setup.save_finish", "Save & finish"), 190f, 48f,
-                ContentWidth - 190f, FooterY, ButtonKind.Primary, FinishSetup,
-                () => SetupValidationIssue() == null);
-        }
+            AddButton(footer.rectTransform, Loc.T("setup.save_finish", "Save & finish"), 182f, 48f,
+                nextX, -16f, VoiceUiKit.ButtonKind.Primary, FinishSetup, () => SetupValidationIssue() == null);
     }
 
     private static void UseExistingSettings()
@@ -874,14 +752,17 @@ internal static class VoiceFirstRunSetup
 
     private static void GoTo(int page)
     {
-        page = Mathf.Clamp(page, WelcomePage, ReadyPage);
+        page = Mathf.Clamp(page, AudioPage, ReadyPage);
         if (page == _page) return;
+        if (page == ReadyPage) _returnToReview = false;
+        else if (_page == ReadyPage) _returnToReview = true;
         if (_page == AudioPage)
         {
             CaptureAudioCheckResults();
             DisposeAudioPreview();
         }
         if (_page == HudPage) _hudPreview?.Suspend();
+        if (_page == HudPage) _hudReveal = 0f;
         VoiceUiKit.RebindRow.CancelCapture();
         _page = page;
         BuildPage();
@@ -950,29 +831,28 @@ internal static class VoiceFirstRunSetup
 
         var card = VoiceUiKit.Panel("PromptCard", _closePrompt, SetupSurfaceRaised, rounded: true);
         card.rectTransform.Anchor(new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
-        card.rectTransform.sizeDelta = new Vector2(620f, 300f);
+        card.rectTransform.sizeDelta = new Vector2(620f, 292f);
         card.rectTransform.anchoredPosition = Vector2.zero;
         _closePromptCard = card.rectTransform;
         AddPanelBorder(card.rectTransform, SetupBorder);
+        var spectrum = VoiceUiKit.SpectrumImage("PromptSpectrum", card.rectTransform);
+        PlaceTopLeft(spectrum.rectTransform, 24f, 0f, 572f, 2f);
 
-        AddText(card.rectTransform, Loc.T("setup.leave_setup", "Leave setup?"), 31f,
-            VoiceUiKit.TextBright, TextAlignmentOptions.Center, FontStyles.Bold,
-            new Vector2(42f, -35f), new Vector2(536f, 44f));
+        AddText(card.rectTransform, Loc.T("setup.leave_setup", "Leave setup?"), 28f,
+            VoiceUiKit.TextBright, TextAlignmentOptions.Left, FontStyles.Bold,
+            new Vector2(28f, -24f), new Vector2(564f, 42f));
         _promptMessage = AddText(card.rectTransform,
-            Loc.T("setup.continue_with_the_recommended_setup_or_keep_the_sett", "Continue with the recommended setup, or keep the settings already on this device."),
-            20f, SetupTextSecondary, TextAlignmentOptions.Center, FontStyles.Normal,
-            new Vector2(62f, -90f), new Vector2(496f, 62f), wrap: true);
-
-        AddText(card.rectTransform,
-            Loc.T("setup.use_existing_settings_completes_this_one_time_setup", "Use existing settings completes this one-time setup without changing anything."),
-            17f, SetupTextTertiary, TextAlignmentOptions.Center, FontStyles.Normal,
-            new Vector2(58f, -159f), new Vector2(504f, 42f), wrap: true);
-
+            Loc.T("setup.your_changes_haven_t_been_saved_keep", "Your changes haven't been saved. Keep setting up, or keep your current settings."),
+            18f, SetupTextSecondary, TextAlignmentOptions.Left, FontStyles.Normal,
+            new Vector2(28f, -82f), new Vector2(564f, 64f), wrap: true);
+        AddText(card.rectTransform, Loc.T("setup.you_can_run_setup_again_from_settings", "You can run setup again from Settings."), 14f,
+            SetupTextTertiary, TextAlignmentOptions.Left, FontStyles.Normal,
+            new Vector2(28f, -160f), new Vector2(564f, 28f));
         PromptButtons.Clear();
-        PromptButtons.Add(new SetupButton(card.rectTransform, Loc.T("setup.continue_setup", "Continue setup"), 230f, 50f,
-            70f, -222f, ButtonKind.Primary, HideClosePrompt));
-        PromptButtons.Add(new SetupButton(card.rectTransform, Loc.T("setup.use_existing_settings", "Use existing settings"), 230f, 50f,
-            320f, -222f, ButtonKind.Secondary, UseExistingSettings));
+        PromptButtons.Add(new VoiceUiKit.ActionButton(card.rectTransform, Loc.T("setup.use_existing_settings", "Use existing settings"), 230f, 48f,
+            28f, -216f, VoiceUiKit.ButtonKind.Secondary, UseExistingSettings));
+        PromptButtons.Add(new VoiceUiKit.ActionButton(card.rectTransform, Loc.T("setup.continue_setup", "Continue setup"), 230f, 48f,
+            362f, -216f, VoiceUiKit.ButtonKind.Primary, HideClosePrompt));
         VoiceUiKit.SwallowClick();
         _inputLockedUntilFrame = Time.frameCount + 1;
     }
@@ -991,6 +871,7 @@ internal static class VoiceFirstRunSetup
     private static void CloseInternal(bool destroy)
     {
         _shown = false;
+        _returnToReview = false;
         VoiceUiKit.RebindRow.CancelCapture();
         DisposeAudioPreview();
         if (_hudPreview != null)
@@ -1013,7 +894,6 @@ internal static class VoiceFirstRunSetup
         Buttons.Clear();
         PromptButtons.Clear();
         HudCards.Clear();
-        CelebrationDots.Clear();
         VoiceUiKit.SwallowClick();
     }
 
@@ -1071,7 +951,7 @@ internal static class VoiceFirstRunSetup
                 ? Loc.T("setup.voice_is_sent_only_while_your_npush_to_talk_shortcut", "Voice is sent only while your\nPush to Talk shortcut is held.")
                 : Loc.T("setup.voice_activation_sends_speech_nautomatically_when_yo", "Voice activation sends speech\nautomatically when you talk.");
 #endif
-            _micModeHelpText.color = pushToTalk ? SetupWarning : VoiceUiKit.Accent;
+            _micModeHelpText.color = SetupTextSecondary;
         }
         if (_pushToTalkRow != null)
             _pushToTalkRow.Title.color = pushToTalk ? VoiceUiKit.TextPrimary : SetupTextTertiary;
@@ -1090,6 +970,12 @@ internal static class VoiceFirstRunSetup
         }
         _hoveredHudSettings = null;
         _hoveredHudDescription = null;
+        if (_draft?.HideSpeakingBar == true)
+        {
+            if (_hudDescriptionText != null)
+                _hudDescriptionText.text = Loc.T("setup.enable_the_speaking_bar_below_to_choose", "Enable the speaking bar below to choose and preview a layout.");
+            return;
+        }
         for (int i = 0; i < HudCards.Count; i++) HudCards[i].Tick(dt);
         if (_hudDescriptionText != null)
         {
@@ -1106,20 +992,11 @@ internal static class VoiceFirstRunSetup
         try
         {
             _hudPreviewHost = VoiceUiKit.Rect("SetupHudPreviewHost", _shell.PaneRoot);
-            _hudPreviewHost.Anchor(new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f));
-            _hudPreviewHost.sizeDelta = new Vector2(-ContentSideInset * 2f, 0f);
-            _hudPreviewHost.anchoredPosition = Vector2.zero;
-
             Vector2 previewSize = SpeakingBarLivePreview.EmbeddedCardSize;
-            float previewWidth = previewSize.x;
-            float previewHeight = previewSize.y;
-            const float previewGap = 18f;
-            const float layoutTopY = ContentTopY - 76f;
-            float pickerWidth = ContentWidth - previewWidth - previewGap;
-            var center = new Vector2(
-                pickerWidth + previewGap + previewWidth * 0.5f - ContentWidth * 0.5f,
-                layoutTopY - previewHeight * 0.5f);
-            _hudPreview = new SpeakingBarLivePreview(_hudPreviewHost, center, embedded: true);
+            PlaceTopLeft(_hudPreviewHost, ContentSideInset + 22f, ContentTopY,
+                previewSize.x, previewSize.y);
+            _hudPreviewHost.localScale = new Vector3(HudPreviewScale, HudPreviewScale, 1f);
+            _hudPreview = new SpeakingBarLivePreview(_hudPreviewHost, Vector2.zero, embedded: true);
         }
         catch (Exception ex)
         {
@@ -1138,7 +1015,7 @@ internal static class VoiceFirstRunSetup
     private static void TickHudPreview(float dt, bool render)
     {
         if (_hudPreview == null || _draft == null) return;
-        float reveal = Smooth(_hudReveal);
+        float reveal = render ? Smooth(_hudReveal) : 0f;
         try
         {
             if (_draft.HideSpeakingBar)
@@ -1171,7 +1048,6 @@ internal static class VoiceFirstRunSetup
         float availableH = canvas.height > 1f ? canvas.height : 1080f;
         float maxScale = Mathf.Min(1f,
             Mathf.Min(availableW / (PanelWidth + 64f), availableH / (PanelHeight + 64f)));
-        maxScale = Mathf.Clamp(maxScale, 0.74f, 1f);
         float scale = maxScale * Mathf.Lerp(0.96f, 1f, Smooth(_appear));
         _shell.RootRect.localScale = new Vector3(scale, scale, 1f);
         _shell.Group.alpha = Smooth(_appear);
@@ -1197,23 +1073,19 @@ internal static class VoiceFirstRunSetup
         }
     }
 
-    private static void TickButtons(List<SetupButton> buttons, float dt)
+    private static void TickButtons(List<VoiceUiKit.ActionButton> buttons, float dt)
     {
         for (int i = 0; i < buttons.Count; i++)
             buttons[i].Tick(dt, Time.frameCount > _inputLockedUntilFrame);
     }
 
-    private static bool PointerOverAnyButton(List<SetupButton> buttons)
+    private static bool PointerOverAnyButton(List<VoiceUiKit.ActionButton> buttons)
     {
         for (int i = 0; i < buttons.Count; i++)
             if (buttons[i].IsPointerOver) return true;
         return false;
     }
 
-    private static void TickCelebration(float dt)
-    {
-        for (int i = 0; i < CelebrationDots.Count; i++) CelebrationDots[i].Tick(dt);
-    }
 
     private static void DisposeAudioPreview()
     {
@@ -1240,22 +1112,13 @@ internal static class VoiceFirstRunSetup
     private static TextMeshProUGUI? BuildPageHeading(string title, string subtitle)
     {
         if (_pageRoot == null || _shell == null) return null;
-        var heading = AddText(_pageRoot, title, 33f, VoiceUiKit.TextBright,
+        var heading = AddText(_pageRoot, title, 31f, VoiceUiKit.TextBright,
             TextAlignmentOptions.Left, FontStyles.Bold,
-            new Vector2(2f, -56f), new Vector2(ContentWidth - 4f, 38f));
+            new Vector2(22f, 0f), new Vector2(ContentWidth - 44f, 46f));
         heading.characterSpacing = 0f;
-        return AddText(_pageRoot, subtitle, 19f, SetupTextSecondary,
+        return AddText(_pageRoot, subtitle, 16f, SetupTextSecondary,
             TextAlignmentOptions.Left, FontStyles.Normal,
-            new Vector2(2f, -98f), new Vector2(ContentWidth - 4f, 24f));
-    }
-
-    private static RectTransform BuildCard(
-        RectTransform parent, string name, float x, float y, float w, float h)
-    {
-        var card = VoiceUiKit.Panel(name, parent, SetupSurfaceRaised, rounded: true);
-        PlaceTopLeft(card.rectTransform, x, y, w, h);
-        AddPanelBorder(card.rectTransform, SetupBorder);
-        return card.rectTransform;
+            new Vector2(22f, -52f), new Vector2(ContentWidth - 44f, 28f));
     }
 
     private static void AddPanelBorder(RectTransform panel, Color32 color)
@@ -1264,16 +1127,6 @@ internal static class VoiceFirstRunSetup
         outline.effectColor = color;
         outline.effectDistance = new Vector2(1f, -1f);
         outline.useGraphicAlpha = true;
-    }
-
-    private static void AddCardTitle(
-        RectTransform card, string title, string subtitle, float rightInset = 20f)
-    {
-        float width = Mathf.Max(80f, card.rect.width - 20f - rightInset);
-        AddText(card, title, 23f, VoiceUiKit.TextBright, TextAlignmentOptions.Left,
-            FontStyles.Bold, new Vector2(20f, -13f), new Vector2(width, 24f));
-        AddText(card, subtitle, 16f, SetupTextSecondary, TextAlignmentOptions.Left,
-            FontStyles.Normal, new Vector2(20f, -40f), new Vector2(width, 22f));
     }
 
     private static RectTransform BuildInlineNotice(
@@ -1293,29 +1146,30 @@ internal static class VoiceFirstRunSetup
         return notice.rectTransform;
     }
 
-    private static void BuildJourneyRow(
-        RectTransform parent, float y, string glyph, string title, string description)
+#if ANDROID
+    private static void BuildTouchGuide(float x, float width, Sprite sprite, string title, string description)
     {
-        var icon = VoiceUiKit.Panel("JourneyIcon", parent,
-            new Color32(34, 211, 238, 28), rounded: true, soft: true);
-        PlaceTopLeft(icon.rectTransform, 22f, y, 46f, 46f);
-        AddText(icon.rectTransform, glyph, 18f, VoiceUiKit.Accent,
-            TextAlignmentOptions.Center, FontStyles.Bold,
-            Vector2.zero, new Vector2(46f, 46f));
-        AddText(parent, title, 21f, VoiceUiKit.TextBright,
-            TextAlignmentOptions.Left, FontStyles.Bold,
-            new Vector2(84f, y + 1f), new Vector2(parent.rect.width - 108f, 26f));
-        AddText(parent, description, 17f, SetupTextSecondary,
-            TextAlignmentOptions.Left, FontStyles.Normal,
-            new Vector2(84f, y - 26f), new Vector2(parent.rect.width - 108f, 42f), wrap: true);
+        if (_pageRoot == null) return;
+        var guide = VoiceUiKit.Rect("TouchGuide", _pageRoot);
+        PlaceTopLeft(guide, x, -348f, width, 172f);
+        var icon = VoiceUiKit.Rect("ControlIcon", guide).gameObject.AddComponent<Image>();
+        icon.sprite = sprite;
+        icon.preserveAspect = true;
+        icon.raycastTarget = false;
+        PlaceTopLeft(icon.rectTransform, 22f, 0f, 28f, 28f);
+        AddText(guide, title, 18f, VoiceUiKit.TextBright, TextAlignmentOptions.Left, FontStyles.Bold,
+            new Vector2(60f, 0f), new Vector2(width - 82f, 28f));
+        AddText(guide, description, 15f, SetupTextSecondary, TextAlignmentOptions.TopLeft, FontStyles.Normal,
+            new Vector2(22f, -42f), new Vector2(width - 44f, 126f), wrap: true);
     }
+#endif
 
-    private static void BuildCheckBadge(
+    private static RectTransform BuildCheckBadge(
         RectTransform parent, Vector2 topLeft, float size, Color32 color)
     {
         var badge = VoiceUiKit.Panel("CheckBadge", parent, color, rounded: true, soft: true);
         PlaceTopLeft(badge.rectTransform, topLeft.x, topLeft.y, size, size);
-        Color32 checkColor = new(9, 40, 29, 255);
+        Color32 checkColor = VoiceUiKit.PanelOuter;
         var shortBar = VoiceUiKit.Panel("CheckShort", badge.rectTransform, checkColor, true, true);
         shortBar.rectTransform.Anchor(new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
         shortBar.rectTransform.sizeDelta = new Vector2(size * 0.26f, Mathf.Max(3f, size * 0.07f));
@@ -1326,6 +1180,7 @@ internal static class VoiceFirstRunSetup
         longBar.rectTransform.sizeDelta = new Vector2(size * 0.46f, Mathf.Max(3f, size * 0.07f));
         longBar.rectTransform.anchoredPosition = new Vector2(size * 0.09f, size * -0.05f);
         longBar.rectTransform.localRotation = Quaternion.Euler(0f, 0f, 46f);
+        return badge.rectTransform;
     }
 
     private static VoiceUiKit.Row AddBindingRow(
@@ -1346,43 +1201,34 @@ internal static class VoiceFirstRunSetup
             .Build(parent, label, width, y, 54f, help));
     }
 
-    private static void BuildSummaryCard(
-        float x, float width, string title, IReadOnlyList<string> lines, Action edit)
+    private static void BuildSummaryRow(
+        float y, VoiceSettingsCategory category, string title, IReadOnlyList<string> lines, Action edit)
     {
         if (_pageRoot == null) return;
-        var card = BuildCard(_pageRoot, "Summary" + title, x, ContentTopY, width, 232f);
-        BuildCheckBadge(card, new Vector2(18f, -16f), 30f, SetupSuccess);
-        AddText(card, title, 21f, VoiceUiKit.TextBright, TextAlignmentOptions.Left,
-            FontStyles.Bold, new Vector2(60f, -15f), new Vector2(width - 150f, 32f));
-        AddButton(card, Loc.T("setup.edit", "Edit"), 70f, 34f, width - 88f, -13f,
-            ButtonKind.Ghost, edit);
+        var row = VoiceUiKit.Rect("Review" + title, _pageRoot);
+        PlaceTopLeft(row, 0f, y, ContentWidth, 108f);
+        var icon = VoiceUiKit.Rect("ReviewIcon", row).gameObject.AddComponent<Image>();
+        icon.sprite = VoiceUiBranding.CategoryIcon(category);
+        icon.preserveAspect = true;
+        icon.raycastTarget = false;
+        PlaceTopLeft(icon.rectTransform, 22f, -6f, 34f, 34f);
+        AddText(row, title, 20f, VoiceUiKit.TextBright, TextAlignmentOptions.Left, FontStyles.Bold,
+            new Vector2(80f, 0f), new Vector2(ContentWidth - 210f, 32f));
+        AddButton(row, Loc.T("setup.edit", "Edit"), 76f, 44f, ContentWidth - 98f, 0f, VoiceUiKit.ButtonKind.Ghost, edit);
+        float width = (ContentWidth - 118f) * 0.5f;
         for (int i = 0; i < lines.Count && i < 4; i++)
         {
-            var line = AddText(card, lines[i], i == 0 ? 18f : 17f,
-                i == 0 ? VoiceUiKit.TextPrimary : SetupTextSecondary,
-                TextAlignmentOptions.Left, i == 0 ? FontStyles.Bold : FontStyles.Normal,
-                new Vector2(20f, -66f - i * 38f), new Vector2(width - 40f, 32f), wrap: true);
+            var line = AddText(row, lines[i], 16f, SetupTextSecondary, TextAlignmentOptions.Left,
+                FontStyles.Normal, new Vector2(80f + i / 2 * (width + 16f), -38f - i % 2 * 28f),
+                new Vector2(width, 26f));
             line.enableAutoSizing = true;
-            line.fontSizeMax = i == 0 ? 18f : 17f;
-            line.fontSizeMin = 15f;
+            line.fontSizeMax = 16f;
+            line.fontSizeMin = 13f;
         }
+        var divider = VoiceUiKit.Panel("ReviewDivider", row, VoiceUiKit.Divider, rounded: false);
+        PlaceTopLeft(divider.rectTransform, 22f, -108f, ContentWidth - 44f, 1f);
     }
 
-    private static void BuildMicGlyph(RectTransform root)
-    {
-        var capsule = VoiceUiKit.Panel("MicCapsule", root, VoiceUiKit.Accent, rounded: true, soft: true);
-        capsule.rectTransform.Anchor(new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
-        capsule.rectTransform.sizeDelta = new Vector2(25f, 43f);
-        capsule.rectTransform.anchoredPosition = new Vector2(0f, 5f);
-        var stem = VoiceUiKit.Panel("MicStem", root, VoiceUiKit.Accent, rounded: true, soft: true);
-        stem.rectTransform.Anchor(new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
-        stem.rectTransform.sizeDelta = new Vector2(5f, 22f);
-        stem.rectTransform.anchoredPosition = new Vector2(0f, -23f);
-        var baseBar = VoiceUiKit.Panel("MicBase", root, VoiceUiKit.Accent, rounded: true, soft: true);
-        baseBar.rectTransform.Anchor(new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
-        baseBar.rectTransform.sizeDelta = new Vector2(36f, 5f);
-        baseBar.rectTransform.anchoredPosition = new Vector2(0f, -33f);
-    }
 
     private static VoiceUiKit.Row AddRow(VoiceUiKit.Row row)
     {
@@ -1390,18 +1236,18 @@ internal static class VoiceFirstRunSetup
         return row;
     }
 
-    private static SetupButton AddButton(
+    private static VoiceUiKit.ActionButton AddButton(
         RectTransform parent,
         string text,
         float width,
         float height,
         float x,
         float y,
-        ButtonKind kind,
+        VoiceUiKit.ButtonKind kind,
         Action click,
         Func<bool>? enabled = null)
     {
-        var button = new SetupButton(parent, text, width, height, x, y, kind, click, enabled);
+        var button = new VoiceUiKit.ActionButton(parent, text, width, height, x, y, kind, click, enabled);
         Buttons.Add(button);
         return button;
     }
@@ -1528,11 +1374,8 @@ internal static class VoiceFirstRunSetup
 
     private static string SelectedHudDescription()
     {
-        if (_draft == null) return Loc.T("setup.hover_a_layout_to_preview_it_live_select_one_to_use", "Hover a layout to preview it live. Select one to use it.");
-        int index = _draft.SelectedHudPreset;
-        return index >= 0 && index < FirstRunHudPresets.All.Count
-            ? FirstRunHudPresets.All[index].Description
-            : Loc.T("setup.choose_a_hud_layout_to_continue", "Choose a HUD layout to continue.");
+        if (_draft == null) return Loc.T("setup.hover_a_layout_to_preview_it_live", "Hover a layout to preview it live. Select one to use it.");
+        return _draft.SelectedHudDescription();
     }
 
     private static string? SetupValidationIssue()
@@ -1562,7 +1405,7 @@ internal static class VoiceFirstRunSetup
         {
             (Loc.T("setup.bind_mute_microphone", "Mute microphone"), draft.ToggleMute),
             (Loc.T("setup.push_to_mute", "Push to Mute"), draft.PushToMute),
-            (Loc.T("setup.push_to_talk", "Push to Talk"), draft.PushToTalk),
+            (Loc.T("setup.push_to_talk_2", "Push to Talk"), draft.PushToTalk),
             (Loc.T("setup.bind_mute_playback", "Mute playback"), draft.ToggleSpeaker),
             (Loc.T("setup.open_voice_menu", "Open voice menu"), draft.OpenVoiceSettings),
         };
@@ -1584,129 +1427,7 @@ internal static class VoiceFirstRunSetup
         return value * value * (3f - 2f * value);
     }
 
-    private enum ButtonKind
-    {
-        Primary,
-        Secondary,
-        Ghost,
-        Danger,
-        DangerGhost,
-    }
 
-    private sealed class SetupButton
-    {
-        private readonly RectTransform _root;
-        private readonly Image _surface;
-        private readonly Image _glow;
-        private readonly TextMeshProUGUI _label;
-        private readonly ButtonKind _kind;
-        private readonly Action _click;
-        private readonly Func<bool> _enabled;
-
-        internal SetupButton(
-            RectTransform parent,
-            string text,
-            float width,
-            float height,
-            float x,
-            float y,
-            ButtonKind kind,
-            Action click,
-            Func<bool>? enabled = null)
-        {
-            _kind = kind;
-            _click = click;
-            _enabled = enabled ?? (() => true);
-            _root = VoiceUiKit.Rect("SetupButton", parent);
-            PlaceTopLeft(_root, x, y, width, height);
-            _glow = VoiceUiKit.GlowImage("ButtonGlow", _root, VoiceUiKit.Clear);
-            _glow.rectTransform.Anchor(Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f));
-            _glow.rectTransform.offsetMin = new Vector2(-8f, -4f);
-            _glow.rectTransform.offsetMax = new Vector2(8f, 8f);
-            _surface = _root.gameObject.AddComponent<Image>();
-            _surface.sprite = VoiceUiKit.Rounded(true);
-            _surface.type = Image.Type.Sliced;
-            _surface.color = RestColor();
-            _surface.raycastTarget = false;
-            _label = VoiceUiKit.Text("ButtonLabel", _root, text, 18f,
-                LabelColor(),
-                TextAlignmentOptions.Center, FontStyles.Bold);
-            _label.characterSpacing = 0f;
-            _label.enableAutoSizing = true;
-            _label.fontSizeMax = 18f;
-            _label.fontSizeMin = 15f;
-            _label.rectTransform.Anchor(Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f));
-            _label.rectTransform.offsetMin = new Vector2(8f, 0f);
-            _label.rectTransform.offsetMax = new Vector2(-8f, 0f);
-        }
-
-        internal void SetText(string text)
-        {
-            if (_label.text != text) _label.text = text;
-        }
-
-        internal bool IsPointerOver => _root != null && _root.gameObject.activeInHierarchy &&
-                                       _enabled() && VoiceUiKit.Contains(_root);
-
-        internal void Tick(float dt, bool allowInput)
-        {
-            if (_root == null || !_root.gameObject.activeInHierarchy) return;
-            bool enabled = _enabled();
-            bool over = enabled && VoiceUiKit.Contains(_root);
-            bool down = over && Input.GetMouseButton(0);
-            Color32 target = !enabled
-                ? VoiceUiKit.ToggleOffTrack
-                : over ? HoverColor() : RestColor();
-            _surface.color = VoiceUiKit.Lerp(_surface.color, target, Mathf.Clamp01(dt * 15f));
-            Color32 glow = VoiceUiKit.Clear;
-            if (over && _kind == ButtonKind.Primary) glow = VoiceUiKit.AccentGlow;
-            else if (over && (_kind == ButtonKind.Danger || _kind == ButtonKind.DangerGhost))
-                glow = new Color32(230, 88, 96, 42);
-            _glow.color = VoiceUiKit.Lerp(_glow.color, glow, Mathf.Clamp01(dt * 14f));
-            _label.color = VoiceUiKit.Lerp(_label.color,
-                enabled ? (over ? LabelHoverColor() : LabelColor()) : VoiceUiKit.TextFaint,
-                Mathf.Clamp01(dt * 14f));
-            float targetScale = down ? 0.98f : over ? 1.015f : 1f;
-            float scale = Mathf.Lerp(_root.localScale.x, targetScale, Mathf.Clamp01(dt * 18f));
-            _root.localScale = new Vector3(scale, scale, 1f);
-            if (allowInput && over && Input.GetMouseButtonDown(0))
-            {
-                VoiceUiKit.SwallowClick();
-                _click();
-            }
-        }
-
-        private Color32 RestColor() => _kind switch
-        {
-            ButtonKind.Primary => VoiceUiKit.Accent,
-            ButtonKind.Secondary => new Color32(34, 43, 56, 255),
-            ButtonKind.Danger => new Color32(91, 39, 45, 255),
-            _ => VoiceUiKit.Clear,
-        };
-
-        private Color32 HoverColor() => _kind switch
-        {
-            ButtonKind.Primary => new Color32(93, 231, 248, 255),
-            ButtonKind.Secondary => SetupSurfaceHover,
-            ButtonKind.Danger => new Color32(126, 48, 57, 255),
-            ButtonKind.DangerGhost => new Color32(74, 34, 39, 230),
-            _ => new Color32(34, 211, 238, 18),
-        };
-
-        private Color32 LabelColor() => _kind switch
-        {
-            ButtonKind.Primary => new Color32(6, 28, 36, 255),
-            ButtonKind.DangerGhost => new Color32(242, 143, 149, 255),
-            _ => VoiceUiKit.TextPrimary,
-        };
-
-        private Color32 LabelHoverColor() => _kind switch
-        {
-            ButtonKind.Primary => new Color32(4, 24, 31, 255),
-            ButtonKind.DangerGhost => new Color32(255, 184, 188, 255),
-            _ => VoiceUiKit.TextBright,
-        };
-    }
 
     private sealed class HudPresetCard
     {
@@ -1714,12 +1435,12 @@ internal static class VoiceFirstRunSetup
         private readonly string _name;
         private readonly string _description;
         private readonly SpeakingBarPreviewSettings _previewSettings;
-        private readonly bool _original;
         private RectTransform _root = null!;
         private RectTransform _visual = null!;
         private Image _surface = null!;
         private Image _border = null!;
         private TextMeshProUGUI _title = null!;
+        private RectTransform _check = null!;
         private float _hover;
         private float _selected;
 
@@ -1727,24 +1448,23 @@ internal static class VoiceFirstRunSetup
             int index,
             string name,
             string description,
-            SpeakingBarPreviewSettings previewSettings,
-            bool original)
+            SpeakingBarPreviewSettings previewSettings)
         {
             _index = index;
             _name = name;
             _description = description;
             _previewSettings = previewSettings;
-            _original = original;
         }
 
         internal void Build(
-            RectTransform parent, float x, float y, float width, float height, bool prominent)
+            RectTransform parent, float x, float y, float width, float height)
         {
             _root = VoiceUiKit.Rect("HudPresetHit", parent);
             PlaceTopLeft(_root, x, y, width, height);
             _border = _root.gameObject.AddComponent<Image>();
             _border.sprite = VoiceUiKit.Rounded();
             _border.type = Image.Type.Sliced;
+            _border.Round(VoiceUiKit.RadiusControl);
             _border.color = SetupBorder;
             _border.raycastTarget = false;
 
@@ -1755,27 +1475,27 @@ internal static class VoiceFirstRunSetup
             _surface = _visual.gameObject.AddComponent<Image>();
             _surface.sprite = VoiceUiKit.Rounded();
             _surface.type = Image.Type.Sliced;
+            _surface.Round(VoiceUiKit.RadiusControl);
             _surface.color = SetupSurfaceRaised;
             _surface.raycastTarget = false;
 
-            float titleHeight = prominent ? 26f : 24f;
-            float titleSize = prominent ? 20f : 18f;
-            _title = AddText(_visual, _name, titleSize, VoiceUiKit.TextPrimary,
+            _title = AddText(_visual, _name, 18f, VoiceUiKit.TextPrimary,
                 TextAlignmentOptions.Center, FontStyles.Bold,
-                new Vector2(10f, -(height - titleHeight) * 0.5f),
-                new Vector2(width - 20f, titleHeight));
+                new Vector2(10f, -(height - 24f) * 0.5f),
+                new Vector2(width - 48f, 24f));
             _title.enableAutoSizing = true;
-            _title.fontSizeMax = titleSize;
+            _title.fontSizeMax = 18f;
             _title.fontSizeMin = 15f;
+            _check = BuildCheckBadge(_visual,
+                new Vector2(width - 26f, -(height - 18f) * 0.5f), 18f, VoiceUiKit.Accent);
+            _check.gameObject.SetActive(_draft != null && _draft.SelectedHudPreset == _index);
         }
 
         internal void Tick(float dt)
         {
-            if (_draft == null || _root == null) return;
+            if (_draft == null || _root == null || _draft.HideSpeakingBar) return;
             bool over = VoiceUiKit.Contains(_root);
-            bool selected = _original
-                ? _draft.OriginalHudSelected
-                : !_draft.OriginalHudSelected && _draft.SelectedHudPreset == _index;
+            bool selected = _draft.SelectedHudPreset == _index;
             if (over)
             {
                 _hoveredHudSettings = _previewSettings;
@@ -1784,22 +1504,23 @@ internal static class VoiceFirstRunSetup
             }
             if (over && Time.frameCount > _inputLockedUntilFrame && Input.GetMouseButtonDown(0))
             {
-                if (_original) _draft.SelectOriginalHud();
-                else _draft.SelectHudPreset(_index);
+                _draft.SelectHudPreset(_index);
                 selected = true;
                 VoiceUiKit.SwallowClick();
             }
 
             _hover = Mathf.MoveTowards(_hover, over ? 1f : 0f, dt * 10f);
             _selected = Mathf.MoveTowards(_selected, selected ? 1f : 0f, dt * 8f);
+            _check.gameObject.SetActive(selected);
             _visual.anchoredPosition = new Vector2(0f, _hover * 1.5f);
             _surface.color = VoiceUiKit.Lerp(
                 SetupSurfaceRaised,
-                VoiceUiKit.Lerp(SetupSurfaceHover, new Color32(20, 49, 59, 255), _selected),
+                VoiceUiKit.Lerp(SetupSurfaceHover,
+                    VoiceUiKit.Lerp(SetupSurfaceRaised, VoiceUiKit.Accent, 0.12f), _selected),
                 Mathf.Max(_hover, _selected));
             _border.color = VoiceUiKit.Lerp(
                 SetupBorder,
-                VoiceUiKit.Lerp(new Color32(102, 122, 148, 180), VoiceUiKit.Accent, _selected),
+                VoiceUiKit.Lerp(VoiceUiKit.ControlHover, VoiceUiKit.Accent, _selected),
                 Mathf.Max(_hover, _selected));
             _title.color = VoiceUiKit.Lerp(VoiceUiKit.TextPrimary, VoiceUiKit.TextBright,
                 Mathf.Max(_hover, _selected));
@@ -1807,39 +1528,4 @@ internal static class VoiceFirstRunSetup
 
     }
 
-    private sealed class CelebrationDot
-    {
-        private RectTransform _root = null!;
-        private Image _image = null!;
-        private Vector2 _base;
-        private float _phase;
-
-        internal void Build(RectTransform parent, Vector2 position, int index)
-        {
-            _base = position;
-            _phase = index * 0.61f;
-            _root = VoiceUiKit.Rect("CelebrationDot", parent);
-            _root.Anchor(new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0.5f, 0.5f));
-            float size = 5f + index % 4 * 2f;
-            _root.sizeDelta = new Vector2(size, size);
-            _root.anchoredPosition = position;
-            _image = _root.gameObject.AddComponent<Image>();
-            _image.sprite = VoiceUiKit.Rounded(true);
-            _image.type = Image.Type.Sliced;
-            _image.color = index % 3 == 0 ? VoiceUiKit.TextBright : VoiceUiKit.Accent;
-            _image.raycastTarget = false;
-        }
-
-        internal void Tick(float dt)
-        {
-            _phase += dt * 1.8f;
-            _root.anchoredPosition = _base + new Vector2(
-                Mathf.Sin(_phase) * 5f,
-                Mathf.Cos(_phase * 0.83f) * 7f);
-            float alpha = 0.35f + (Mathf.Sin(_phase * 1.4f) + 1f) * 0.325f;
-            var c = _image.color;
-            c.a = alpha;
-            _image.color = c;
-        }
-    }
 }

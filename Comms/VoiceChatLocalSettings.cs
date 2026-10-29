@@ -305,6 +305,9 @@ public class VoiceChatLocalSettings
     public ConfigEntry<MicDeviceEnum> MicrophoneDeviceIndex { get; }
 #if WINDOWS
     public ConfigEntry<SpkDeviceEnum> SpeakerDeviceIndex { get; }
+    public ConfigEntry<bool> ObsCompatibilityMode { get; }
+    public ConfigEntry<bool> ObsRecordingIntegration { get; }
+    public ConfigEntry<VoiceObsRecordingMode> ObsRecordingMode { get; }
 #endif
     public ConfigEntry<float> ButtonPositionX { get; }
     public ConfigEntry<float> ButtonPositionY { get; }
@@ -532,6 +535,14 @@ public class VoiceChatLocalSettings
         SpeakerDeviceIndex = config.Bind("Audio", "Speaker",
             SpkDeviceEnum.Default,
             ConfigHelp.D(Loc.L("help.speaker", "Selects the playback device Perfect Comms uses for voice audio. Default follows the system's default output device.")));
+        ObsCompatibilityMode = config.Bind("Audio", "ObsCompatibilityMode", false,
+            ConfigHelp.D(Loc.L("help.obs_compatibility_mode", "Adds a minimized Perfect Comms Audio window for OBS. Voice routing is unchanged.")));
+        ObsRecordingIntegration = config.Bind("Audio", "ObsRecordingIntegration", false,
+            ConfigHelp.D(Loc.L("help.obs_recording_integration", "Saves separate voice files with the optional OBS plugin. Does not record your own microphone.")));
+        ObsRecordingMode = config.Bind("Audio", "ObsRecordingMode", VoiceObsRecordingMode.PerPlayer,
+            ConfigHelp.D(Loc.L("help.obs_recording_mode", "Separate players or groups. Applies next recording.")));
+        ObsRecordingMode.Value = VoiceObsRecording.NormalizeMode(ObsRecordingMode.Value);
+        VoiceObsRecording.SettingChanged(ObsRecordingIntegration.Value);
 #endif
 
         ApplyLegacyDefaultCanonicalization(
@@ -1690,6 +1701,17 @@ public class VoiceChatLocalSettings
             _lastResolvedSpkAvailable = device.IsAvailable;
             if (device.IsAvailable)
                 VoiceChatRoom.Current?.SetSpeaker(id);
+        }
+        else if (configEntry == ObsCompatibilityMode)
+        {
+            SidecarVoiceHost.ApplyObsCompatibilityMode();
+        }
+        else if (configEntry == ObsRecordingIntegration || configEntry == ObsRecordingMode)
+        {
+            var mode = VoiceObsRecording.NormalizeMode(ObsRecordingMode.Value);
+            if (ObsRecordingMode.Value != mode) ObsRecordingMode.Value = mode;
+            VoiceObsRecording.SettingChanged(ObsRecordingIntegration.Value);
+            SidecarVoiceHost.ApplyObsRecording();
         }
 #endif
         else if (configEntry == ShowVoiceConnectionStatus)

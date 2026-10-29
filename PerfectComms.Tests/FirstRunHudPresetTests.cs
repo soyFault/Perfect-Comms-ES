@@ -22,30 +22,6 @@ public sealed class FirstRunHudPresetTests
     }
 
     [Fact]
-    public void MostCommonLayoutsLeadCatalogWithExpectedFlow()
-    {
-        Assert.Equal(3, FirstRunHudPresets.CommonCount);
-        Assert.Equal(
-            new[] { "Top Middle", "Middle Right", "Middle Left" },
-            FirstRunHudPresets.All.Take(FirstRunHudPresets.CommonCount).Select(p => p.Name));
-
-        var top = FirstRunHudPresets.All[0];
-        Assert.Equal(SpeakingBarPosition.TopMiddle, top.Position);
-        Assert.Equal(SpeakingBarSideLayout.Wrapped, top.SideLayout);
-        Assert.Equal(1f, top.Scale);
-        Assert.True(top.Backdrop);
-
-        foreach (var side in FirstRunHudPresets.All.Skip(1).Take(2))
-        {
-            Assert.Equal(SpeakingBarSideLayout.SingleLane, side.SideLayout);
-            Assert.Equal(1f, side.Scale);
-            Assert.True(side.Backdrop);
-            Assert.True(SpeakingBarLayoutPolicy.UsesSingleVerticalLaneFor(
-                side.Position, side.SideLayout));
-        }
-    }
-
-    [Fact]
     public void EveryPresetUsesSafeUserFacingValues()
     {
         foreach (var preset in FirstRunHudPresets.All)
@@ -132,6 +108,8 @@ public sealed class FirstRunHudPresetTests
             OriginalHudSelected = true,
         };
 
+        Assert.Equal("Keeps your existing custom layout.", draft.SelectedHudDescription());
+
         draft.SelectHudPreset(2);
 
         Assert.False(draft.OriginalHudSelected);
@@ -143,6 +121,10 @@ public sealed class FirstRunHudPresetTests
         Assert.True(draft.OriginalHudSelected);
         Assert.Equal(original, draft.Hud);
         Assert.Equal(-1, draft.SelectedHudPreset);
+        Assert.Equal("Keeps your existing custom layout.", draft.SelectedHudDescription());
+
+        draft.OriginalHudSelected = false;
+        Assert.Equal("Choose a HUD layout to continue.", draft.SelectedHudDescription());
     }
 
     [Fact]

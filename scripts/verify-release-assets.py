@@ -92,8 +92,8 @@ STARLIGHT_NATIVE_SUFFIXES = (
 )
 STARLIGHT_DIRECT_DEPENDENCIES = {
     "Concentus": "2.2.2",
-    "SIPSorcery": "10.0.16",
-    "Tmds.LibC": "0.2.0",
+    "SIPSorcery": "10.0.17",
+    "Tmds.LibC": "0.5.0",
 }
 STARLIGHT_OWNED_OUTPUTS = frozenset(
     (
@@ -2347,8 +2347,8 @@ def main() -> int:
     parser.add_argument(
         "--expected-protocol",
         type=int,
-        default=17,
-        help="protocol expected from --helper-build-info (default: 17)",
+        default=18,
+        help="protocol expected from --helper-build-info (default: 18)",
     )
     args = parser.parse_args()
     root = args.root.resolve()

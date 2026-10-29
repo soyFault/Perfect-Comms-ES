@@ -43,6 +43,10 @@ internal sealed class PerfectCommsVoiceBackend : IVoiceBackend
     private readonly Dictionary<int, PeerConnection> _canonicalRouteScratch = new();
     private readonly HashSet<int> _snapshotRouteClientIds = new();
     private readonly List<SidecarProtocol.GameStatePeerInput> _helperGameStatePeers = new(32);
+#if WINDOWS
+    private Dictionary<string, VoicePlayerSnapshot>? _obsRecordingTargets;
+    private VoiceObsRecordingProjection? _obsRecordingProjection;
+#endif
     private readonly List<byte> _meetingSpatialRosterScratch = new(32);
     private readonly Dictionary<byte, float> _meetingSpatialPanByPlayerId = new(32);
     private readonly GameStateSendGate _gameStateSendGate = new();
@@ -1065,20 +1069,32 @@ internal sealed class PerfectCommsVoiceBackend : IVoiceBackend
         if (VoiceSceneState.IsLobbyVoicePhase(phase))
             return false;
         var specialChat = VoiceImpostorPolicy.SpecialChatEnabled(settings, phase);
+        var ghostListening = phase == VoiceGamePhase.Tasks && VoiceGhostListeningPolicy.Enabled(settings);
+        var hasSpeaker = snapshot != null && snapshot.TryGetLocalPlayer(out _);
         var trusted = hostPolicyReady && snapshot != null && snapshot.Phase == phase &&
-            snapshot.LiveLocalPlayerResolved && snapshot.PlayerEnumerationCompleted &&
+            snapshot.LiveLocalPlayerResolved && snapshot.PlayerEnumerationCompleted && hasSpeaker &&
             !snapshot.RoutingRosterRetained;
-        var active = radio.IsActive || specialChat || !trusted && wasPrivate;
+        var ghostOnlySpeaker = hasSpeaker && snapshot!.TryGetLocalPlayer(out var localSpeaker) &&
+            VoiceGhostListeningPolicy.IsGhostOnlySpeaker(settings, phase,
+                localSpeaker.IsDead, localSpeaker.IsSpectator, localSpeaker.IsImpostorTeam);
+        var active = radio.IsActive || specialChat ||
+            ghostListening && (!trusted || ghostOnlySpeaker) || !trusted && wasPrivate;
         if (!active || !trusted || !snapshot!.TryGetLocalPlayer(out var speaker) ||
+            speaker.Disconnected || speaker.IsDummy || !speaker.IsVisible && !speaker.IsDead ||
             speaker.External.Muted || VoiceRoleMuteState.IsMeetingVoiceBlocked(speaker, phase))
+            return active;
+        if (ghostOnlySpeaker && (!snapshot.AuthenticatedRosterAvailable || !speaker.IsAuthenticatedClient))
             return active;
         foreach (var listener in snapshot.Players)
         {
             if (listener.IsLocal || listener.ClientId == snapshot.LocalClientId || listener.ClientId < 0)
                 continue;
-            var allowed = specialChat
-                ? VoiceImpostorPolicy.CanTransmit(settings, speaker) && VoiceImpostorPolicy.CanListen(listener)
-                : VoiceProximityCalculator.CanReceiveRadioState(settings, phase, speaker, listener, radio);
+            var allowed = specialChat && VoiceImpostorPolicy.CanTransmit(settings, speaker)
+                ? VoiceImpostorPolicy.CanListen(listener)
+                : radio.IsActive
+                    ? VoiceProximityCalculator.CanReceiveRadioState(settings, phase, speaker, listener, radio)
+                    : ghostOnlySpeaker && listener.IsAuthenticatedClient &&
+                      VoiceGhostListeningPolicy.CanReceive(settings, phase, listener, speaker);
             if (allowed)
                 receivers.Add(listener.ClientId);
         }
@@ -1746,7 +1762,24 @@ internal sealed class PerfectCommsVoiceBackend : IVoiceBackend
             $"slot={_activeCaptureSlot} device={VoiceDiagnostics.DescribeDevice(_lastMicDeviceName)} wine={WineEnvironment.IsWine} " +
             "hint=check OS mic permission / antivirus quarantine / helper extraction");
         VoiceDiagnostics.Log("voice.sidecar.unavailable", detail);
-        try { VoiceChatHudState.ShowToastThreadSafe(Loc.T("toast.voice_retrying_helper", "Voice unavailable - retrying audio helper")); } catch { }
+        ShowVoiceUnavailableToast();
+    }
+
+    private static int _helperBlockToastEpisode;
+
+    private static void ShowVoiceUnavailableToast()
+    {
+        var blockKind = VoiceHelperBlockState.Kind;
+        var toast = Loc.T("toast.voice_retrying_helper", "Voice unavailable - retrying audio helper");
+        if (blockKind != VoiceHelperBlockKind.None)
+        {
+            // The HUD line and notice card already explain the block; toast once per episode.
+            var episode = VoiceHelperBlockState.Episode;
+            if (Interlocked.Exchange(ref _helperBlockToastEpisode, episode) == episode)
+                return;
+            toast = VoiceConnectionStatusPolicy.HelperBlockedTitle(blockKind);
+        }
+        try { VoiceChatHudState.ShowToastThreadSafe(toast); } catch { }
     }
 
     internal static int VoiceRecoveryDelayMs(int priorAttempts)
@@ -4420,6 +4453,18 @@ internal sealed class PerfectCommsVoiceBackend : IVoiceBackend
             helperGameStatePeers = _helperGameStatePeers;
 #endif
         helperGameStatePeers?.Clear();
+#if WINDOWS
+        bool recordVoices = localSettings?.ObsRecordingIntegration.Value == true &&
+                            SidecarVoiceHost.SupportsObsCompatibilityMode;
+        if (recordVoices)
+        {
+            _obsRecordingTargets ??= new Dictionary<string, VoicePlayerSnapshot>(StringComparer.Ordinal);
+            _obsRecordingTargets.Clear();
+            _obsRecordingProjection ??= new VoiceObsRecordingProjection();
+        }
+        _obsRecordingProjection?.UpdateParticipants(AmongUsClient.Instance?.GameId ?? 0, snapshot.Players,
+            snapshot.PlayerEnumerationCompleted && !snapshot.RoutingRosterRetained && snapshot.AuthenticatedRosterAvailable);
+#endif
         foreach (var peer in _updatePeerScratch)
         {
             if (peer.ClientId >= 0 &&
@@ -4482,6 +4527,10 @@ internal sealed class PerfectCommsVoiceBackend : IVoiceBackend
                 helperGameStatePeers.Add(new SidecarProtocol.GameStatePeerInput(
                     peer.ClientIdText,
                     gain, result.Pan, (int)result.FilterMode, result.Muffled));
+#if WINDOWS
+                if (recordVoices && target.HasValue && gain > 0f)
+                    _obsRecordingTargets![peer.ClientIdText] = target.Value;
+#endif
             }
             LogCenteredLoudRoute(peer, target, listenerPos, result, snapshot.Phase);
 
@@ -4492,6 +4541,9 @@ internal sealed class PerfectCommsVoiceBackend : IVoiceBackend
         VoiceFrameProfiler.End("room.backend.proximity", proxTicks);
 
 #if WINDOWS
+        if (recordVoices && helperGameStatePeers != null && VoiceChatRoom.Current is { } recordingRoom &&
+            ReferenceEquals(recordingRoom.CurrentSnapshot, snapshot))
+            ApplyObsRecordingIdentities(recordingRoom, snapshot, helperGameStatePeers);
         if (helperGameStatePeers != null)
             SendNativeGameStateIfDue(VoiceChatHudState.IsSpeakerMuted, _masterVolume, helperGameStatePeers);
 #elif ANDROID
@@ -4501,6 +4553,18 @@ internal sealed class PerfectCommsVoiceBackend : IVoiceBackend
 
         MaybeLogStats(snapshot, "ok");
     }
+
+#if WINDOWS
+    private void ApplyObsRecordingIdentities(
+        VoiceChatRoom room,
+        VoiceGameStateSnapshot snapshot,
+        List<SidecarProtocol.GameStatePeerInput> routes)
+    {
+        var privacy = VoiceIdentityPrivacyRuntime.Current(VoiceOverlayState.Current(room), snapshot.Phase);
+        _obsRecordingProjection!.Apply(routes, _obsRecordingTargets!, snapshot,
+            privacy.HideAllForViewer || privacy.DimAll, VoiceIdentityPrivacyRuntime.Peek);
+    }
+#endif
 
     internal void ResetRadioState()
     {
@@ -4588,7 +4652,8 @@ internal sealed class PerfectCommsVoiceBackend : IVoiceBackend
         if (!_voiceReady || desktopVoice == null || desktopVoice.Health != CaptureHealth.Healthy)
             return;
         if (!_gameStateSendGate.ShouldSend(Environment.TickCount64, fingerprint)) return;
-        desktopVoice.SendGameState(deaf, master, peers);
+        if (!desktopVoice.SendGameState(deaf, master, peers))
+            _gameStateSendGate.Reset();
 #elif ANDROID
         var mobileVoice = _mobileVoice;
         if (mobileVoice?.IsRunning != true) return;

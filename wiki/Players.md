@@ -24,13 +24,14 @@ On desktop, press `F10` to open Voice Settings. Hosts can press `F11` to open Ho
 Managed Starlight players and desktop `PerfectComms.dll` players interoperate in
 the same voice lobby. The desktop installation and media stack are unchanged.
 
+When an update notification appears in the main menu, **View release** opens its release page and **Dismiss** closes the card for that menu visit. The card waits while a Perfect Comms panel or first-time setup is open.
+
 ## First-time setup
 
 The setup saves everything only after you finish the final Review step. Existing settings remain unchanged if you leave early.
 
 | Step | What you choose |
 | :--- | :--- |
-| **Welcome** | Begin a new setup or keep the settings you already have. |
 | **Audio** | Select and test your microphone and output, set levels, and choose Open Mic or Push To Talk. |
 | **Controls** | Review voice controls and, on desktop, choose whether keybinds stay active while chat is open. |
 | **HUD** | Show or hide voice controls, connection status, the speaking bar, and the meeting overlay; choose a speaking-bar layout with a live preview. |
@@ -95,13 +96,15 @@ Task-phase voice is proximity-based by default. Distance, falloff, walls, vision
 
 You cannot override these match rules from Voice Settings. See **[Host Settings](Host-Settings)** for their exact behavior.
 
+If the host enables **Ghosts Hear Living During Tasks**, nearby ghosts can hear you during tasks even when living players cannot hear each other. A persistent yellow lobby notice warns you before the match. During tasks, **Ghosts only** identifies that microphone audience; manual mute, deafen, and Push To Talk still control transmission. The option is off by default and does not let ghosts reply to living players.
+
 ### Team Radio
 
 Team Radio provides private hold-to-talk channels when the host enables it and your current team or role is eligible. On desktop, hold `V` to transmit and press `G` to cycle available channels. On Android, tap the radio button to cycle or hold it to transmit. The host decides whether channels work during tasks, meetings, or both.
 
 ### Player volumes, mute, and deafen
 
-- Press `Shift+B` to open persistent local volume sliders and live speaking meters for other players. Each slider ranges from 0% to 200% and affects only what you hear.
+- Press `Shift+B` to open the personal volume mixer with persistent local sliders and live speaking meters for other players. Scroll to reach the full roster. Each slider ranges from 0% to 200% and affects only what you hear; the reset arrow restores that player to 100%.
 - Muting stops your microphone transmission without silencing other players.
 - Deafening mutes Perfect Comms playback and pauses your microphone transmission until you undeafen.
 - The optional alive/dead focus bindings temporarily apply separate group volume levels while held.
@@ -114,6 +117,10 @@ The speaking bar can show only active speakers or reserve a slot for every conne
 
 Open **Voice Lobbies** from the main menu to browse public voice-enabled lobbies. A host chooses whether to publish the lobby and which supported directory to use. Directory selection changes discovery only; it does not change the match's voice rules.
 
+The directory scrolls through all listed lobbies. Each row shows its player count, and its button reads **Join** or the reason it cannot be joined: **Full**, **In game**, **Wrong version**, **No code**, **No region**, or **Unavailable**. **Refresh** requests a fresh list.
+
+**Edit lobby info** opens separate lobby-title and language fields with 40- and 16-character limits. **Save** applies the text; **Cancel** or closing the panel discards unfinished changes. These details appear publicly only when you host and enable Public Voice Lobby. On desktop, `Tab` switches fields, `Enter` saves, and `Esc` cancels.
+
 ## Host Voice Settings overview
 
 Only the current lobby host can edit these synced settings.
@@ -122,10 +129,57 @@ Only the current lobby host can edit these synced settings.
 | :--- | :--- |
 | **Proximity** | Maximum hearing distance, falloff, wall/vision occlusion, and security-camera hearing. |
 | **Lobby** | Public voice-lobby listing and directory selection. |
-| **Meeting & Voice** | Meeting-floor grace period, vent voice, ghost rules, Communications sabotage, and Meetings/Lobby Only mode. |
-| **Team Radio** | Team Radio, the impostor channel, and task/meeting availability. |
+| **Voice rules** | Meeting-floor grace period, vent voice, ghost rules, Communications sabotage, and Meetings/Lobby Only mode. |
+| **Team radio** | Team Radio, the impostor channel, and task/meeting availability. |
 
-Compatible mods can register additional tabs under **Mod Behaviour**. Those tabs and role-specific options appear only when the source mod registers them; Perfect Comms does not include a permanent TOU-Mira settings tab.
+Compatible mods can register additional tabs under **Mod behaviour**. Those tabs and role-specific options appear only when the source mod registers them; Perfect Comms does not include a permanent TOU-Mira settings tab.
+
+## OBS Compatibility Mode
+
+Use this when you want voice chat as its own OBS audio source but are not installing the OBS recording plugin. Native Windows only, off by default.
+
+1. Open **Voice Settings > Audio > Streaming** and enable **OBS Compatibility Mode**, then join a voice lobby. A minimized **Perfect Comms Audio** window appears; closing it only minimizes it, and turning the option off removes it.
+2. In OBS **Sources**, add an **Application Audio Capture** and choose the **Perfect Comms Audio** window. This source carries voice chat only.
+3. Capture game sound with a second **Application Audio Capture** of **Among Us**, and keep your microphone as its own input. Do not use **Desktop Audio** for game sound, because it also contains voice chat and would play every voice twice.
+
+If you install the recording plugin below, turn **OBS Compatibility Mode** off and remove its Application Audio Capture; the plugin's **Perfect Comms** source replaces it.
+
+## OBS Recording Integration
+
+Optional, off by default, and available for native Windows x64 Perfect Comms with 64-bit OBS Studio. Tested with OBS Studio 32.2.2; other OBS versions may work, but compatibility and recording synchronization are unverified. Linux/Proton, macOS/Wine/CrossOver, and Android do not provide this integration. It adds one combined **Perfect Comms** audio source to OBS and saves separate incoming-voice WAV files beside your recording. It does not record your own microphone.
+
+### Install and set up
+
+1. Install the matching desktop `PerfectComms.dll` normally. Download the separate `PerfectComms-OBS-win-x64.zip` from the same release.
+2. Close OBS. Extract the ZIP into your OBS installation folder, the folder containing `bin`, `data`, and `obs-plugins`. Merge its `obs-plugins` folder, rather than placing the ZIP inside another plugin folder. The DLL belongs at `obs-plugins/64bit/perfect-comms-obs.dll`. Restart OBS. This ZIP is not an installer and does not include OBS itself.
+3. In Perfect Comms, open **Voice Settings > Audio > Streaming**, enable **OBS Recording Integration**, and join voice. Under **Separate Voice Files**, choose **Per player** (default) or **Alive / dead**. Changes to this mode apply to the next recording.
+4. In OBS **Sources**, add **Perfect Comms** once. Use **Add Existing** to reuse that source in other scenes; additional new instances stay silent. Keep its **Sync Offset** at **0 ms** in **Advanced Audio Properties**.
+5. Avoid capturing voice chat twice. Turn **OBS Compatibility Mode** off and remove any Application Audio Capture of **Perfect Comms Audio**. Capture game sound with an **Application Audio Capture** of **Among Us** instead of **Desktop Audio**, because Desktop Audio also contains voice chat. A typical setup has three audio sources: **Perfect Comms** (voice chat), **Among Us** (game sound), and your microphone.
+6. In **Settings > Output**, use Advanced output mode to select recording audio tracks. For example, track 1 can hold your combined listening mix, track 2 game audio, track 3 your microphone, and track 4 the Perfect Comms combined source. In **Advanced Audio Properties**, assign each source accordingly and enable those tracks in Recording. These are ordinary OBS tracks, not the individual voice files.
+7. Choose standard **MKV** or **MP4**, or **Hybrid MP4/MOV**, with automatic recording file splitting disabled. Custom FFmpeg output is not supported. Record to a writable NTFS or ReFS location with enough free space, without junctions or symbolic links anywhere in the recording folder path.
+
+### Record and edit
+
+Use OBS **Start Recording**, **Pause/Resume**, and **Stop Recording** normally. OBS controls the voice files automatically, including removing paused time and adding silence before late joins or after a player stops speaking. After stopping, allow up to ten seconds for voice-file finalization before closing OBS or disconnecting voice.
+
+For `match.mkv`, look beside the video for `match-voices`, or a numbered variant if that folder already exists. Existing files are never overwritten. Import the video and every voice WAV into your editor at **timeline 0**, without trimming each WAV's leading silence or aligning it to the first spoken word. The files are 48 kHz stereo, 32-bit float WAV, switching to RF64 for large files; your editor must support those formats.
+
+- **Per player:** a file for each permitted displayed identity that contributes audio. Safe aliases share their displayed identity's file. Hidden identities share **Private voices.wav**, not individually named files.
+- **Alive / dead:** **Alive voices.wav** and **Dead voices.wav** as needed, plus **Private voices.wav** when privacy hides a speaker's group. An absent or silent voice does not require a file.
+
+Separate files avoid OBS's six-track limit. When editing with these files, mute or remove the combined Perfect Comms audio from the video to avoid doubling voices. Keep the separately recorded game and microphone tracks.
+
+Voice files follow the incoming audio you are allowed to hear, including player/group volume, spatial audio, voice filters, deafen, and Speaker Volume. They follow the mod's logical voice routing, not whether your physical Windows speakers are working. They exclude your local mic and any unpermitted audio. OBS source fader changes and OBS filters affect the combined OBS source only, not the separate files.
+
+### Status and recording problems
+
+**Audio > Streaming** shows **Off**, **Waiting for OBS**, **Connected**, **Recording**, **Paused**, or **Recording error**. **Open Guide** opens this section. The OBS source's Properties also shows status and the recording folder; use **Refresh connection and recording status** there.
+
+- **Perfect Comms source missing:** check the ZIP's folder layout, restart 64-bit OBS, and check its log for a plugin load error. Installing only the mod DLL does not install the OBS plugin.
+- **Waiting for OBS:** enable the integration, join voice, and add the source. Run OBS and Among Us as the same Windows user.
+- **Echo or doubled voices:** remove duplicate application/desktop capture, check source monitoring, and do not play the combined voice track alongside the separate voice files in your editor.
+- **No named file or unexpected Private voices:** check local deafen, Speaker Volume, player volumes, and the host's hearing rules. Privacy-hidden voices intentionally share one anonymous file; recording cannot recover their real identities.
+- **Recording error:** read the status message. Keep Sync Offset at 0, disable automatic file splitting, use a supported output, and check free space, folder permissions, sparse-file support, and junctions/symbolic links. Invalid encoder timestamps, output errors, queue overflow, or a disconnect during finalization can leave incomplete files. Correct the cause before starting a new recording; do not treat an errored voice folder as complete. Voice chat continues when recording fails.
 
 ## Troubleshooting
 
@@ -135,7 +189,8 @@ Compatible mods can register additional tabs under **Mod Behaviour**. Those tabs
 - **Others cannot hear you:** confirm you are not muted, hold Push To Talk if selected, check Mic Volume and Mic Sensitivity, and test the selected microphone in the Devices tab.
 - **Microphone or speaker is unavailable:** check operating-system permissions and device routing, then reopen Voice Settings. On Android, grant microphone permission to Starlight.
 - **The Starlight test does not load:** confirm the approved test received `PerfectCommsStarlight.dll`, then follow the beta or staff-approved local-mod testing build's log instructions.
-- **A Windows audio helper is blocked:** check whether security software quarantined it. Restore or allow it only when Perfect Comms came from the official release.
+- **A Windows audio helper is blocked:** see [Antivirus blocks voice chat](Installing-Perfect-Comms#antivirus-blocks-voice-chat).
+- **Perfect Comms Audio is missing from OBS:** on native Windows, enable **Audio > Streaming > OBS Compatibility Mode**, enter a voice lobby, and wait for the minimized **Perfect Comms Audio** helper window. Then reopen the OBS **Application Audio Capture** source properties to refresh its application list. Another player is not required for the window to appear.
 - **A problem needs detailed logs:** enable **Voice Settings > Advanced > Diagnostics**, reproduce the problem, and collect the BepInEx log. Diagnostics turns itself off on the next launch.
 
 ## More help

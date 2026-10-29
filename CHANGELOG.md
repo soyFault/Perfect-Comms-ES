@@ -1,70 +1,121 @@
 # Changelog
 
-## Unreleased
+## Perfect Comms v4.1.12
 
-### Voice Settings Interface
+### New
 
-- Voice settings now use the helper logo's cyan, blue, and purple palette, Space Grotesk text, an icon sidebar, grouped controls, and inline setting descriptions.
-- Microphone mode has separate Open Mic and Push To Talk buttons. Sliders and enabled toggles use the same spectrum accent.
-- The settings panel fits the available canvas and retains scrolling, key rebinding, device selection, and the speaking-bar preview. Desktop shortcut hints follow the configured bindings.
-- Removed TextMeshPro's automatic extra tracking from bold interface text so headings and labels retain the font's intended spacing.
-- Corrected the font atlas's distance-field encoding to match Unity's antialiased edge range, avoiding overly hard text edges at small sizes.
+- Hosts can enable **Ghosts Hear Living During Tasks** (off by default). Living players can speak to nearby ghosts and spectators while ordinary living-to-living task voice is off. The option appears only while **Meetings/Lobby Only** or **Only Ghosts can Talk/Hear** is on, and **Ghosts Also Meeting/Lobby Only** still blocks it. Ghost hearing distance, falloff, vent privacy, and mute controls still apply. A yellow lobby notice shows when it is on, and your microphone status reads **Ghosts only** while only ghosts and spectators can hear you.
+- **OBS Compatibility Mode** (Windows, off by default, **Audio > Streaming**) shows a minimized Perfect Comms Audio window, so OBS Application Audio Capture can capture voice chat separately from the game. Closing the window minimizes it; turning the option off removes it.
+- **OBS Recording Integration** (Windows, off by default, **Audio > Streaming**) saves a separate voice file for each player, or one for alive and one for dead players, next to your OBS video. Install the plugin from `PerfectComms-OBS-win-x64.zip` and add the **Perfect Comms** source once; OBS Start, Stop, Pause, and Resume then control the voice files. The setting shows the bridge status with an **Open Guide** button, and the HUD warns if recording fails. [Setup guide](https://github.com/artriy/Perfect-Comms/wiki/Players#obs-recording-integration).
+- Perfect Comms appears in Reactor's main-menu and in-game credits when Reactor is installed.
+
+### Improved
+
+- Redesigned Voice Settings: Space Grotesk text, an icon sidebar, grouped controls with inline descriptions, separate Open Mic and Push To Talk buttons, chevron option steppers, and a redrawn microphone logo. Controls use solid cyan, and shortcut hints follow your key bindings.
+- Smooth mouse-wheel scrolling in Voice Settings, Host Voice Settings, Player Volumes, and Voice Lobbies. Quick wheel turns build on the current motion, and dragging a scrollbar still moves the content directly.
+- First-time setup has four steps (Audio, Controls, HUD, Review) with a preview-first HUD page. You can keep your existing HUD layout, and nothing is saved until **Save & finish**.
+- Host Voice Settings group related match rules into cards with inline explanations. Hidden options keep their values, and the panel scrolls for long rule lists and mod tabs.
+- Player Volumes have wider names, a quiet level meter, a scrollable roster, and per-player reset buttons. Saved 0%-200% volumes are kept.
+- Voice Lobbies open a scrollable list. Each lobby shows its player count, and its button says whether you can join or why not (Full, Wrong version, In game, No code, No region).
+- The lobby-info editor has separate title and language fields with character counts and a fixed Save/Cancel footer.
+- The Voice Settings and Host Voice Settings launchers are smaller microphone-logo tiles.
+- Update notifications appear as a small bottom-right card with **View release** and **Dismiss**, and wait while another Perfect Comms panel is open.
+- The microphone and speaker HUD icons are redrawn and stay smooth when scaled down.
+- When Windows antivirus removes or blocks the Perfect Comms audio helper, voice now says so instead of retrying silently. The HUD shows **Antivirus blocked voice chat**, a card in the main menu or lobby walks through restoring and allowing `PerfectCommsAudio.exe` (with **Open folder**, **Retry**, and **Open guide**), and Voice Settings shows the same message with **How to fix** and **Retry** until voice starts.
+
+### Fixed
+
+- Speaking-bar names no longer overlap neighboring rings, and the settings preview wraps and sizes like the live HUD.
+- A one-frame avatar color flicker no longer applies its color later.
+- Ghost avatars finish loading hats and visors without waiting for unused skins, and multipart ghost bodies render consistently.
+- Dragging a Player Volumes slider or scrollbar keeps following the mouse when the pointer leaves the list.
+- Host Voice Settings stays on the selected tab when a mod adds or removes its tab while the panel is open.
+- If the interface font or artwork cannot load, panels open with the game's font instead of failing.
+
+### Compatibility
+
+- Voice protocol 8 and host-settings schema 5: all voice participants need v4.1.12.
+- Supports Windows, Linux/Proton, macOS/Wine, and Starlight Android on Among Us v19 or newer. The desktop build targets Steam Among Us `2026.9.29`.
+- OBS features are available on native Windows x64 only, not on Proton, Wine, or Starlight. The OBS plugin is tested with OBS Studio 32.2.2; other OBS versions are unverified.
+
+<details>
+<summary>Technical notes</summary>
+
+#### Ghost listening
+
+- Ghost-only speech is sent only to authenticated ghosts and spectators, using restricted packet recipients and the existing capture cutover fences. Mod pair routes and task-voice bypasses do not extend it to living listeners. Mute, deafen, and Push To Talk take priority, and private-radio audiences are unchanged.
+- Host migration revokes the opt-in until fresh host settings arrive. Unavailable or retained rosters cannot authorize ghost listeners, and settings packets from non-hosts cannot change it.
+
+#### OBS recording
+
+- Voice files are 48 kHz stereo float WAV (RF64 when large), aligned to the start of the video. Import every voice file at timeline zero. The combined **Perfect Comms** source, game audio, and your microphone stay separate OBS sources, and OBS source filters and the fader do not change the voice files.
+- Supported outputs are standard MKV/MP4 and hybrid MP4/MOV with automatic file splitting off. The recording folder must support sparse files (NTFS or ReFS) and cannot pass through junctions or symbolic links. Unsupported setups and write failures stop the voice files with a visible status and do not end voice chat.
+- Recording follows the audio you are allowed to hear, after local mute, deafen, volume, spatial, and mod filters. Concealed identities are saved as **Private voices** in both modes, and your own microphone is never exported. The **Separate Voice Files** mode applies to the next recording.
+- The plugin connects to the mod over a current-user Windows named pipe, not a network port. Closing OBS returns the status to waiting; reopening it reconnects.
+- Desktop sidecar protocol 18. Pion ABI 3 is unchanged.
+
+#### Interface
+
+- Space Grotesk ships as an embedded distance-field font (SIL Open Font License 1.1; see THIRD_PARTY_NOTICES). TextMeshPro's automatic extra bold tracking is removed.
+- Pills, slider tracks, toggles, and scrollbars keep true rounded ends at every size. Long setting descriptions shrink before truncating.
+- Scrolling uses a critically damped spring, so it never overshoots and feels the same at any frame rate.
+- HUD icons use mipmaps and trilinear filtering.
+
+#### Dependencies
+
+- Starlight Android bundles SIPSorcery 10.0.17. The desktop DLL embeds System.Text.Json 10.0.14, and the native audio helper uses current Rust crates, including `parking_lot` 0.13.
+- Pion WebRTC stays at v4.2.17, so desktop P2P connections behave as in v4.1.11. It is now built with Go 1.26.10, which fixes a standard-library certificate-parsing issue ([GO-2026-5037](https://pkg.go.dev/vuln/GO-2026-5037)).
+
+</details>
 
 ## Perfect Comms v4.1.11
 
 > [!IMPORTANT]
-> **Among Us compatibility:** Perfect Comms v4.1.11 requires Among Us v19 or newer. Earlier Among Us versions are not supported.
+> Requires **Among Us v19 or newer**. Earlier versions are not supported.
+> Windows players need an **x64 IL2CPP loader**; Windows x86 is no longer included.
 
-Perfect Comms v4.1.11 supports Among Us v19 across all supported platforms, adds Push To Talk and Team Radio support while performing tasks, and introduces new host options for impostor chat across death and during meetings.
+### New
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/artriy/Perfect-Comms/v4.1.11/assets/brand/divider.svg" alt="divider" width="900">
-</p>
+- Push To Talk and Team Radio now work while doing tasks.
+- Hosts can enable **Meeting Only - Impostor Chat** for global task-phase chat between living actual impostors. Ghosts and spectators can listen; living crew and mod-added impostor voice privileges do not gain access.
+- Hosts can enable **Impostors Talk Across Death** so dead actual impostors can reply in task-only impostor chat and impostor Team Radio. With it off, dead impostors can still listen. Crew ghosts and spectators stay listen-only on those channels, with normal ghost chat unchanged.
+- Hosts can enable **Impostors Talk Across Death in Meetings**, directly beneath **Impostors Talk Across Death**. Both must be enabled. Living and dead actual impostors hold their radio control (default `V` on desktop or the Starlight radio button) to speak privately. Living actual impostors, all ghosts, and spectators can listen. Living crew receive neither audio nor radio indicators; crew ghosts and spectators cannot transmit.
 
-### Among Us v19 Compatibility
+### Improved
 
-- **Voice chat supports Among Us v19 across all supported platforms.**
-  > <sub>Compatibility covers Windows, Linux/Proton, macOS/Wine, and Starlight Android. The desktop build targets Steam Among Us <code>2026.9.29</code>. Windows x86 native payloads are no longer built, embedded, or packaged; Windows players need an x64 IL2CPP loader.</sub>
+- Meeting caller grace now blocks other living players from speaking during the grace period. Existing ghost exemptions remain unchanged.
+- Private speech and radio indicators stay within their authorized audience when channels or game phases change. Stale radio state and playback routes are cleared.
+- Mod integrations keep their pair mutes, volume, and routing, including zero-volume silence.
 
-### Task Voice and Impostor Chat
+### Fixed
 
-- **Push To Talk and Team Radio work while performing tasks.**
-  > <sub>Task interactions no longer block those voice controls. Typing, open modals, rebinding, focus loss, and physical-release quarantine still prevent unintended transmission.</sub>
+- Ghosts no longer lose voice chat while haunting, even when their player object is hidden. Ghost, impostor-only, and meeting restrictions still apply.
+- A meeting voice failure no longer interrupts the game transition.
+- Native audio backends now use patched dependencies addressing [RUSTSEC-2026-0293](https://rustsec.org/advisories/RUSTSEC-2026-0293.html).
 
-- **New host option: global impostor chat during tasks.**
-  > <sub>Hosts can enable the new <b>Meeting Only - Impostor Chat</b> option to let living actual impostors speak across the map during tasks. All ghosts and spectators can listen, but living crew and mod-added voice privileges do not gain access. Meetings retain normal speech unless the separate meeting radio option is enabled.</sub>
+### Compatibility
 
-- **New host option: let dead impostors answer their living teammates.**
-  > <sub>Hosts can enable the new <b>Impostors Talk Across Death</b> option to let dead actual impostors reply in task-only impostor chat and impostor Team Radio. With it off, dead impostors can still hear living impostors. Crew ghosts and spectators remain listen-only on these channels; their normal ghost chat remains available.</sub>
+- Supports Windows, Linux/Proton, macOS/Wine, and Starlight Android on Among Us v19 or newer. The desktop build targets Steam Among Us `2026.9.29`.
+- Meeting radio works only during Meeting, independently of ordinary Team Radio and task-only impostor chat. Task and Exile rules are unchanged. Meetings otherwise retain normal speech.
+- Releasing meeting radio restores ordinary speech and death separation. Mute controls and caller grace still apply. An explicit off preference survives turning the parent option off and back on.
 
-- **Haunting no longer removes ghosts from voice chat.**
-  > <sub>Ghosts remain voice participants when their player object is hidden. Ghost, impostor-only, and meeting restrictions still apply.</sub>
+<details>
+<summary>Technical notes</summary>
 
-### Private Meeting Radio
+#### Input and routing safeguards
 
-- **New host option: private impostor radio during meetings.**
-  > <sub>The new <b>Impostors Talk Across Death in Meetings</b> option appears directly beneath <b>Impostors Talk Across Death</b>. When the host enables both, living and dead actual impostors can hold their existing radio control (default V on desktop or the Starlight radio button) to talk privately. Living actual impostors, all ghosts, and spectators can listen; living crew receive neither private audio packets nor radio state. Crew ghosts and spectators cannot transmit.</sub>
+- Typing, open modals, rebinding, focus loss, and physical-release quarantine still prevent unintended voice transmission.
+- Audience changes discard captured speech, queued RTP, retransmission caches, and codec history before opening a wider audience. Windows capture stays muted until helper startup and the initial private audience configuration are complete.
+- Only authorized clients receive radio state. Holding Team Radio does not restrict the global call in menus, lobbies, Intro, or results screens. Spectator capture and playback follow the same eligibility rules.
+- Eligible private-chat listeners retain API pair-route gain and shape. Pair routes cannot grant private-channel access or bypass normal meeting death separation; host-authorized impostor meeting radio remains the explicit exception.
+- Native connection behavior and Pion dependency pins are unchanged from v4.1.10.
 
-- **Meeting radio has its own host setting and returns to normal speech on release.**
-  > <sub>The option works only during Meeting, independently of ordinary Team Radio and task-only impostor chat settings. Releasing radio restores ordinary meeting speech and death separation. Task and Exile rules stay unchanged, mute controls and caller grace still apply, and an explicit off preference survives turning the parent setting off and back on.</sub>
+#### Dependency advisory
 
-- **Meeting caller grace now gives the caller the speaking floor.**
-  > <sub>The opening grace period blocks other living speakers rather than only showing a countdown. Existing ghost exemptions remain unchanged.</sub>
+- Vendored CoreAudio and PulseAudio Rust backends use `ringbuf 0.5.2` to address the memory-safety advisory linked above. Existing sample buffers and callback logging use primitive types without a panicking destructor, so those consumers do not trigger the reported fault.
+- Buffer capacity, overflow behavior, sample order, and underrun silence are unchanged.
 
-### Voice Privacy and Compatibility
-
-- **Private speech stays within its authorized audience, including at channel changes.**
-  > <sub>Private Team Radio, task-only impostor chat, and impostor meeting radio send audio only to eligible peers. Audience changes discard captured speech, queued RTP, retransmission caches, and codec history before opening a wider audience. Windows capture stays muted until helper startup and the initial private audience configuration have both completed.</sub>
-
-- **Radio indicators follow the same audience and phase rules as audio.**
-  > <sub>Only authorized clients receive radio state, and phase transitions clear stale radio state and queued playback routes. Holding Team Radio does not restrict the global call in menus, lobbies, Intro, or results screens. Spectator capture and playback use the same eligibility rules, and a meeting voice failure no longer aborts the game transition.</sub>
-
-- **Mod integrations retain their pair mutes, volume, and voice routing.**
-  > <sub>Eligible private-chat listeners keep API pair-route gain and shape, including zero-volume silence. Pair routes cannot grant private-channel access or bypass normal meeting death separation; the host-authorized impostor meeting radio is the explicit exception. Native connection behavior and Pion dependency pins remain unchanged from v4.1.10.</sub>
-
-- **Native audio dependencies address a published memory-safety advisory.**
-  > <sub>The vendored CoreAudio and PulseAudio Rust backends now use patched <code>ringbuf 0.5.2</code>, addressing <a href="https://rustsec.org/advisories/RUSTSEC-2026-0293.html">RUSTSEC-2026-0293</a>. Existing sample buffers and callback logging use primitive types without a panicking destructor, so those consumers do not trigger the reported fault. Buffer capacity, overflow, sample order, and underrun silence remain unchanged.</sub>
-
+</details>
 
 ## Perfect Comms v4.1.10
 

@@ -43,6 +43,7 @@ internal interface ISidecarVoiceClient : IDisposable
     event Action<IReadOnlyList<SidecarProtocol.PeerLevel>>? OnPeerLevels;
     event Action<SidecarPlaybackState>? OnPlaybackState;
     event Action<SidecarCaptureState>? OnCaptureState;
+    event Action<VoiceObsRecordingStatus>? OnObsRecordingStatus;
 
     CaptureHealth Health { get; }
     IReadOnlyList<VoiceDeviceInfo> OutputDevices { get; }
@@ -67,6 +68,8 @@ internal interface ISidecarVoiceClient : IDisposable
         float monitorGain,
         IEnumerable<IceServer>? iceServers);
     void SetDsp(bool aec, bool agc, bool ns, bool nsVeryHigh, bool hpf);
+    void SetObsCompatibilityMode(bool enabled);
+    void SetObsRecording(bool enabled, VoiceObsRecordingMode mode);
     void SetSynthetic(bool enabled);
     void SetMonitor(bool enabled, bool delayed, float gain);
     void SetInput(float gain, float vadThreshold, float noiseGateThreshold);
@@ -154,6 +157,7 @@ internal sealed class SidecarVoiceLease : IDisposable
     private readonly Action<IReadOnlyList<SidecarProtocol.PeerLevel>> _peerLevelsForwarder;
     private readonly Action<SidecarCaptureState> _captureStateForwarder;
     private readonly Action<SidecarPlaybackState> _playbackStateForwarder;
+    private Action<VoiceObsRecordingStatus>? _obsRecordingForwarder;
 
     internal SidecarVoiceLease(SidecarVoiceHostCore host, long id, SidecarVoiceCallbacks callbacks)
     {
@@ -189,6 +193,8 @@ internal sealed class SidecarVoiceLease : IDisposable
         client.OnPeerLevels += _peerLevelsForwarder;
         client.OnCaptureState += _captureStateForwarder;
         client.OnPlaybackState += _playbackStateForwarder;
+        _obsRecordingForwarder = status => _host.PublishObsRecordingStatus(this, client, status);
+        client.OnObsRecordingStatus += _obsRecordingForwarder;
     }
 
     internal void Detach(ISidecarVoiceClient client)
@@ -203,6 +209,8 @@ internal sealed class SidecarVoiceLease : IDisposable
         client.OnPeerLevels -= _peerLevelsForwarder;
         client.OnCaptureState -= _captureStateForwarder;
         client.OnPlaybackState -= _playbackStateForwarder;
+        client.OnObsRecordingStatus -= _obsRecordingForwarder;
+        _obsRecordingForwarder = null;
     }
 
     internal void Deactivate() => Interlocked.Exchange(ref _active, 0);
@@ -339,11 +347,8 @@ internal sealed class SidecarVoiceLease : IDisposable
         var snapshot = servers.ToArray();
         _host.Submit(this, client => client.SetIceServers(snapshot));
     }
-    public void SendGameState(bool deaf, float master, IReadOnlyList<SidecarProtocol.GameStatePeerInput> peers)
-    {
-        var snapshot = peers?.ToArray() ?? Array.Empty<SidecarProtocol.GameStatePeerInput>();
-        _host.Submit(this, client => client.SendGameState(deaf, master, snapshot));
-    }
+    public bool SendGameState(bool deaf, float master, IReadOnlyList<SidecarProtocol.GameStatePeerInput> peers)
+        => _host.SubmitGameState(this, deaf, master, peers);
 
     internal Task RetirementCompletion => _retirementCompletion.Task;
     internal void CompleteRetirement() => _retirementCompletion.TrySetResult(true);
@@ -463,6 +468,9 @@ internal sealed class SidecarVoiceHostCore
         private readonly int _capacity;
         private readonly Action<CommandSession> _criticalStateFailed;
         private CommandWork? _reservedCriticalState;
+        private CommandWork? _pendingObsCompatibility;
+        private CommandWork? _pendingObsRecording;
+        private CommandWork? _pendingGameState;
         private bool _accepting = true;
 
         internal CommandSession(
@@ -497,12 +505,75 @@ internal sealed class SidecarVoiceHostCore
             }
         }
 
+        internal bool TryEnqueueGameState(
+            bool deaf, float master, IReadOnlyList<SidecarProtocol.GameStatePeerInput> peers)
+        {
+            lock (_queueGate)
+            {
+                if (!_accepting) return false;
+                var snapshot = peers.ToArray();
+                _pendingGameState = new CommandWork
+                {
+                    Generation = Generation,
+                    Action = client =>
+                    {
+                        client.SendGameState(deaf, master, snapshot);
+                        return true;
+                    },
+                };
+                _available.Set();
+                return true;
+            }
+        }
+
+        internal void ApplyObsCompatibilityMode(Func<bool?> setting)
+        {
+            lock (_queueGate)
+            {
+                if (!_accepting) return;
+                _pendingObsCompatibility = new CommandWork
+                {
+                    Generation = Generation,
+                    Action = client =>
+                    {
+                        var enabled = setting();
+                        if (enabled.HasValue)
+                            client.SetObsCompatibilityMode(enabled.Value);
+                        return true;
+                    },
+                };
+                _available.Set();
+            }
+        }
+
+        internal void ApplyObsRecording(Func<SidecarObsRecordingSettings?> setting)
+        {
+            lock (_queueGate)
+            {
+                if (!_accepting) return;
+                _pendingObsRecording = new CommandWork
+                {
+                    Generation = Generation,
+                    Action = client =>
+                    {
+                        if (setting() is { } current)
+                            client.SetObsRecording(current.Enabled, current.Mode);
+                        return true;
+                    },
+                };
+                _available.Set();
+            }
+        }
+
         internal override void BeginRetirement(bool quiesce, string reason)
         {
             lock (_queueGate)
             {
                 if (!_accepting) return;
                 _accepting = false;
+                _pendingObsCompatibility = null;
+                _pendingObsRecording = null;
+                _pendingGameState = null;
                 if (_reservedCriticalState != null)
                 {
                     _queue.Enqueue(_reservedCriticalState);
@@ -527,7 +598,22 @@ internal sealed class SidecarVoiceHostCore
                 CommandWork? work = null;
                 lock (_queueGate)
                 {
-                    if (_queue.Count != 0)
+                    if (_pendingGameState != null)
+                    {
+                        work = _pendingGameState;
+                        _pendingGameState = null;
+                    }
+                    else if (_pendingObsCompatibility != null && _reservedCriticalState == null)
+                    {
+                        work = _pendingObsCompatibility;
+                        _pendingObsCompatibility = null;
+                    }
+                    else if (_pendingObsRecording != null && _reservedCriticalState == null)
+                    {
+                        work = _pendingObsRecording;
+                        _pendingObsRecording = null;
+                    }
+                    else if (_queue.Count != 0)
                         work = _queue.Dequeue();
                     else if (_reservedCriticalState != null)
                     {
@@ -572,6 +658,8 @@ internal sealed class SidecarVoiceHostCore
     private readonly Func<ISidecarVoiceClient> _createClient;
     private readonly Action<ThreadStart, string> _startCommandWorker;
     private readonly int _commandCapacity;
+    private readonly Func<bool?>? _obsCompatibilityMode;
+    private readonly Func<SidecarObsRecordingSettings?>? _obsRecordingSettings;
     private CommandSession? _session;
     private RetirementSession? _retiring;
     private StartupAttempt? _starting;
@@ -580,20 +668,28 @@ internal sealed class SidecarVoiceHostCore
     private long _nextGeneration;
     private bool _shutdown;
 
-    internal SidecarVoiceHostCore(Func<ISidecarVoiceClient> createClient)
-        : this(createClient, DefaultCommandCapacity)
+    internal SidecarVoiceHostCore(
+        Func<ISidecarVoiceClient> createClient,
+        Func<bool?>? obsCompatibilityMode = null,
+        Func<SidecarObsRecordingSettings?>? obsRecordingSettings = null)
+        : this(createClient, DefaultCommandCapacity, obsCompatibilityMode: obsCompatibilityMode,
+            obsRecordingSettings: obsRecordingSettings)
     {
     }
 
     internal SidecarVoiceHostCore(
         Func<ISidecarVoiceClient> createClient,
         int commandCapacity,
-        Action<ThreadStart, string>? startCommandWorker = null)
+        Action<ThreadStart, string>? startCommandWorker = null,
+        Func<bool?>? obsCompatibilityMode = null,
+        Func<SidecarObsRecordingSettings?>? obsRecordingSettings = null)
     {
         _createClient = createClient ?? throw new ArgumentNullException(nameof(createClient));
         if (commandCapacity <= 0) throw new ArgumentOutOfRangeException(nameof(commandCapacity));
         _commandCapacity = commandCapacity;
         _startCommandWorker = startCommandWorker ?? StartCommandWorker;
+        _obsCompatibilityMode = obsCompatibilityMode;
+        _obsRecordingSettings = obsRecordingSettings;
     }
 
     internal SidecarVoiceLease? TryAcquire(SidecarVoiceCallbacks callbacks, out string failure)
@@ -725,7 +821,12 @@ internal sealed class SidecarVoiceHostCore
                        && _session == null
                        && _retiring == null;
             if (accepted)
+            {
                 _session = session;
+                ResetObsRecordingStatusLocked();
+                ApplyObsCompatibilityMode();
+                ApplyObsRecording();
+            }
             else
             {
                 retirement ??= session;
@@ -777,6 +878,54 @@ internal sealed class SidecarVoiceHostCore
             return OwnsLocked(lease) && ReferenceEquals(_session, session)
                 ? devices
                 : Array.Empty<VoiceDeviceInfo>();
+    }
+
+    internal void ApplyObsCompatibilityMode()
+    {
+        lock (_gate)
+        {
+            if (_obsCompatibilityMode == null || _owner == null || !OwnsLocked(_owner) || _starting != null)
+                return;
+            _session?.ApplyObsCompatibilityMode(_obsCompatibilityMode);
+        }
+    }
+
+    internal void ApplyObsRecording()
+    {
+        lock (_gate)
+        {
+            if (_obsRecordingSettings == null || _owner == null || !OwnsLocked(_owner) || _starting != null)
+                return;
+            _session?.ApplyObsRecording(_obsRecordingSettings);
+        }
+    }
+
+    internal void PublishObsRecordingStatus(
+        SidecarVoiceLease lease, ISidecarVoiceClient client, VoiceObsRecordingStatus status)
+    {
+        lock (_gate)
+        {
+            if (!OwnsLocked(lease) || !ReferenceEquals(_session?.Client, client) ||
+                _obsRecordingSettings?.Invoke() is not { Enabled: true })
+                return;
+            if (status.State != "waiting" && client.Health != CaptureHealth.Healthy) return;
+            VoiceObsRecording.Publish(status.State, status.Message);
+        }
+    }
+
+    private void ResetObsRecordingStatusLocked()
+    {
+        if (_obsRecordingSettings == null) return;
+        VoiceObsRecording.HelperUnavailable(_obsRecordingSettings()?.Enabled == true);
+    }
+
+    internal bool SubmitGameState(
+        SidecarVoiceLease lease, bool deaf, float master,
+        IReadOnlyList<SidecarProtocol.GameStatePeerInput> peers)
+    {
+        lock (_gate)
+            return OwnsLocked(lease) && _starting == null &&
+                   _session?.TryEnqueueGameState(deaf, master, peers) == true;
     }
 
     internal void Submit(SidecarVoiceLease lease, Action<ISidecarVoiceClient> action)
@@ -892,6 +1041,7 @@ internal sealed class SidecarVoiceHostCore
             {
                 lease.Deactivate();
                 _owner = null;
+                ResetObsRecordingStatusLocked();
                 if (_session != null)
                 {
                     retiring = _session;
@@ -925,6 +1075,7 @@ internal sealed class SidecarVoiceHostCore
             if (owner != null)
                 owner.Deactivate();
             _owner = null;
+            ResetObsRecordingStatusLocked();
             if (_session != null)
             {
                 retiring = _session;
@@ -953,6 +1104,7 @@ internal sealed class SidecarVoiceHostCore
             if (!OwnsLocked(lease) || !ReferenceEquals(_session, session)) return;
             _session = null;
             _retiring = session;
+            ResetObsRecordingStatusLocked();
             retire = true;
         }
         if (retire)
@@ -966,6 +1118,7 @@ internal sealed class SidecarVoiceHostCore
             if (!ReferenceEquals(_session, session)) return;
             _session = null;
             _retiring = session;
+            ResetObsRecordingStatusLocked();
             retire = true;
         }
         if (retire)
@@ -980,6 +1133,7 @@ internal sealed class SidecarVoiceHostCore
             if (!OwnsLocked(lease) || !ReferenceEquals(_session, session)) return;
             _session = null;
             _retiring = session;
+            ResetObsRecordingStatusLocked();
             session.BeginRetirement(false, "dead-before-start");
         }
     }
@@ -1036,7 +1190,25 @@ internal sealed class SidecarVoiceHostCore
 
 internal static class SidecarVoiceHost
 {
-    private static readonly SidecarVoiceHostCore Host = new(CreateClient);
+    private static readonly SidecarVoiceHostCore Host = new(
+        CreateClient,
+        obsCompatibilityMode: () => SupportsObsCompatibilityMode
+            ? VoiceSettings.Instance?.ObsCompatibilityMode.Value ?? false
+            : null,
+        obsRecordingSettings: () => SupportsObsCompatibilityMode
+            ? new SidecarObsRecordingSettings(
+                VoiceSettings.Instance?.ObsRecordingIntegration.Value ?? false,
+                VoiceSettings.Instance?.ObsRecordingMode.Value ?? VoiceObsRecordingMode.PerPlayer)
+            : null);
+
+    internal static bool SupportsObsCompatibilityMode =>
+        !WineEnvironment.IsWine
+        && System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
+            System.Runtime.InteropServices.OSPlatform.Windows)
+        && SidecarLauncher.TargetTriple() == "x86_64-pc-windows-msvc";
+
+    internal static void ApplyObsCompatibilityMode() => Host.ApplyObsCompatibilityMode();
+    internal static void ApplyObsRecording() => Host.ApplyObsRecording();
 
     internal static SidecarVoiceLease? TryAcquire(SidecarVoiceCallbacks callbacks, out string failure)
         => Host.TryAcquire(callbacks, out failure);
@@ -1046,19 +1218,59 @@ internal static class SidecarVoiceHost
     private static ISidecarVoiceClient CreateClient()
         => new SidecarVoiceClient(LaunchSidecarHelper);
 
+    private static readonly VoiceHelperBlockTracker HelperBlockTracker = new();
+
     private static SidecarLaunchResult LaunchSidecarHelper(string token, string deviceId)
     {
+        var nativeWindows = !WineEnvironment.IsWine
+            && System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
+                System.Runtime.InteropServices.OSPlatform.Windows);
         var assembly = System.Reflection.Assembly.GetExecutingAssembly();
-        var helperPath = SidecarLauncher.EnsureHelperExtracted(
-            assembly,
-            SidecarLauncher.NativeCacheBaseDirectory(),
-            force: false);
-        return SidecarLauncher.Launch(
+        var cacheRoot = string.Empty;
+        string helperPath;
+        try
+        {
+            helperPath = SidecarLauncher.EnsureHelperExtracted(
+                assembly,
+                SidecarLauncher.NativeCacheBaseDirectory(),
+                force: false,
+                out cacheRoot);
+        }
+        catch (Exception ex)
+        {
+            ObserveHelperLaunch(VoiceHelperLaunchFailure.FromExtraction(ex), nativeWindows, cacheRoot);
+            throw;
+        }
+        var result = SidecarLauncher.Launch(
             helperPath,
             token,
             handshakeTimeoutMs: 4000,
             wine: WineEnvironment.IsWine,
             resolveWineHostPath: WineEnvironment.ResolveHostPath);
+        if (result.Success)
+        {
+            HelperBlockTracker.Reset();
+            VoiceHelperBlockState.Clear();
+        }
+        else
+        {
+            ObserveHelperLaunch(result.BlockFailure, nativeWindows, cacheRoot);
+        }
+        return result;
+    }
+
+    private static void ObserveHelperLaunch(
+        VoiceHelperLaunchFailure failure,
+        bool nativeWindows,
+        string cacheRoot)
+    {
+        var kind = HelperBlockTracker.Observe(failure, nativeWindows);
+        if (kind == VoiceHelperBlockKind.None)
+            return;
+        VoiceDiagnostics.Log(
+            "sidecar.helper_blocked",
+            $"kind={kind} stage={failure.Stage} nativeErrorCode={failure.NativeErrorCode} extractionStage={failure.ExtractionStage} root={NativeLibraryCache.DiagnosticValue(cacheRoot)}");
+        VoiceHelperBlockState.Report(kind, cacheRoot);
     }
 }
 #endif

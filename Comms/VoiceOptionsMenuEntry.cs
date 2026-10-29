@@ -46,9 +46,9 @@ public static class VoiceOptionsMenuEntry
         if (_chip.Built) return;
         try
         {
-            _chip.Build("PERFECT COMMS", Loc.T("chip.voice_settings", "VOICE SETTINGS"),
+            _chip.Build(Loc.T("chip.options_eyebrow", "Personal · Perfect Comms"), Loc.T("chip.voice_settings", "Voice settings"),
                 new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f),
-                new Vector2(14f, 0f),
+                new Vector2(16f, 0f),
                 VoiceSettingsPanel.Show,
                 static () => _menu != null && _menu.gameObject != null && _menu.gameObject.activeInHierarchy,
                 static () => true, 1.0f);
@@ -63,7 +63,7 @@ public static class VoiceOptionsMenuEntry
 
     internal static void RefreshLanguage()
     {
-        if (_chip.Built) _chip.SetLabel(Loc.T("chip.voice_settings", "VOICE SETTINGS"));
+        if (_chip.Built) _chip.SetLabel(Loc.T("chip.options_eyebrow", "Personal · Perfect Comms"), Loc.T("chip.voice_settings", "Voice settings"));
     }
 
     public static void TickButton() => _chip.Tick();

@@ -18,11 +18,16 @@ internal static class VoiceUiBranding
     private const string ResourcePrefix = "VoiceChatPlugin.Resources.VoiceUi.";
     private static readonly Sprite?[] CategorySprites = new Sprite?[5];
     private static Sprite? _logo;
+    private static Sprite? _chevron;
 #if !STARLIGHT
     private static TMP_FontAsset? _font;
+    private static bool _fontFailed;
 #endif
+    private static Sprite? _blankSprite;
 
     internal static Sprite Logo() => _logo ??= LoadSprite("VoiceChatPlugin.Resources.miclogo.png");
+
+    internal static Sprite Chevron() => _chevron ??= LoadSprite(ResourcePrefix + "Chevron.png");
 
     internal static Sprite CategoryIcon(VoiceSettingsCategory category)
     {
@@ -39,20 +44,50 @@ internal static class VoiceUiBranding
         // assembled there. The UI keeps using the game's own font on Starlight.
         return fallbackFont;
 #else
+        if (_fontFailed) return fallbackFont;
         if (fallbackFont == null) return _font;
-        if (_font == null) _font = CreateFont(fallbackFont);
+        if (_font == null)
+        {
+            try { _font = CreateFont(fallbackFont); }
+            catch (Exception ex)
+            {
+                _fontFailed = true;
+                VoiceChatPluginMain.Logger.LogWarning("[PC-UI] Space Grotesk font unavailable; using the game font: " + ex);
+                return fallbackFont;
+            }
+        }
         else if (fallbackFont != _font && !_font.fallbackFontAssetTable.Contains(fallbackFont))
             _font.fallbackFontAssetTable.Add(fallbackFont);
         return _font;
 #endif
     }
 
+    // Missing art degrades to a transparent sprite: a null sprite would draw a white box on every caller's Image.
     private static Sprite LoadSprite(string resourceName)
     {
-        var sprite = VoiceChatHudState.LoadSprite(resourceName, highQuality: true);
-        if (sprite == null) throw new InvalidOperationException("Failed to load voice settings artwork: " + resourceName);
-        sprite.texture.hideFlags = HideFlags.HideAndDontSave;
-        return sprite;
+        try
+        {
+            var sprite = VoiceChatHudState.LoadSprite(resourceName, highQuality: true);
+            if (sprite == null) throw new InvalidOperationException("Failed to load voice settings artwork: " + resourceName);
+            sprite.texture.hideFlags = HideFlags.HideAndDontSave;
+            return sprite;
+        }
+        catch (Exception ex)
+        {
+            VoiceChatPluginMain.Logger.LogWarning("[PC-UI] Voice UI artwork unavailable: " + ex);
+            return BlankSprite();
+        }
+    }
+
+    private static Sprite BlankSprite()
+    {
+        if (_blankSprite != null) return _blankSprite;
+        var texture = new Texture2D(1, 1, TextureFormat.RGBA32, false) { hideFlags = HideFlags.HideAndDontSave };
+        texture.SetPixel(0, 0, Color.clear);
+        texture.Apply();
+        _blankSprite = Sprite.Create(texture, new Rect(0f, 0f, 1f, 1f), new Vector2(0.5f, 0.5f));
+        _blankSprite.hideFlags = HideFlags.HideAndDontSave;
+        return _blankSprite;
     }
 
 #if !STARLIGHT

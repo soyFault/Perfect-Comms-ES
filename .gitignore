@@ -36,6 +36,7 @@ scripts/*
 !scripts/generate-cubeb-license-inventories.py
 !scripts/verify-cubeb-provenance.py
 !scripts/build-pion.sh
+!scripts/build-obs-plugin.ps1
 !scripts/verify-pion-license-inventory.py
 !scripts/package-starlight.sh
 !scripts/package-starlight.ps1
@@ -63,9 +64,8 @@ cloudflare/**/package-lock.json
 cloudflare/**/*.log
 TouMira/
 artifacts/
-website/
 assets/brand/logo-concepts/
-assets/brand/vectorcraft/*.vectorcraft
+assets/brand/vectorcraft/
 # Local portable toolchains and downloaded installers travel with folder copies,
 # not with source-control commits.
 dev-tools/

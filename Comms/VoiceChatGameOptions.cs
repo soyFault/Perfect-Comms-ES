@@ -24,6 +24,7 @@ public class VoiceChatGameOptions
     public ToggleHolder TeamRadioInMeetings { get; }
     public ToggleHolder TeamRadioInTasks { get; }
     public ToggleHolder OnlyGhostsCanTalk { get; }
+    public ToggleHolder GhostsHearLivingDuringTasks { get; }
     public ToggleHolder GhostsHearEachOtherUnlimited { get; }
     public ToggleHolder OnlyMeetingOrLobby { get; }
     public ToggleHolder OnlyMeetingOrLobbyAffectsGhosts { get; }
@@ -80,6 +81,11 @@ public class VoiceChatGameOptions
         };
         OnlyGhostsCanTalk = new ToggleHolder(cfg, Section, "OnlyGhostsCanTalk", Loc.L("host.only_ghosts_can_talk", "Only Ghosts can Talk/Hear"), false,
             Loc.L("host.only_ghosts_can_talk_help", "Restricts task-phase voice communication to dead players only."));
+        GhostsHearLivingDuringTasks = new ToggleHolder(cfg, Section, "GhostsHearLivingDuringTasks", Loc.L("host.ghosts_hear_living_during_tasks", "Ghosts Hear Living During Tasks"), false,
+            Loc.L("host.ghosts_hear_living_during_tasks_help", "During Tasks only, ghosts hear nearby living players despite Meetings/Lobby Only or Only Ghosts can Talk/Hear. Does not enable living-to-living speech. Normal ghost range, falloff and vent privacy apply. Ghosts Also Meeting/Lobby Only takes priority while Meetings/Lobby Only is on. Mute, push-to-talk, deafen and host role mutes still apply."))
+        {
+            Visible = GhostsHearLivingVisible
+        };
         GhostsHearEachOtherUnlimited = new ToggleHolder(cfg, Section, "GhostsHearEachOtherUnlimited", Loc.L("host.ghosts_hear_each_other_unlimited", "Ghosts Hear Each Other Anywhere"), false,
             Loc.L("host.ghosts_hear_each_other_unlimited_help", "Lets dead players hear one another across the entire map instead of using proximity distance."));
         OnlyMeetingOrLobby = new ToggleHolder(cfg, Section, "OnlyMeetingOrLobby", Loc.L("host.only_meeting_or_lobby", "Meetings/Lobby Only"), false,
@@ -120,6 +126,10 @@ public class VoiceChatGameOptions
         Instance.TeamRadio.Value && Instance.TeamRadioInMeetings.Value;
 
     private static bool MeetingLobbySubOptionsVisible() => Instance.OnlyMeetingOrLobby.Value;
+
+    private static bool GhostsHearLivingVisible() => VoiceGhostListeningPolicy.CanApply(
+        Instance.OnlyMeetingOrLobby.Value, Instance.OnlyGhostsCanTalk.Value,
+        Instance.OnlyMeetingOrLobbyAffectsGhosts.Value);
 
     private static bool ImpostorsTalkAcrossDeathSubOptionsVisible() => Instance.ImpostorsTalkAcrossDeath.Value;
 

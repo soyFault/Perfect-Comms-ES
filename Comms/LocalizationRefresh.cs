@@ -22,6 +22,9 @@ internal static class LocalizationRefresh
     internal static void Apply()
     {
         Run("hud warnings", VoiceHudWarnings.Invalidate);
+#if WINDOWS
+        Run("helper notice", VoiceHelperBlockedNotice.Clear);
+#endif
         Run("settings panel", VoiceSettingsPanel.RefreshLanguage);
         Run("host panel", HostSettingsPanel.RefreshLanguage);
         Run("volume menu", VoiceVolumeMenu.RefreshLanguage);

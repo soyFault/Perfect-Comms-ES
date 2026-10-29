@@ -125,6 +125,7 @@ public class VoiceChatRoom
     private bool _retainingTransitionSnapshot;
     private readonly Dictionary<int, float> _missingSnapshotClientSince = new();
     private readonly HashSet<int> _authenticatedSnapshotClientIds = new();
+    private bool _authenticatedRosterIncludesLocal;
     private float _authRosterUnavailableSince = -1f;
     private float _completeRemoteRosterWaitStart = -1f;
     private float _bootstrapUntilTime = -999f;
@@ -529,7 +530,14 @@ public class VoiceChatRoom
         {
             _snapshotRefreshTimer = StateRefreshInterval;
             long __snapTicks = VoiceFrameProfiler.Begin();
-            var refreshedSnapshot = VoiceSnapshotBuilder.Build(_commsSabActive);
+            var authRosterState = CollectAuthenticatedSnapshotClientIds();
+            var refreshedSnapshot = VoiceSnapshotBuilder.Build(_commsSabActive,
+                authRosterState == AuthenticatedRosterCollectionState.Populated ? _authenticatedSnapshotClientIds : null);
+            refreshedSnapshot = refreshedSnapshot with
+            {
+                AuthenticatedRosterAvailable = authRosterState == AuthenticatedRosterCollectionState.Populated &&
+                    _authenticatedRosterIncludesLocal,
+            };
             var observedGameId = ResolveCurrentGameId();
             var explicitDisconnect = VoiceRoomLifetimeGate.IsExplicitDisconnectLatched;
             var currentGameId = VoiceRoomLifetimeGate.ResolveSnapshotSessionGameId(
@@ -564,7 +572,6 @@ public class VoiceChatRoom
                     _completeRemoteRosterWaitStart = -1f;
                 }
 
-                var authRosterState = CollectAuthenticatedSnapshotClientIds();
                 if (authRosterState == AuthenticatedRosterCollectionState.Populated)
                 {
                     _authRosterUnavailableSince = -1f;
@@ -793,6 +800,7 @@ public class VoiceChatRoom
     private AuthenticatedRosterCollectionState CollectAuthenticatedSnapshotClientIds()
     {
         _authenticatedSnapshotClientIds.Clear();
+        _authenticatedRosterIncludesLocal = false;
         try
         {
             var client = AmongUsClient.Instance;
@@ -808,6 +816,8 @@ public class VoiceChatRoom
                 {
                     resolvedRosterEntries++;
                     _authenticatedSnapshotClientIds.Add(member.Id);
+                    if (member.Id == client.ClientId)
+                        _authenticatedRosterIncludesLocal = true;
                 }
             }
             return resolvedRosterEntries == 0
@@ -817,6 +827,7 @@ public class VoiceChatRoom
         catch
         {
             _authenticatedSnapshotClientIds.Clear();
+            _authenticatedRosterIncludesLocal = false;
             return AuthenticatedRosterCollectionState.Unavailable;
         }
     }
@@ -834,24 +845,38 @@ public class VoiceChatRoom
     }
 
     internal static void RequestLocalVoiceRefreshFromKeybind()
+        => RequestLocalVoiceRefresh("keybind");
+
+    /// <returns>True when a local voice refresh actually started.</returns>
+    internal static bool RequestLocalVoiceRefreshFromHelperNotice()
+        => RequestLocalVoiceRefresh("helper-blocked-retry");
+
+    /// <summary>True while the current room's local voice refresh (F7) cooldown is running.</summary>
+    internal static bool IsLocalVoiceRefreshCoolingDown
+    {
+        get
+        {
+            var current = Current;
+            return current != null &&
+                   !IsLocalVoiceRefreshCooldownElapsed(Time.time, current._lastLocalVoiceRefreshRequestTime);
+        }
+    }
+
+    private static bool RequestLocalVoiceRefresh(string trigger)
     {
         var current = Current;
         if (current == null)
         {
-            VoiceDiagnostics.Log("voice.refresh.local.ignored", "reason=no-room trigger=keybind");
-            return;
+            VoiceDiagnostics.Log("voice.refresh.local.ignored", $"reason=no-room trigger={trigger}");
+            return false;
         }
 
-        current.RequestLocalVoiceRefresh();
-    }
-
-    private void RequestLocalVoiceRefresh()
-    {
-        if (!TryBeginLocalVoiceRefreshCooldown("voice.refresh.local.rate_limited", "keybind"))
-            return;
+        if (!current.TryBeginLocalVoiceRefreshCooldown("voice.refresh.local.rate_limited", trigger))
+            return false;
         VoiceDiagnostics.Log("voice.refresh.local.requested",
-            $"backend=native-engine {VoiceDiagnostics.DescribeRoom(_activeRoomCode)} {VoiceDiagnostics.DescribeRegion(_activeRegion)} peers={_voiceBackend?.PeerCount ?? 0}");
-        ApplyLocalVoiceRefresh("keybind");
+            $"trigger={trigger} backend=native-engine {VoiceDiagnostics.DescribeRoom(current._activeRoomCode)} {VoiceDiagnostics.DescribeRegion(current._activeRegion)} peers={current._voiceBackend?.PeerCount ?? 0}");
+        current.ApplyLocalVoiceRefresh(trigger);
+        return true;
     }
 
     private bool TryBeginLocalVoiceRefreshCooldown(string rateLimitedEvent, string trigger)
@@ -1104,6 +1129,7 @@ public class VoiceChatRoom
                     _hostSettingsResyncPending))
             {
                 _hostSettingsResyncPending = true;
+                VoiceRoomSettingsState.RevokeGhostListening();
                 _hostPolicyWaitStartTime = Time.realtimeSinceStartup;
                 _hostPolicyFallbackLogged = false;
                 _hostSettingsRequestGate.Reset();
@@ -1137,6 +1163,7 @@ public class VoiceChatRoom
         _hostSettingsRequestGate.Reset();
         _hostSettingsResponseGates.Clear();
         _hostSettingsResyncPending = true;
+        VoiceRoomSettingsState.RevokeGhostListening();
         _hostPolicyWaitStartTime = Time.realtimeSinceStartup;
         _hostPolicyFallbackLogged = false;
 
@@ -1848,7 +1875,10 @@ public class VoiceChatRoom
         VoiceDiagnostics.Log("settings.host.resync_applied", $"transport={transport} hostClient={hostClientId} hostPlayer={hostPlayerId}");
     }
 
-    internal static void NoteHostSettingsSnapshotRejected()
+    // Untrusted senders must not revoke: any non-host could otherwise disable ghost listening room-wide.
+    internal static bool ShouldRevokeGhostListeningOnSnapshotRejection(bool trustedSender) => trustedSender;
+
+    internal static void NoteHostSettingsSnapshotRejected(bool trustedSender)
     {
         // Snapshot rejected (e.g. stale host id during migration): flag a re-request so settings
         // converge once the host id resolves. The successful-send gate bounds retries to 2 seconds.
@@ -1859,6 +1889,8 @@ public class VoiceChatRoom
         if (!current._hostSettingsResyncPending)
             current._hostPolicyWaitStartTime = Time.realtimeSinceStartup;
         current._hostSettingsResyncPending = true;
+        if (ShouldRevokeGhostListeningOnSnapshotRejection(trustedSender))
+            VoiceRoomSettingsState.RevokeGhostListening();
         current._hostSettingsRequestGate.Reset();
     }
 

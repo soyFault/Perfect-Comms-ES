@@ -23,7 +23,6 @@ public static class VoiceSettingsPanel
     private const float DeviceRowH = 142f;
     private const float HeaderH = 30f;
     private const float TopPad = 0f;
-    private const float SmoothScrollRate = 18f;
     private const float ScrollbarMinThumbHeight = 30f;
 
     private static readonly string[] Categories =
@@ -56,6 +55,7 @@ public static class VoiceSettingsPanel
     private static VoiceUiKit.Row? _activeRow;
     private static float _scroll;
     private static float _scrollTarget;
+    private static float _scrollVelocity;
     private static float _contentHeight;
     private static float _animT;
     private static int _visSignature = int.MinValue;
@@ -93,6 +93,7 @@ public static class VoiceSettingsPanel
 
         HostSettingsPanel.ForceClose();
         VoiceVolumeMenu.ForceClose();
+        VoiceLobbyBrowserUi.ForceClose();
 
         VoiceUiKit.EnsureCanvas();
         VoiceUiKit.EnsureDriver();
@@ -111,6 +112,7 @@ public static class VoiceSettingsPanel
         _shell.Group.blocksRaycasts = true;
         _scroll = 0f;
         _scrollTarget = 0f;
+        _scrollVelocity = 0f;
         CancelScrollbarDrag();
         _shell.PaneRoot.anchoredPosition = Vector2.zero;
         _animT = 0f;
@@ -287,6 +289,7 @@ public static class VoiceSettingsPanel
         _activeRow = null;
         _scroll = 0f;
         _scrollTarget = 0f;
+        _scrollVelocity = 0f;
         _contentHeight = 0f;
         _visSignature = int.MinValue;
         _expandedMixSettings = MixSettingsExpansion.None;
@@ -442,6 +445,15 @@ public static class VoiceSettingsPanel
         if ((uint)cat >= (uint)CategoryOrder.Length)
             return defs;
 
+#if WINDOWS
+        defs.Add(new Entry
+        {
+            Key = "Helper Blocked Banner",
+            Height = HelperBlockedBannerRow.RowHeight,
+            Visible = () => VoiceHelperBlockState.IsBlocked,
+            Build = (pane, paneW, y) => new HelperBlockedBannerRow().Build(pane, paneW, y),
+        });
+#endif
         switch (CategoryOrder[cat])
         {
             case VoiceSettingsCategory.Audio: BuildAudio(defs, s); break;
@@ -488,6 +500,7 @@ public static class VoiceSettingsPanel
         {
             _scroll = 0f;
             _scrollTarget = 0f;
+            _scrollVelocity = 0f;
         }
         else
         {
@@ -588,12 +601,12 @@ public static class VoiceSettingsPanel
 
     private static void BuildAudio(List<Entry> defs, VoiceChatLocalSettings s)
     {
-        Section(defs, Loc.L("settings.section.levels", "LEVELS"));
+        Section(defs, Loc.L("settings.section.levels", "Levels"));
         Slider(defs, Loc.L("settings.row.mic_volume", "Mic Volume"), s.MicVolume, Pct);
         Slider(defs, Loc.L("settings.row.mic_sensitivity", "Mic Sensitivity"), s.MicSensitivity, Num2);
         Slider(defs, Loc.L("settings.row.speaker_volume", "Speaker Volume"), s.MasterVolume, Pct);
         EnumStep(defs, Loc.L("settings.row.meeting_spatial_audio", "Meeting Spatial Audio"), s.MeetingSpatial, new[] { Loc.L("settings.spatial_off", "Off"), Loc.L("settings.spatial_low", "Low"), Loc.L("settings.spatial_full", "Full") });
-        Section(defs, Loc.L("settings.section.processing", "PROCESSING"));
+        Section(defs, Loc.L("settings.section.processing", "Processing"));
         defs.Add(new Entry
         {
             Key = "Mic Mode",
@@ -608,9 +621,29 @@ public static class VoiceSettingsPanel
         Toggle(defs, Loc.L("settings.row.echo_cancellation", "Echo Cancellation"), s.EchoCancellationEnabled);
 #endif
         Slider(defs, Loc.L("settings.row.voice_falloff_softness", "Voice Falloff Softness"), s.VoiceFalloffSoftness, Pct);
-        Section(defs, Loc.L("settings.section.startup", "STARTUP"));
+        Section(defs, Loc.L("settings.section.startup", "Startup"));
         Toggle(defs, Loc.L("settings.row.start_muted", "Start Muted"), s.StartMuted);
         Toggle(defs, Loc.L("settings.row.start_deafened", "Start Deafened"), s.StartDeafened);
+#if WINDOWS
+        if (SidecarVoiceHost.SupportsObsCompatibilityMode)
+        {
+            Section(defs, Loc.L("settings.section.streaming", "Streaming"));
+            Toggle(defs, Loc.L("settings.row.obs_compatibility_mode", "OBS Compatibility Mode"), s.ObsCompatibilityMode);
+            Toggle(defs, Loc.L("settings.row.obs_recording_integration", "OBS Recording Integration"), s.ObsRecordingIntegration);
+            EnumStep(defs, Loc.L("settings.row.separate_voice_files", "Separate Voice Files"), s.ObsRecordingMode,
+                new[] { Loc.L("settings.obs_per_player", "Per player"), Loc.L("settings.obs_alive_dead", "Alive / dead") }, () => s.ObsRecordingIntegration.Value);
+            defs.Add(new Entry
+            {
+                Key = "OBS Recording Status",
+                Height = 104f,
+                Visible = () => s.ObsRecordingIntegration.Value,
+                Build = (pane, paneW, y) => new VoiceUiKit.ObsRecordingStatusRow().Build(pane, paneW, y),
+            });
+            Action(defs, Loc.L("settings.row.obs_recording_setup", "OBS Recording Setup"), Loc.T("settings.open_guide", "Open Guide"),
+                () => Application.OpenURL("https://github.com/artriy/Perfect-Comms/wiki/Players#obs-recording-integration"),
+                Loc.T("settings.help_obs_setup", "Install the plugin once, then add a Perfect Comms audio source."));
+        }
+#endif
     }
 
     private static void BuildDevices(List<Entry> defs, VoiceChatLocalSettings s)
@@ -649,7 +682,7 @@ public static class VoiceSettingsPanel
         });
 #endif
 
-        Section(defs, Loc.L("settings.section.microphone_test", "MICROPHONE TEST"));
+        Section(defs, Loc.L("settings.section.microphone_test", "Microphone test"));
         defs.Add(new Entry
         {
             Key = "Microphone Test",
@@ -898,7 +931,7 @@ public static class VoiceSettingsPanel
         Func<bool> showVoiceControls = () => visibility().VoiceControlsHudVisible;
         Func<bool> showSpeakingBar = () => visibility().SpeakingBarVisible;
 
-        Section(defs, Loc.L("settings.section.voice_controls", "VOICE CONTROLS"));
+        Section(defs, Loc.L("settings.section.voice_controls", "Voice controls"));
         Toggle(
             defs,
             Loc.L("settings.row.disable_voice_controls_hud", "Disable Voice Controls HUD"),
@@ -919,7 +952,7 @@ public static class VoiceSettingsPanel
         Toggle(defs, Loc.L("settings.row.voice_connection_status", "Voice Connection Status"), s.ShowVoiceConnectionStatus,
             showVoiceControls);
 
-        Section(defs, Loc.L("settings.section.speaking_bar", "SPEAKING BAR"));
+        Section(defs, Loc.L("settings.section.speaking_bar", "Speaking bar"));
         Toggle(
             defs,
             Loc.L("settings.row.disable_speaking_bar", "Disable Speaking Bar"),
@@ -955,19 +988,19 @@ public static class VoiceSettingsPanel
         Slider(defs, Loc.L("settings.row.speaking_bar_y", "Speaking Bar Y"), s.SpeakingBarY, Pct,
             () => showSpeakingBar() && s.SpeakingBarManualLayout.Value);
 
-        Section(defs, Loc.L("settings.section.meeting_overlay", "MEETING OVERLAY"));
+        Section(defs, Loc.L("settings.section.meeting_overlay", "Meeting overlay"));
         Toggle(defs, Loc.L("settings.row.meeting_speaking_overlay", "Meeting Speaking Overlay"), s.MeetingSpeakingOverlay);
 
-        Section(defs, Loc.L("settings.section.other", "OTHER"));
+        Section(defs, Loc.L("settings.section.other", "Other"));
     }
 
     private static void BuildAdvanced(List<Entry> defs, VoiceChatLocalSettings s)
     {
-        Section(defs, Loc.L("settings.section.setup", "SETUP"));
-        Action(defs, Loc.L("settings.row.first_time_setup", "First-Time Setup"), Loc.T("settings.run_setup_again", "RUN SETUP AGAIN"), ShowFirstRunSetup,
+        Section(defs, Loc.L("settings.section.setup", "Setup"));
+        Action(defs, Loc.L("settings.row.first_time_setup", "First-Time Setup"), Loc.T("settings.run_setup_again", "Run setup again"), ShowFirstRunSetup,
             Loc.T("settings.help_run_setup", "Reopens the guided audio, controls, and HUD setup. Your current settings are kept unless you finish with changes."));
 
-        Section(defs, Loc.L("settings.section.troubleshooting", "TROUBLESHOOTING"));
+        Section(defs, Loc.L("settings.section.troubleshooting", "Troubleshooting"));
         Toggle(defs, Loc.L("settings.row.show_fake_15_players", "Show Fake 15 Players"), s.ShowFake15Players,
             () => !s.DisableSpeakingBar.Value);
         Toggle(defs, Loc.L("settings.row.diagnostics", "Diagnostics"),
@@ -1211,7 +1244,10 @@ public static class VoiceSettingsPanel
 
         bool inputBusy = _activeRow != null || VoiceUiKit.RebindRow.IsCapturing;
         if (inputBusy)
+        {
             _scrollTarget = _scroll;
+            _scrollVelocity = 0f;
+        }
         if (!inputBusy && Input.GetMouseButtonDown(0) && VoiceUiKit.Contains(_scrollbarRoot))
         {
             if (!TryGetScrollbarPointerFromTop(out float pointerFromTop)) return true;
@@ -1234,7 +1270,10 @@ public static class VoiceSettingsPanel
         if (!inputBusy && VoiceUiKit.Contains(_shell.PaneClip))
         {
             if (Input.GetMouseButtonDown(0))
+            {
                 _scrollTarget = _scroll;
+                _scrollVelocity = 0f;
+            }
             float delta = Input.mouseScrollDelta.y;
             if (Mathf.Abs(delta) > 0.01f)
                 _scrollTarget = Mathf.Clamp(_scrollTarget - delta * RowH, 0f, MaxScroll());
@@ -1261,6 +1300,7 @@ public static class VoiceSettingsPanel
             _scrollbarThumb.rect.height);
         if (!snap) return;
         _scroll = _scrollTarget;
+        _scrollVelocity = 0f;
         if (_shell != null)
             _shell.PaneRoot.anchoredPosition = new Vector2(0f, _scroll);
         UpdateScrollbarVisual();
@@ -1274,11 +1314,11 @@ public static class VoiceSettingsPanel
         _scroll = VoiceSettingsScrollPolicy.Clamp(_scroll, maxScroll);
 
         if (!_scrollbarDragging)
-            _scroll = VoiceSettingsScrollPolicy.Advance(
-                _scroll,
-                _scrollTarget,
-                SmoothScrollRate,
-                unscaledDeltaTime);
+        {
+            float next = VoiceSettingsScrollPolicy.Follow(_scroll, ref _scrollVelocity, _scrollTarget, unscaledDeltaTime);
+            _scroll = VoiceSettingsScrollPolicy.Clamp(next, maxScroll);
+            if (_scroll != next) _scrollVelocity = 0f;
+        }
 
         _shell.PaneRoot.anchoredPosition = new Vector2(0f, _scroll);
         UpdateScrollbarVisual();

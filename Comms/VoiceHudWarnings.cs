@@ -13,6 +13,10 @@ internal static class VoiceHudWarnings
     private static float _nextRefreshTime;
     private static string _cached = string.Empty;
 
+    internal static bool ShouldShowGhostListeningNotice(
+        VoiceRoomSettingsSnapshot settings, VoiceGamePhase phase, bool settingsSynced)
+        => settingsSynced && phase == VoiceGamePhase.Lobby && VoiceGhostListeningPolicy.Enabled(settings);
+
     internal static string BuildWarning()
     {
         if (Time.unscaledTime < _nextRefreshTime) return _cached;
@@ -53,7 +57,15 @@ internal static class VoiceHudWarnings
             // Two animation frames per second keeps the status visibly alive without making the
             // compact text jitter rapidly beside the voice buttons.
             int animationFrame = (int)(Time.unscaledTime * 2f);
+#if WINDOWS
+            return VoiceConnectionStatusPolicy.BuildText(
+                connection,
+                animationFrame,
+                VoiceHelperBlockState.Kind,
+                VoiceChatKeybinds.OpenVoiceMenu.Label);
+#else
             return VoiceConnectionStatusPolicy.BuildText(connection, animationFrame);
+#endif
         }
 
         if (!room.UsingMicrophone && !room.Mute)
@@ -61,6 +73,12 @@ internal static class VoiceHudWarnings
 
         if (!room.UsingSpeaker && !VoiceChatHudState.IsSpeakerMuted)
             return Loc.T("warning.speaker_unavailable", "speaker unavailable");
+
+#if WINDOWS
+        if (VoiceSettings.Instance?.ObsRecordingIntegration.Value == true &&
+            VoiceObsRecording.Status.State == "error")
+            return Loc.T("hud.obs_recording_failed", "OBS recording failed, check Audio settings");
+#endif
 
         return string.Empty;
     }

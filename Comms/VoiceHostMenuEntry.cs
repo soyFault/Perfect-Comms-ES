@@ -43,7 +43,7 @@ public static class VoiceHostMenuEntry
     private static void EnsureButton()
     {
         if (_chip.Built) return;
-        _chip.Build("PERFECT COMMS", Loc.T("chip.host_voice_settings", "HOST VOICE SETTINGS"),
+        _chip.Build(Loc.T("chip.host_eyebrow", "Lobby-wide · Perfect Comms"), Loc.T("chip.host_voice_settings", "Host voice settings"),
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
             new Vector2(0f, -48f),
             HostSettingsPanel.Show,
@@ -55,7 +55,7 @@ public static class VoiceHostMenuEntry
 
     internal static void RefreshLanguage()
     {
-        if (_chip.Built) _chip.SetLabel(Loc.T("chip.host_voice_settings", "HOST VOICE SETTINGS"));
+        if (_chip.Built) _chip.SetLabel(Loc.T("chip.host_eyebrow", "Lobby-wide · Perfect Comms"), Loc.T("chip.host_voice_settings", "Host voice settings"));
     }
 
     public static void TickHostButton() => _chip.Tick();

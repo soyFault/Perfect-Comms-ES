@@ -2,7 +2,9 @@
 
 The host controls the match-wide voice rules. Host changes sync automatically to every player; players separately control their own devices, volumes, keybinds, and HUD.
 
-Open **Host Voice Settings** from the lobby game-settings console. On desktop, the host can also press `F11`. The panel closes automatically if host authority moves to another player. Hover the **!** beside an option for its in-game explanation.
+Open **Host Voice Settings** from the lobby game-settings console. On desktop, the host can also press `F11`. The panel closes automatically if host authority moves to another player. Hover the **?** beside an option for its full in-game explanation.
+
+The header's **Applies to everyone in the lobby** label distinguishes these shared rules from personal settings. Related rules are grouped, with dependent options indented below their parent. Use the scrollbars for long rule lists or mod-tab lists; changes apply immediately without a save step.
 
 ## Proximity tab
 
@@ -23,7 +25,7 @@ Open **Host Voice Settings** from the lobby game-settings console. On desktop, t
 
 The directory handles public-lobby discovery only. It does not carry voice audio or signaling and does not change the host's voice rules.
 
-## Meeting & Voice tab
+## Voice rules tab
 
 | Setting | Default | What it controls |
 | :--- | :---: | :--- |
@@ -33,9 +35,10 @@ The directory handles public-lobby discovery only. It does not carry voice audio
 | **Private Talk in Vents** | On | Prevents players outside vents from hearing vented speech. |
 | **Impostors Hear Dead** | Off | Allows living impostors to hear dead players when the ghost rules permit speech. |
 | **Comms Sabotage Disables Voice** | On | Disables ordinary voice while Communications sabotage is active. |
-| **Only Ghosts can Talk/Hear** | Off | Restricts task-phase voice to dead players. |
+| **Only Ghosts can Talk/Hear** | Off | Restricts task-phase voice to dead players, except for the optional living-to-ghost rule below. |
+| **Ghosts Hear Living During Tasks** | Off | Lets living players speak to nearby ghosts and spectators while Meetings/Lobby Only or Only Ghosts can Talk/Hear blocks living-to-living voice. Keeps normal ghost hearing distance, falloff, vent privacy, and mute controls. Shown only while one of those two rules is on and Ghosts Also Meeting/Lobby Only is not overriding it. |
 | **Ghosts Hear Each Other Anywhere** | Off | Removes proximity distance between dead players. |
-| **Meetings/Lobby Only** | Off | Disables living-player voice during tasks. |
+| **Meetings/Lobby Only** | Off | Disables ordinary living-to-living voice during tasks. |
 | **Meeting Only - Impostor Chat** | Off | Beneath Meetings/Lobby Only when enabled. Living actual impostors can speak globally during tasks; all ghosts and spectators listen, but living crew and mod-added impostor voice privileges do not gain access. |
 | **Ghosts Also Meeting/Lobby Only** | Off | Applies Meetings/Lobby Only to dead players too. |
 | **Impostors Talk Across Death** | Off | Lets dead actual impostors reply in task-only impostor chat and impostor Team Radio. Crew ghosts and spectators remain listen-only on these channels. |
@@ -44,6 +47,8 @@ The directory handles public-lobby discovery only. It does not carry voice audio
 Conditional rows appear only when their parent rule is enabled.
 
 The meeting exception requires both across-death options, independently of ordinary Team Radio settings. It does not apply in Exile or tasks. Releasing radio restores normal speech and death separation; mute and meeting-floor rules remain authoritative. Hiding the meeting child does not reset its saved value.
+
+Ghost listening does not let ghosts reply to living players or grant Team Radio access. **Ghosts Also Meeting/Lobby Only**, while its parent is enabled, blocks this exception. Existing impostor chat and private-radio audiences stay unchanged. A yellow bottom-right lobby notice warns everyone when the exception is active; the task microphone status reads **Ghosts only**, with mute, deafen, and Push To Talk taking priority. Clients wait for a fresh host grant after host migration, and ghost-only delivery stops when authenticated roster information is unavailable.
 
 ## Team Radio tab
 
@@ -84,7 +89,7 @@ Role rules activate automatically when their matching mod and role state are ava
 
 ## Additional mod tabs
 
-Other compatible mods can add their own tab under **Mod Behaviour**, with synced options, through the [mod integration API](Mod-Integration). A client without that mod does not render its tab.
+Other compatible mods can add their own tab under **Mod behaviour**, with synced options, through the [mod integration API](Mod-Integration). A client without that mod does not render its tab.
 
 ## How synchronization works
 

@@ -153,6 +153,7 @@ public static partial class VoiceChatHudState
         DestroyButtons();
         DestroyTooltips();
         DestroyCompactStatus();
+        DestroyGhostListeningNotice();
         // Preserve the HUD-independent privacy contract even when setup/role/UI work threw before
         // the normal policy point in UpdateHud.
         ApplyAudioPolicy(VoiceChatRoom.Current?.CurrentSnapshot);
@@ -202,6 +203,7 @@ public static partial class VoiceChatHudState
                 DestroyTooltips();
                 DestroyToast();
                 DestroyCompactStatus();
+                DestroyGhostListeningNotice();
             });
 
         var settings = VoiceSettings.Instance;
@@ -234,6 +236,7 @@ public static partial class VoiceChatHudState
         ResetAndroidTouchState();
 #endif
         _lastTrustedLocalAudioState = null;
+        DestroyGhostListeningNotice();
 
         var settings = VoiceSettings.Instance;
         if (settings != null)
@@ -260,6 +263,7 @@ public static partial class VoiceChatHudState
         ResetAndroidTouchState();
 #endif
         _lastTrustedLocalAudioState = null;
+        DestroyGhostListeningNotice();
         _compactStatusMessage = "";
         _compactStatusExpiry = 0f;
         InvalidateAudioPolicyCache();
@@ -659,6 +663,7 @@ public static partial class VoiceChatHudState
         var hud = HudManager.Instance;
         if (hud == null)
         {
+            DestroyGhostListeningNotice();
 #if ANDROID
             ReleaseAndroidTouchInput();
 #endif
@@ -671,6 +676,7 @@ public static partial class VoiceChatHudState
         var localPlayer = PlayerControl.LocalPlayer;
         if (localPlayer == null)
         {
+            DestroyGhostListeningNotice();
 #if ANDROID
             ReleaseAndroidTouchInput();
 #endif
@@ -685,6 +691,7 @@ public static partial class VoiceChatHudState
         _lastUpdateStep = "readiness.local-data";
         if (localPlayer.Data == null)
         {
+            DestroyGhostListeningNotice();
 #if ANDROID
             ReleaseAndroidTouchInput();
 #endif
@@ -696,6 +703,7 @@ public static partial class VoiceChatHudState
         _lastUpdateStep = "readiness.map-button";
         if (hud.MapButton == null)
         {
+            DestroyGhostListeningNotice();
 #if ANDROID
             ReleaseAndroidTouchInput();
 #endif
@@ -752,6 +760,8 @@ public static partial class VoiceChatHudState
         UpdateToast(hud);
         _lastUpdateStep = "compact-status";
         UpdateCompactStatus(hud);
+        _lastUpdateStep = "ghost-listening-notice";
+        UpdateGhostListeningNotice(hud);
         _lastUpdateStep = "complete";
     }
 
@@ -1312,7 +1322,7 @@ public static partial class VoiceChatHudState
         && NormalizeTeamRadioState().IsActive
         && !_speakerMuted
         && !IsManualMuteActive()
-        && !TryGetLocalTransmitBlockReason(out _)
+        && !TryGetLocalTransmitBlockReason(out _, allowGhostListening: false)
 #if ANDROID
         && AndroidTeamRadioPhaseSupportsPrivateRouting()
 #endif
@@ -1673,6 +1683,8 @@ public static partial class VoiceChatHudState
             _compactStatusMessage = "";
 
         string warning = VoiceHudWarnings.BuildWarning();
+        if (warning.Length == 0)
+            warning = GhostListeningMicrophoneStatus();
         bool showManualState = VoiceSettings.Instance?.ShowMuteDeafenStatusAlerts.Value ?? true;
         bool microphoneMuted = IsManualMuteActive();
         if (!string.Equals(transient, _lastCompactTransient, StringComparison.Ordinal)
@@ -1945,6 +1957,7 @@ public static partial class VoiceChatHudState
             : _speakerMuted ? Loc.T("hud.deafened", "Deafened")
             : IsManualMuteActive() ? Loc.T("hud.muted", "Muted")
             : IsInTeamRadioMode() ? Loc.T("tooltip.radio_held", "Team Radio: {0} (held)", TeamRadioDisplayName(NormalizeTeamRadioState()))
+            : GhostListeningMicrophoneStatus() is { Length: > 0 } audienceStatus ? audienceStatus
             : pushToTalkMode ? Loc.T("hud.mode_push_to_talk", "Push To Talk")
             : Loc.T("hud.status_active", "Active");
         string channel = TeamRadioDisplayName(NormalizeTeamRadioState());
@@ -2073,11 +2086,11 @@ public static partial class VoiceChatHudState
             AndroidTeamRadioPhaseSupportsPrivateRouting(),
             _speakerMuted,
             IsManualMuteActive(),
-            TryGetLocalTransmitBlockReason(out _),
+            TryGetLocalTransmitBlockReason(out _, allowGhostListening: false),
             TeamRadioBlockedByMeetingPolicy());
 #else
         => CanUseTeamRadio()
-        && !TryGetLocalTransmitBlockReason(out _)
+        && !TryGetLocalTransmitBlockReason(out _, allowGhostListening: false)
         && !TeamRadioBlockedByMeetingPolicy();
 #endif
 
@@ -2094,12 +2107,15 @@ public static partial class VoiceChatHudState
         => CanUseTeamRadio();
 
     internal static bool TryGetLocalTransmitBlockReason(out string reason)
+        => TryGetLocalTransmitBlockReason(out reason, allowGhostListening: true);
+
+    private static bool TryGetLocalTransmitBlockReason(out string reason, bool allowGhostListening)
     {
         var phase = VoiceSceneState.ResolvePhase();
         if (VoiceRoleMuteState.TryGetLocalVoiceBlockReason(phase, out reason))
             return true;
 
-        if (IsLocalRoomPolicyVoiceBlocked(phase, out var policyReason))
+        if (IsLocalRoomPolicyVoiceBlocked(phase, out var policyReason, allowGhostListening))
         {
             reason = policyReason;
             return true;
@@ -2116,19 +2132,24 @@ public static partial class VoiceChatHudState
         VoiceGamePhase phase, bool localDead, bool localImpostorTeam, bool localSpectator)
         => IsLocalRoomPolicyVoiceBlocked(phase, localDead, localImpostorTeam, localSpectator, out _);
 
-    private static bool IsLocalRoomPolicyVoiceBlocked(VoiceGamePhase phase, out string reason)
+    private static bool IsLocalRoomPolicyVoiceBlocked(
+        VoiceGamePhase phase, out string reason, bool allowGhostListening = true)
     {
         var local = PlayerControl.LocalPlayer;
         VoiceRoleMuteState.GetVoiceLifeState(local, phase, out bool localDead, out bool localSpectator);
         return IsLocalRoomPolicyVoiceBlocked(phase, localDead,
-            local?.Data?.Role?.IsImpostor == true, localSpectator, out reason);
+            local?.Data?.Role?.IsImpostor == true, localSpectator, out reason, allowGhostListening);
     }
 
     private static bool IsLocalRoomPolicyVoiceBlocked(
-        VoiceGamePhase phase, bool localDead, bool localImpostorTeam, bool localSpectator, out string reason)
+        VoiceGamePhase phase, bool localDead, bool localImpostorTeam, bool localSpectator,
+        out string reason, bool allowGhostListening = true)
     {
         reason = string.Empty;
         var settings = VoiceRoomSettingsState.Current;
+        if (allowGhostListening && VoiceGhostListeningPolicy.IsGhostOnlySpeaker(
+                settings, phase, localDead, localSpectator, localImpostorTeam))
+            return false;
         if (VoiceImpostorPolicy.SpecialChatEnabled(settings, phase))
         {
             if (VoiceImpostorPolicy.CanTransmit(settings, localImpostorTeam, localDead, localSpectator))
@@ -2214,11 +2235,13 @@ public static partial class VoiceChatHudState
     {
         if (_controlSpriteCache.TryGetValue(path, out var cached)) return cached;
 
-        var source = LoadSprite(path);
+        var source = LoadSprite(path, highQuality: true);
         if (source == null) return null!;
         try
         {
             var texture = source.texture;
+            texture.filterMode = FilterMode.Trilinear;
+            texture.mipMapBias = 0f;
             var pixels = texture.GetPixels32();
             int minX = texture.width;
             int minY = texture.height;

@@ -76,17 +76,11 @@ public static class PingTrackerPatch
 {
     private const float LabelSize = SpeakingBarVisualMetrics.LabelSize;
     private const float SlotWidth = SpeakingBarVisualMetrics.SlotWidth;
-    // Vertical-stack pitch (vertical layout only). Kept a touch above icon+name height so the lower slot's ring
-    // (outer half-height ~0.236 at RingScale) clears the name of the slot above it (name sits at -LabelOffset).
-    private const float SlotHeight = SpeakingBarVisualMetrics.SlotHeight;
     private const float LabelOffset = SpeakingBarVisualMetrics.LabelOffset;
     // Distance from the icon CENTRE to the icon-facing edge of a Left/Right name. The label's rect pivot is set to
     // that facing edge, so this value is the exact text-edge position; kept just outside the ring (~0.24 half-width)
     // so the name sits snug against the ring without overlapping it.
     private const float LabelSideOffset = SpeakingBarVisualMetrics.LabelSideOffset;
-    // Extra vertical-stack pitch added ONLY when the name sits ABOVE the icon (Top), so an above-name never
-    // collides with the slot above it (the default SlotHeight is tuned for names BELOW the icon).
-    private const float TopNameExtraPitch = SpeakingBarVisualMetrics.TopNameExtraPitch;
     private const float RingScale = SpeakingBarVisualMetrics.RingScale;
     private const float StaleSlotTimeoutSeconds = 2f;
     // BetterCrewLink-style panel: tight, flat padding rather than the old wide shadow halo.
@@ -99,7 +93,6 @@ public static class PingTrackerPatch
     private static GameObject? _barRoot;
     private static SortingGroup? _barSortingGroup; // cached so KeepSpeakingBarOnTop avoids a per-frame GetComponent
     private static SpriteRenderer? _backdropSR;
-    private static Sprite? _backdropSprite;
     private static float _nextColorPrewarmTime;
     private const float ColorPrewarmInterval = 0.25f; // warm one uncached avatar colour per quarter-second
     private const int PublicGhostCosmeticReadyWaitFrames = 120;
@@ -399,7 +392,8 @@ public static class PingTrackerPatch
                     UpdateSlotLabel(existing, player);
                     continue;
                 }
-                else if (!existing.CosmeticsComplete && player != null && CrewmateAvatarRenderer.OutfitCosmeticsResolved(player))
+                else if (!existing.CosmeticsComplete && !_publiclyDead.Contains(id) &&
+                         CrewmateAvatarRenderer.OutfitCosmeticsResolved(player))
                 {
                     CrewmateAvatarRenderer.TryRefreshOutfitCosmetics(existing.IconGO, player, id);
                     existing.CosmeticsComplete = true;
@@ -490,7 +484,8 @@ public static class PingTrackerPatch
 
             bool retryGhostCosmetics = publiclyDead
                                        && slot.PublicGhostCosmeticRefreshFrames > 0;
-            if (!iconChanged && !stateChanged && !retryGhostCosmetics)
+            bool pendingGhostCosmetics = publiclyDead && !slot.CosmeticsComplete;
+            if (!iconChanged && !stateChanged && !retryGhostCosmetics && !pendingGhostCosmetics)
                 continue;
 
             bool cosmeticsRefreshed = false;
@@ -513,8 +508,17 @@ public static class PingTrackerPatch
                         bool ghostCosmeticsReady =
                             CrewmateAvatarRenderer.IsLiveGhostBodyApplied(player);
                         CrewmateAvatarRenderer.TryRefreshPublicGhostCosmetics(slot.IconGO, player);
-                        slot.CosmeticsComplete = CrewmateAvatarRenderer.OutfitCosmeticsResolved(player);
+                        slot.CosmeticsComplete = CrewmateAvatarRenderer.OutfitCosmeticsResolved(player, ghost: true);
                         if (ghostCosmeticsReady)
+                            slot.PublicGhostCosmeticRefreshFrames = 0;
+                        cosmeticsRefreshed = true;
+                    }
+                    else if (pendingGhostCosmetics &&
+                             CrewmateAvatarRenderer.OutfitCosmeticsResolved(player, ghost: true))
+                    {
+                        CrewmateAvatarRenderer.TryRefreshPublicGhostCosmetics(slot.IconGO, player);
+                        slot.CosmeticsComplete = true;
+                        if (CrewmateAvatarRenderer.IsLiveGhostBodyApplied(player))
                             slot.PublicGhostCosmeticRefreshFrames = 0;
                         cosmeticsRefreshed = true;
                     }
@@ -779,13 +783,15 @@ public static class PingTrackerPatch
                     }
                     else
                     {
+                        slot.PendingFingerprint = default;
                         slot.TargetLevel = level;
                         slot.IsSpeaking = true;
                         if (slot.IconGO == null)
                         {
                             TryCreateSlotIcon(id, slot);
                         }
-                        else if (!slot.CosmeticsComplete && player != null && CrewmateAvatarRenderer.OutfitCosmeticsResolved(player))
+                        else if (!slot.CosmeticsComplete && player != null && !_publiclyDead.Contains(id) &&
+                                 CrewmateAvatarRenderer.OutfitCosmeticsResolved(player))
                         {
                             // The player's cosmetics finished loading — attach them in place (no destroy/recreate pop).
                             CrewmateAvatarRenderer.TryRefreshOutfitCosmetics(slot.IconGO, player, id);
@@ -989,7 +995,7 @@ public static class PingTrackerPatch
         var backdropGO = new GameObject("VC_BarBackdrop");
         backdropGO.transform.SetParent(_barRoot.transform, false);
         _backdropSR = backdropGO.AddComponent<SpriteRenderer>();
-        _backdropSR.sprite = GetBackdropSprite();
+        _backdropSR.sprite = VoiceUiKit.Solid(Color.white);
         _backdropSR.drawMode = SpriteDrawMode.Sliced;
         _backdropSR.color = BackdropColor;
         _backdropSR.sortingLayerName = VCSorting.Layer;
@@ -1610,7 +1616,10 @@ public static class PingTrackerPatch
             {
                 if (slot.VanillaStyleVersion != _vanillaNameStyleVersion && slot.LabelTMP.gameObject.activeInHierarchy
                     && ApplyVanillaNameStyle(slot.LabelTMP, FindPlayer(kv.Key)))
+                {
                     slot.VanillaStyleVersion = _vanillaNameStyleVersion;
+                    slot.LabelMeasurePending = true;
+                }
                 if (slot.VanillaStyleVersion == _vanillaNameStyleVersion && slot.LabelTMP.alpha < 1f)
                     slot.LabelTMP.alpha = 1f;
             }
@@ -1701,9 +1710,8 @@ public static class PingTrackerPatch
             return;
         }
 
-        float primaryPitch = _namePosition == SpeakingBarNamePosition.Top
-            ? SlotHeight + TopNameExtraPitch
-            : SlotHeight;
+        float primaryPitch = SpeakingBarVisualMetrics.VerticalPitch(
+            _namePosition, itemMaxY - itemMinY);
         // Reserve the panel footprint even while it is hidden. Backdrop is a visual toggle;
         // it must not make the solver choose a different wrap or avatar scale.
         float outerPad = BackdropPad * 2f;
@@ -1846,7 +1854,7 @@ public static class PingTrackerPatch
         minY = Mathf.Min(minY, syMin); maxY = Mathf.Max(maxY, syMax);
     }
 
-    private static bool TryGetAvailableLayoutSize(Camera? cam, out float width, out float height)
+    internal static bool TryGetAvailableLayoutSize(Camera? cam, out float width, out float height)
     {
         width = 0f;
         height = 0f;
@@ -1930,38 +1938,6 @@ public static class PingTrackerPatch
         _backdropSR.transform.localPosition = new Vector3((minX + maxX) * 0.5f, (minY + maxY) * 0.5f, -99f);
     }
 
-    private static Sprite GetBackdropSprite()
-    {
-        if (_backdropSprite != null) return _backdropSprite;
-
-        const int size = 64;
-        const float radius = 4f;
-        const float feather = 1f;
-
-        var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
-        var pixels = new Color32[size * size];
-        float insetMin = radius;
-        float insetMax = size - 1f - radius;
-        for (int y = 0; y < size; y++)
-            for (int x = 0; x < size; x++)
-            {
-                float dx = Mathf.Max(Mathf.Max(insetMin - x, x - insetMax), 0f);
-                float dy = Mathf.Max(Mathf.Max(insetMin - y, y - insetMax), 0f);
-                float d = Mathf.Sqrt(dx * dx + dy * dy);
-                byte a = (byte)(Mathf.Clamp01((radius - d) / feather) * 255f);
-                pixels[y * size + x] = new Color32(255, 255, 255, a);
-            }
-
-        tex.SetPixels32(pixels);
-        tex.Apply();
-        _backdropSprite = Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 64f, 0,
-            SpriteMeshType.FullRect, new Vector4(8f, 8f, 8f, 8f));
-        _backdropSprite.hideFlags |= HideFlags.HideAndDontSave;
-        return _backdropSprite;
-    }
-
-    internal static Sprite GetPreviewBackdropSprite()
-        => GetBackdropSprite();
 
     // Places a slot's name label relative to its icon per the local SpeakingBarNamePosition setting. Bottom (default)
     // keeps the historic below-icon spot; Top sits above; Left/Right sit beside the icon with the label's rect pivot
