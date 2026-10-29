@@ -40,10 +40,13 @@ internal static class Loc
     internal static string? ForcedLocale;
 
     /// <summary>Locale used for lookups right now: forced, else the Among Us language, else English.</summary>
+    internal static bool BisectForceEnglish = true;
+
     internal static string CurrentLocale
     {
         get
         {
+            if (BisectForceEnglish) return EnglishLocale;
             var forced = ForcedLocale;
             if (forced != null) return forced;
             try
