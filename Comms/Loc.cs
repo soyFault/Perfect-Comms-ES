@@ -49,7 +49,6 @@ internal static class Loc
     internal static void Initialize()
     {
         _mainThreadId = Environment.CurrentManagedThreadId;
-        _ = CurrentLocale;
     }
 
     /// <summary>Forgets the main thread and the cached locale (tests).</summary>
@@ -60,10 +59,13 @@ internal static class Loc
     }
 
     /// <summary>Locale used for lookups right now: forced, else the Among Us language, else English.</summary>
+    internal static bool BisectForceEnglish = true;
+
     internal static string CurrentLocale
     {
         get
         {
+            if (BisectForceEnglish) return EnglishLocale;
             var forced = ForcedLocale;
             if (forced != null) return forced;
             if (_mainThreadId != -1 && Environment.CurrentManagedThreadId != _mainThreadId)
