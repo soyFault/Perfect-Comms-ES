@@ -91,8 +91,20 @@ public class VoiceChatPluginMain : BasePlugin
     public override void Load()
     {
         Logger = Log;
-        Loc.Initialize();
-        LocalizationRefresh.Register();
+        // Diagnostic switch: an empty BepInEx/config/perfectcomms.noloc file forces English and skips the
+        // language-change hooks, to tell a localization problem apart from the rest of the build.
+        bool locDisabled = false;
+        try { locDisabled = System.IO.File.Exists(System.IO.Path.Combine(Paths.ConfigPath, "perfectcomms.noloc")); } catch { }
+        if (locDisabled)
+        {
+            Loc.ForcedLocale = "en_US";
+            Log.LogWarning("[Loc] perfectcomms.noloc found: localization disabled (English only).");
+        }
+        else
+        {
+            Loc.Initialize();
+            LocalizationRefresh.Register();
+        }
         _configStore = PerfectCommsConfigStore.Open(
             Config,
             new BepInPlugin(Id, "Perfect Comms", Version),
